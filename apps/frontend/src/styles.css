@@ -201,6 +201,52 @@ input {
   margin: 0;
 }
 
+.chatList {
+  display: grid;
+  gap: 10px;
+}
+
+.chatBubble {
+  border-radius: 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+}
+
+.chatBubbleUser {
+  background: rgba(14, 107, 88, 0.08);
+}
+
+.chatBubbleAssistant {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.chatRole {
+  margin: 0 0 6px;
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+
+.chatContent {
+  margin: 0;
+  color: var(--ink);
+}
+
+.chatForm {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.chatForm input {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  color: var(--ink);
+}
+
 @media (max-width: 720px) {
   .panelHeader {
     align-items: stretch;

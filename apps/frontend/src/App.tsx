@@ -1,6 +1,15 @@
 import { FormEvent, useEffect, useState } from "react";
 
-import { Person, getSession, listPersons, login, logout } from "./api";
+import {
+  Conversation,
+  Person,
+  getConversation,
+  getSession,
+  listPersons,
+  login,
+  logout,
+  sendMessage
+} from "./api";
 
 type ViewState = "checking" | "login" | "workspace";
 
@@ -13,6 +22,10 @@ export default function App() {
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [conversation, setConversation] = useState<Conversation | null>(null);
+  const [isConversationLoading, setIsConversationLoading] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
 
   useEffect(() => {
     const boot = async () => {
@@ -34,6 +47,28 @@ export default function App() {
 
   const selectedPerson =
     people.find((person) => person.person_id === selectedPersonId) ?? null;
+
+  useEffect(() => {
+    const loadConversation = async () => {
+      if (!selectedPersonId || view !== "workspace") {
+        setConversation(null);
+        return;
+      }
+      setIsConversationLoading(true);
+      setErrorMessage(null);
+      try {
+        const payload = await getConversation(selectedPersonId);
+        setConversation(payload);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "No se pudo cargar la conversacion";
+        setErrorMessage(message);
+      } finally {
+        setIsConversationLoading(false);
+      }
+    };
+    void loadConversation();
+  }, [selectedPersonId, view]);
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -72,6 +107,28 @@ export default function App() {
     setOperatorName("");
     setPassword("");
     setSelectedPersonId(null);
+    setConversation(null);
+    setChatInput("");
+  }
+
+  async function handleSendMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedPersonId || !chatInput.trim() || isSendingMessage) {
+      return;
+    }
+    setIsSendingMessage(true);
+    setErrorMessage(null);
+    try {
+      const updatedConversation = await sendMessage(selectedPersonId, chatInput.trim());
+      setConversation(updatedConversation);
+      setChatInput("");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo enviar el mensaje";
+      setErrorMessage(message);
+    } finally {
+      setIsSendingMessage(false);
+    }
   }
 
   if (view === "checking") {
@@ -195,6 +252,47 @@ export default function App() {
             continuar.
           </p>
         )}
+      </section>
+      <section className="panel selectedPanel">
+        <h2>Conversacion</h2>
+        {isConversationLoading ? (
+          <p className="metaText">Cargando conversacion...</p>
+        ) : (
+          <div className="chatList">
+            {(conversation?.messages ?? []).length === 0 ? (
+              <p className="metaText">No hay mensajes aun para este perfil.</p>
+            ) : (
+              conversation?.messages.map((message) => (
+                <article
+                  className={
+                    message.role === "user"
+                      ? "chatBubble chatBubbleUser"
+                      : "chatBubble chatBubbleAssistant"
+                  }
+                  key={message.message_id}
+                >
+                  <p className="chatRole">{message.role === "user" ? "Tutor" : "Asistente"}</p>
+                  <p className="chatContent">{message.content}</p>
+                </article>
+              ))
+            )}
+          </div>
+        )}
+        <form className="chatForm" onSubmit={handleSendMessage}>
+          <input
+            disabled={!selectedPersonId || isSendingMessage}
+            onChange={(event) => setChatInput(event.target.value)}
+            placeholder="Escribe un mensaje para este perfil..."
+            value={chatInput}
+          />
+          <button
+            className="primaryButton"
+            disabled={!selectedPersonId || isSendingMessage || !chatInput.trim()}
+            type="submit"
+          >
+            {isSendingMessage ? "Enviando..." : "Enviar"}
+          </button>
+        </form>
       </section>
       {errorMessage ? <p className="errorText">{errorMessage}</p> : null}
     </main>

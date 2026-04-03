@@ -15,6 +15,21 @@ export type Person = {
   updated_at: string;
 };
 
+export type ConversationMessage = {
+  message_id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+};
+
+export type Conversation = {
+  conversation_id: string;
+  person_id: string;
+  status: string;
+  last_message_at: string;
+  messages: ConversationMessage[];
+};
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
 
 async function parseResponse<T>(response: Response): Promise<T> {
@@ -68,4 +83,26 @@ export async function listPersons(): Promise<Person[]> {
   });
   const payload = await parseResponse<{ items: Person[] }>(response);
   return payload.items;
+}
+
+export async function getConversation(personId: string): Promise<Conversation> {
+  const response = await fetch(`${API_BASE}/persons/${personId}/chat/conversation`, {
+    method: "GET",
+    credentials: "include"
+  });
+  return parseResponse<Conversation>(response);
+}
+
+export async function sendMessage(
+  personId: string,
+  message: string
+): Promise<Conversation> {
+  const response = await fetch(`${API_BASE}/persons/${personId}/chat`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message })
+  });
+  const payload = await parseResponse<{ conversation: Conversation }>(response);
+  return payload.conversation;
 }
