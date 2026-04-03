@@ -45,6 +45,7 @@
 - busqueda multi-provider implementada en backend (`Adzuna via RapidAPI`, `Remotive`, `Tavily`)
 - degradacion parcial por proveedor implementada con warnings por fuente
 - deduplicacion de resultados implementada con clave principal por `source_url`
+- `Remotive API` operando en modo publico V1; `REMOTIVE_API_KEY` queda opcional
 
 ## Bloqueadores
 - no hay bloqueadores funcionales de alcance V1

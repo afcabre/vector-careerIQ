@@ -56,6 +56,10 @@ Variables de busqueda para Adzuna via RapidAPI:
 - `RAPIDAPI_KEY`
 - `RAPIDAPI_ADZUNA_HOST`
 
+Remotive API en V1:
+- uso publico sin API key obligatoria
+- `REMOTIVE_API_KEY` se mantiene como variable opcional
+
 Credenciales demo por defecto:
 - `username`: `tutor`
 - `password`: `change_me`
