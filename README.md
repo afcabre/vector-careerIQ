@@ -22,11 +22,12 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
 - `/search` y guardado explicito de oportunidades implementados por `person_id`
 - `analyze` y `prepare` por oportunidad implementados con artefactos persistidos
 - importacion manual de vacantes por URL y texto pegado desde frontend
+- carga de CV por persona (`/cv`) con un CV activo por perfil y extraccion base de texto
 
 ## Siguiente paso
-- completar ingesta de CV con un solo CV activo por persona
 - integrar `Adzuna` y `Remotive API` en busqueda multi-provider
 - ampliar trazabilidad de evidencia para fit cultural
+- conectar indexacion vectorial del CV (Pinecone) sobre el CV activo
 
 ## Arranque Local Minimo
 ### Backend

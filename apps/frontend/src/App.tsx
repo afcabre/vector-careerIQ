@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 
 import {
+  ActiveCV,
   ApplicationArtifact,
   Conversation,
   Opportunity,
@@ -8,6 +9,7 @@ import {
   SearchResult,
   analyzeOpportunity,
   getConversation,
+  getActiveCV,
   getSession,
   importOpportunityByText,
   importOpportunityByUrl,
@@ -19,7 +21,8 @@ import {
   prepareOpportunity,
   saveOpportunityFromSearch,
   searchOpportunities,
-  sendMessage
+  sendMessage,
+  uploadCV
 } from "./api";
 
 type ViewState = "checking" | "login" | "workspace";
@@ -53,6 +56,10 @@ export default function App() {
   const [isImportingUrl, setIsImportingUrl] = useState(false);
   const [isImportingText, setIsImportingText] = useState(false);
   const [savedOpportunities, setSavedOpportunities] = useState<Opportunity[]>([]);
+  const [activeCv, setActiveCv] = useState<ActiveCV | null>(null);
+  const [selectedCvFile, setSelectedCvFile] = useState<File | null>(null);
+  const [isLoadingCv, setIsLoadingCv] = useState(false);
+  const [isUploadingCv, setIsUploadingCv] = useState(false);
   const [isLoadingOpportunities, setIsLoadingOpportunities] = useState(false);
   const [savingResultId, setSavingResultId] = useState<string | null>(null);
   const [selectedOpportunityId, setSelectedOpportunityId] = useState<string | null>(null);
@@ -132,6 +139,28 @@ export default function App() {
     void loadOpportunities();
   }, [selectedPersonId, view]);
 
+  useEffect(() => {
+    const loadActiveCv = async () => {
+      if (!selectedPersonId || view !== "workspace") {
+        setActiveCv(null);
+        setSelectedCvFile(null);
+        return;
+      }
+      setIsLoadingCv(true);
+      setErrorMessage(null);
+      try {
+        const item = await getActiveCV(selectedPersonId);
+        setActiveCv(item);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "No se pudo cargar el CV activo";
+        setErrorMessage(message);
+      } finally {
+        setIsLoadingCv(false);
+      }
+    };
+    void loadActiveCv();
+  }, [selectedPersonId, view]);
+
   const selectedOpportunity =
     savedOpportunities.find((item) => item.opportunity_id === selectedOpportunityId) ?? null;
 
@@ -174,6 +203,8 @@ export default function App() {
     setSelectedPersonId(null);
     setConversation(null);
     setChatInput("");
+    setActiveCv(null);
+    setSelectedCvFile(null);
   }
 
   async function handleSendMessage(event: FormEvent<HTMLFormElement>) {
@@ -232,6 +263,25 @@ export default function App() {
       setErrorMessage(message);
     } finally {
       setSavingResultId(null);
+    }
+  }
+
+  async function handleUploadCv(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedPersonId || !selectedCvFile || isUploadingCv) {
+      return;
+    }
+    setIsUploadingCv(true);
+    setErrorMessage(null);
+    try {
+      const payload = await uploadCV(selectedPersonId, selectedCvFile);
+      setActiveCv(payload);
+      setSelectedCvFile(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "No se pudo cargar el CV";
+      setErrorMessage(message);
+    } finally {
+      setIsUploadingCv(false);
     }
   }
 
@@ -477,6 +527,51 @@ export default function App() {
           <p className="metaText">
             No hay persona consultada seleccionada. Elige un perfil para
             continuar.
+          </p>
+        )}
+      </section>
+      <section className="panel selectedPanel">
+        <h2>CV activo</h2>
+        <form className="cvForm" onSubmit={handleUploadCv}>
+          <input
+            accept=".pdf,.txt,.md"
+            disabled={!selectedPersonId || isUploadingCv}
+            onChange={(event) => {
+              const file = event.target.files?.[0] ?? null;
+              setSelectedCvFile(file);
+            }}
+            type="file"
+          />
+          <button
+            className="primaryButton"
+            disabled={!selectedPersonId || !selectedCvFile || isUploadingCv}
+            type="submit"
+          >
+            {isUploadingCv ? "Cargando..." : "Cargar CV"}
+          </button>
+        </form>
+        {isLoadingCv ? (
+          <p className="metaText">Consultando CV activo...</p>
+        ) : activeCv ? (
+          <div className="cvCard">
+            <p className="metaText">
+              Archivo: <strong>{activeCv.source_filename}</strong> · estado extraccion:{" "}
+              {activeCv.extraction_status}
+            </p>
+            <p className="metaText">
+              Longitud detectada: {activeCv.text_length} caracteres
+              {activeCv.text_truncated ? " (truncado para V1)" : ""}
+            </p>
+            <article className="chatBubble chatBubbleAssistant">
+              <p className="chatRole">Preview</p>
+              <p className="chatContent">
+                {activeCv.extracted_text_preview || "No se obtuvo texto util del archivo."}
+              </p>
+            </article>
+          </div>
+        ) : (
+          <p className="metaText">
+            No hay CV activo para esta persona. Puedes operar sin CV y cargarlo despues.
           </p>
         )}
       </section>

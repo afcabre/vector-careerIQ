@@ -70,6 +70,20 @@ export type ApplicationArtifact = {
   updated_at: string;
 };
 
+export type ActiveCV = {
+  cv_id: string;
+  person_id: string;
+  source_filename: string;
+  mime_type: string;
+  extraction_status: string;
+  text_length: number;
+  text_truncated: boolean;
+  extracted_text_preview: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
 
 async function parseResponse<T>(response: Response): Promise<T> {
@@ -123,6 +137,28 @@ export async function listPersons(): Promise<Person[]> {
   });
   const payload = await parseResponse<{ items: Person[] }>(response);
   return payload.items;
+}
+
+export async function getActiveCV(personId: string): Promise<ActiveCV | null> {
+  const response = await fetch(`${API_BASE}/persons/${personId}/cv/active`, {
+    method: "GET",
+    credentials: "include"
+  });
+  if (response.status === 404) {
+    return null;
+  }
+  return parseResponse<ActiveCV>(response);
+}
+
+export async function uploadCV(personId: string, file: File): Promise<ActiveCV> {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch(`${API_BASE}/persons/${personId}/cv`, {
+    method: "POST",
+    credentials: "include",
+    body: form
+  });
+  return parseResponse<ActiveCV>(response);
 }
 
 export async function getConversation(personId: string): Promise<Conversation> {

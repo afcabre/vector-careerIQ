@@ -247,6 +247,20 @@ textarea {
   gap: 10px;
 }
 
+.cvForm {
+  margin-top: 12px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.cvCard {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
 .chatForm input {
   border: 1px solid var(--line);
   border-radius: 12px;

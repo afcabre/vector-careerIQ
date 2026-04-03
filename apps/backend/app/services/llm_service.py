@@ -2,6 +2,7 @@ from typing import Iterator
 
 from app.core.settings import Settings
 from app.services.conversation_store import MessageRecord
+from app.services.cv_store import get_active_cv
 from app.services.person_store import PersonRecord
 
 try:
@@ -19,6 +20,12 @@ FALLBACK_MESSAGE = (
 def _system_prompt(person: PersonRecord) -> str:
     target_roles = ", ".join(person["target_roles"]) or "sin rol objetivo definido"
     skills = ", ".join(person["skills"]) or "sin skills registradas"
+    cv_context = ""
+    active_cv = get_active_cv(person["person_id"])
+    if active_cv:
+        text = active_cv["extracted_text"].strip()
+        if text:
+            cv_context = text[:1200]
     return (
         "Eres un asistente de empleabilidad que responde para la persona consultada "
         "activa, nunca para el operador.\n"
@@ -26,6 +33,7 @@ def _system_prompt(person: PersonRecord) -> str:
         f"UBICACION: {person['location']}\n"
         f"ROLES OBJETIVO: {target_roles}\n"
         f"SKILLS: {skills}\n"
+        f"CONTEXTO_CV: {cv_context or 'sin CV activo'}\n"
         "Responde en espanol, de forma clara y accionable."
     )
 
