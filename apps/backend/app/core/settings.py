@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     openai_embedding_model: str = "text-embedding-3-small"
     pinecone_api_key: str = ""
     tavily_api_key: str = ""
+    rapidapi_key: str = ""
+    rapidapi_adzuna_host: str = ""
     adzuna_app_id: str = ""
     adzuna_app_key: str = ""
     remotive_api_key: str = ""

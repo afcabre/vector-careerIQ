@@ -41,6 +41,7 @@
 - regla V1 de un solo CV activo por persona aplicada en store (`memory` y `firestore`)
 - extraccion base de texto de CV habilitada con soporte PDF/texto y preview en UI
 - configuracion OpenAI alineada para V1: `gpt-4o-mini` (inferencia) y `text-embedding-3-small` (embeddings)
+- decision de proveedor: `Adzuna` se integrara via `RapidAPI` (`RAPIDAPI_KEY` + `RAPIDAPI_ADZUNA_HOST`)
 
 ## Bloqueadores
 - no hay bloqueadores funcionales de alcance V1
