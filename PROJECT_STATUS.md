@@ -2,8 +2,8 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `analyze y prepare por oportunidad`
-- repo_status: `implementacion activa con login, chat OpenAI, busqueda y ciclo base de postulacion`
+- checkpoint_actual: `importacion manual de vacantes por URL/texto desde UI`
+- repo_status: `implementacion activa con login, chat OpenAI, busqueda, importacion manual y ciclo base de postulacion`
 - ultima_actualizacion: `2026-04-03`
 
 ## Progreso Por Fase
@@ -34,13 +34,13 @@
 - guardado explicito desde busqueda a oportunidades persistidas por `person_id`
 - `analyze` por oportunidad implementado
 - `prepare` implementado con artefactos persistidos (`cover_letter`, `experience_summary`)
+- importacion manual de vacantes por `URL` y por `texto pegado` habilitada en frontend
 
 ## Bloqueadores
 - no hay bloqueadores funcionales para comenzar implementacion
 - falta materializar configuracion local minima antes de desarrollar el primer flujo vertical
 
 ## Siguiente Actividad
-- instalar dependencias y validar arranque local
-- validar modo `firestore` con credenciales reales de entorno
-- ampliar evaluacion de fit cultural con señales externas dedicadas
-- agregar carga manual de vacante por URL/texto desde UI
+- completar ingesta de CV (carga, extraccion base y un CV activo por persona)
+- incorporar `Adzuna` y `Remotive API` en capa multi-provider de busqueda
+- ampliar analisis de fit cultural con trazabilidad de evidencia por fuente

@@ -30,6 +30,10 @@ input {
   font: inherit;
 }
 
+textarea {
+  font: inherit;
+}
+
 .shell {
   min-height: 100vh;
   padding: 48px 20px 64px;
@@ -251,6 +255,41 @@ input {
   color: var(--ink);
 }
 
+.manualGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  margin: 10px 0 14px;
+}
+
+.manualCard {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.85);
+  display: grid;
+  gap: 8px;
+}
+
+.manualCard input,
+.manualCard textarea {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px 10px;
+  background: #fff;
+  color: var(--ink);
+}
+
+.manualCard textarea {
+  resize: vertical;
+}
+
+.manualRow {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+}
+
 .subheading {
   margin: 18px 0 10px;
 }
@@ -259,5 +298,9 @@ input {
   .panelHeader {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .manualRow {
+    grid-template-columns: 1fr;
   }
 }

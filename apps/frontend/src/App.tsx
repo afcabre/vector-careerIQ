@@ -9,6 +9,8 @@ import {
   analyzeOpportunity,
   getConversation,
   getSession,
+  importOpportunityByText,
+  importOpportunityByUrl,
   listOpportunityArtifacts,
   listOpportunities,
   listPersons,
@@ -39,6 +41,17 @@ export default function App() {
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchWarnings, setSearchWarnings] = useState<string[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [manualUrl, setManualUrl] = useState("");
+  const [manualUrlTitle, setManualUrlTitle] = useState("");
+  const [manualUrlCompany, setManualUrlCompany] = useState("");
+  const [manualUrlLocation, setManualUrlLocation] = useState("");
+  const [manualUrlRawText, setManualUrlRawText] = useState("");
+  const [manualTextTitle, setManualTextTitle] = useState("");
+  const [manualTextCompany, setManualTextCompany] = useState("");
+  const [manualTextLocation, setManualTextLocation] = useState("");
+  const [manualTextRawText, setManualTextRawText] = useState("");
+  const [isImportingUrl, setIsImportingUrl] = useState(false);
+  const [isImportingText, setIsImportingText] = useState(false);
   const [savedOpportunities, setSavedOpportunities] = useState<Opportunity[]>([]);
   const [isLoadingOpportunities, setIsLoadingOpportunities] = useState(false);
   const [savingResultId, setSavingResultId] = useState<string | null>(null);
@@ -74,8 +87,8 @@ export default function App() {
   useEffect(() => {
     const loadConversation = async () => {
       if (!selectedPersonId || view !== "workspace") {
-      setConversation(null);
-      return;
+        setConversation(null);
+        return;
       }
       setIsConversationLoading(true);
       setErrorMessage(null);
@@ -219,6 +232,73 @@ export default function App() {
       setErrorMessage(message);
     } finally {
       setSavingResultId(null);
+    }
+  }
+
+  async function handleImportByUrl(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedPersonId || !manualUrl.trim() || isImportingUrl) {
+      return;
+    }
+    setIsImportingUrl(true);
+    setErrorMessage(null);
+    try {
+      const payload = await importOpportunityByUrl(selectedPersonId, {
+        source_url: manualUrl.trim(),
+        title: manualUrlTitle.trim(),
+        company: manualUrlCompany.trim(),
+        location: manualUrlLocation.trim(),
+        raw_text: manualUrlRawText.trim()
+      });
+      const items = await listOpportunities(selectedPersonId);
+      setSavedOpportunities(items);
+      setSelectedOpportunityId(payload.item.opportunity_id);
+      setManualUrl("");
+      setManualUrlTitle("");
+      setManualUrlCompany("");
+      setManualUrlLocation("");
+      setManualUrlRawText("");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo importar por URL";
+      setErrorMessage(message);
+    } finally {
+      setIsImportingUrl(false);
+    }
+  }
+
+  async function handleImportByText(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (
+      !selectedPersonId ||
+      !manualTextTitle.trim() ||
+      !manualTextRawText.trim() ||
+      isImportingText
+    ) {
+      return;
+    }
+    setIsImportingText(true);
+    setErrorMessage(null);
+    try {
+      const item = await importOpportunityByText(selectedPersonId, {
+        title: manualTextTitle.trim(),
+        company: manualTextCompany.trim(),
+        location: manualTextLocation.trim(),
+        raw_text: manualTextRawText.trim()
+      });
+      const items = await listOpportunities(selectedPersonId);
+      setSavedOpportunities(items);
+      setSelectedOpportunityId(item.opportunity_id);
+      setManualTextTitle("");
+      setManualTextCompany("");
+      setManualTextLocation("");
+      setManualTextRawText("");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo importar por texto";
+      setErrorMessage(message);
+    } finally {
+      setIsImportingText(false);
     }
   }
 
@@ -461,6 +541,94 @@ export default function App() {
         {searchWarnings.length > 0 ? (
           <p className="metaText">Avisos: {searchWarnings.join(" | ")}</p>
         ) : null}
+        <h3 className="subheading">Carga manual de vacantes</h3>
+        <div className="manualGrid">
+          <form className="manualCard" onSubmit={handleImportByUrl}>
+            <p className="chatRole">Desde URL</p>
+            <input
+              disabled={!selectedPersonId || isImportingUrl}
+              onChange={(event) => setManualUrl(event.target.value)}
+              placeholder="https://sitio.com/vacante"
+              value={manualUrl}
+            />
+            <input
+              disabled={!selectedPersonId || isImportingUrl}
+              onChange={(event) => setManualUrlTitle(event.target.value)}
+              placeholder="Titulo (opcional)"
+              value={manualUrlTitle}
+            />
+            <div className="manualRow">
+              <input
+                disabled={!selectedPersonId || isImportingUrl}
+                onChange={(event) => setManualUrlCompany(event.target.value)}
+                placeholder="Empresa (opcional)"
+                value={manualUrlCompany}
+              />
+              <input
+                disabled={!selectedPersonId || isImportingUrl}
+                onChange={(event) => setManualUrlLocation(event.target.value)}
+                placeholder="Ubicacion (opcional)"
+                value={manualUrlLocation}
+              />
+            </div>
+            <textarea
+              disabled={!selectedPersonId || isImportingUrl}
+              onChange={(event) => setManualUrlRawText(event.target.value)}
+              placeholder="Snapshot o resumen textual (opcional)"
+              rows={3}
+              value={manualUrlRawText}
+            />
+            <button
+              className="primaryButton"
+              disabled={!selectedPersonId || isImportingUrl || !manualUrl.trim()}
+              type="submit"
+            >
+              {isImportingUrl ? "Importando..." : "Importar URL"}
+            </button>
+          </form>
+          <form className="manualCard" onSubmit={handleImportByText}>
+            <p className="chatRole">Desde texto</p>
+            <input
+              disabled={!selectedPersonId || isImportingText}
+              onChange={(event) => setManualTextTitle(event.target.value)}
+              placeholder="Titulo de la vacante"
+              value={manualTextTitle}
+            />
+            <div className="manualRow">
+              <input
+                disabled={!selectedPersonId || isImportingText}
+                onChange={(event) => setManualTextCompany(event.target.value)}
+                placeholder="Empresa (opcional)"
+                value={manualTextCompany}
+              />
+              <input
+                disabled={!selectedPersonId || isImportingText}
+                onChange={(event) => setManualTextLocation(event.target.value)}
+                placeholder="Ubicacion (opcional)"
+                value={manualTextLocation}
+              />
+            </div>
+            <textarea
+              disabled={!selectedPersonId || isImportingText}
+              onChange={(event) => setManualTextRawText(event.target.value)}
+              placeholder="Pega aqui el contenido de la vacante"
+              rows={3}
+              value={manualTextRawText}
+            />
+            <button
+              className="primaryButton"
+              disabled={
+                !selectedPersonId ||
+                isImportingText ||
+                !manualTextTitle.trim() ||
+                !manualTextRawText.trim()
+              }
+              type="submit"
+            >
+              {isImportingText ? "Importando..." : "Importar texto"}
+            </button>
+          </form>
+        </div>
         <div className="chatList">
           {searchResults.length === 0 ? (
             <p className="metaText">No hay resultados de busqueda recientes.</p>

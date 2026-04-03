@@ -21,11 +21,12 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
 - `/chat` y `/chat/stream` conectados a OpenAI (`OPENAI_API_KEY`) con fallback seguro
 - `/search` y guardado explicito de oportunidades implementados por `person_id`
 - `analyze` y `prepare` por oportunidad implementados con artefactos persistidos
+- importacion manual de vacantes por URL y texto pegado desde frontend
 
 ## Siguiente paso
-- instalar dependencias
-- validar arranque local de backend y frontend
-- conectar sesion de auth a store persistente (hoy es memoria temporal)
+- completar ingesta de CV con un solo CV activo por persona
+- integrar `Adzuna` y `Remotive API` en busqueda multi-provider
+- ampliar trazabilidad de evidencia para fit cultural
 
 ## Arranque Local Minimo
 ### Backend

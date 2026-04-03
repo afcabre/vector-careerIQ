@@ -244,3 +244,46 @@ export async function listOpportunityArtifacts(
   const payload = await parseResponse<{ items: ApplicationArtifact[] }>(response);
   return payload.items;
 }
+
+export async function importOpportunityByUrl(
+  personId: string,
+  payload: {
+    source_url: string;
+    title?: string;
+    company?: string;
+    location?: string;
+    raw_text?: string;
+  }
+): Promise<{ item: Opportunity; created: boolean }> {
+  const response = await fetch(
+    `${API_BASE}/persons/${personId}/opportunities/import-url`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }
+  );
+  return parseResponse<{ item: Opportunity; created: boolean }>(response);
+}
+
+export async function importOpportunityByText(
+  personId: string,
+  payload: {
+    title: string;
+    company?: string;
+    location?: string;
+    raw_text: string;
+  }
+): Promise<Opportunity> {
+  const response = await fetch(
+    `${API_BASE}/persons/${personId}/opportunities/import-text`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }
+  );
+  return parseResponse<Opportunity>(response);
+}
