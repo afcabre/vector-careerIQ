@@ -30,6 +30,35 @@ export type Conversation = {
   messages: ConversationMessage[];
 };
 
+export type SearchResult = {
+  search_result_id: string;
+  source_provider: string;
+  source_url: string;
+  title: string;
+  company: string;
+  location: string;
+  snippet: string;
+  captured_at: string;
+  normalized_payload: Record<string, unknown>;
+};
+
+export type Opportunity = {
+  opportunity_id: string;
+  person_id: string;
+  source_type: string;
+  source_provider: string;
+  source_url: string;
+  title: string;
+  company: string;
+  location: string;
+  status: string;
+  notes: string;
+  snapshot_raw_text: string;
+  snapshot_payload: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
 
 async function parseResponse<T>(response: Response): Promise<T> {
@@ -105,4 +134,51 @@ export async function sendMessage(
   });
   const payload = await parseResponse<{ conversation: Conversation }>(response);
   return payload.conversation;
+}
+
+export async function searchOpportunities(
+  personId: string,
+  query: string,
+  maxResults = 6
+): Promise<{ items: SearchResult[]; warnings: string[] }> {
+  const response = await fetch(`${API_BASE}/persons/${personId}/search`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, max_results: maxResults })
+  });
+  return parseResponse<{ items: SearchResult[]; warnings: string[] }>(response);
+}
+
+export async function saveOpportunityFromSearch(
+  personId: string,
+  result: SearchResult
+): Promise<{ item: Opportunity; created: boolean }> {
+  const response = await fetch(
+    `${API_BASE}/persons/${personId}/opportunities/from-search`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source_provider: result.source_provider,
+        source_url: result.source_url,
+        title: result.title,
+        company: result.company,
+        location: result.location,
+        snippet: result.snippet,
+        normalized_payload: result.normalized_payload
+      })
+    }
+  );
+  return parseResponse<{ item: Opportunity; created: boolean }>(response);
+}
+
+export async function listOpportunities(personId: string): Promise<Opportunity[]> {
+  const response = await fetch(`${API_BASE}/persons/${personId}/opportunities`, {
+    method: "GET",
+    credentials: "include"
+  });
+  const payload = await parseResponse<{ items: Opportunity[] }>(response);
+  return payload.items;
 }

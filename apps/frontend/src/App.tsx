@@ -2,12 +2,17 @@ import { FormEvent, useEffect, useState } from "react";
 
 import {
   Conversation,
+  Opportunity,
   Person,
+  SearchResult,
   getConversation,
   getSession,
+  listOpportunities,
   listPersons,
   login,
   logout,
+  saveOpportunityFromSearch,
+  searchOpportunities,
   sendMessage
 } from "./api";
 
@@ -26,6 +31,13 @@ export default function App() {
   const [isConversationLoading, setIsConversationLoading] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchWarnings, setSearchWarnings] = useState<string[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [savedOpportunities, setSavedOpportunities] = useState<Opportunity[]>([]);
+  const [isLoadingOpportunities, setIsLoadingOpportunities] = useState(false);
+  const [savingResultId, setSavingResultId] = useState<string | null>(null);
 
   useEffect(() => {
     const boot = async () => {
@@ -68,6 +80,28 @@ export default function App() {
       }
     };
     void loadConversation();
+  }, [selectedPersonId, view]);
+
+  useEffect(() => {
+    const loadOpportunities = async () => {
+      if (!selectedPersonId || view !== "workspace") {
+        setSavedOpportunities([]);
+        return;
+      }
+      setIsLoadingOpportunities(true);
+      setErrorMessage(null);
+      try {
+        const items = await listOpportunities(selectedPersonId);
+        setSavedOpportunities(items);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "No se pudieron cargar oportunidades";
+        setErrorMessage(message);
+      } finally {
+        setIsLoadingOpportunities(false);
+      }
+    };
+    void loadOpportunities();
   }, [selectedPersonId, view]);
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
@@ -128,6 +162,45 @@ export default function App() {
       setErrorMessage(message);
     } finally {
       setIsSendingMessage(false);
+    }
+  }
+
+  async function handleSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedPersonId || !searchQuery.trim()) {
+      return;
+    }
+    setIsSearching(true);
+    setErrorMessage(null);
+    try {
+      const payload = await searchOpportunities(selectedPersonId, searchQuery.trim(), 6);
+      setSearchResults(payload.items);
+      setSearchWarnings(payload.warnings);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo ejecutar la busqueda";
+      setErrorMessage(message);
+    } finally {
+      setIsSearching(false);
+    }
+  }
+
+  async function handleSaveSearchResult(result: SearchResult) {
+    if (!selectedPersonId) {
+      return;
+    }
+    setSavingResultId(result.search_result_id);
+    setErrorMessage(null);
+    try {
+      await saveOpportunityFromSearch(selectedPersonId, result);
+      const items = await listOpportunities(selectedPersonId);
+      setSavedOpportunities(items);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo guardar la oportunidad";
+      setErrorMessage(message);
+    } finally {
+      setSavingResultId(null);
     }
   }
 
@@ -293,6 +366,74 @@ export default function App() {
             {isSendingMessage ? "Enviando..." : "Enviar"}
           </button>
         </form>
+      </section>
+      <section className="panel selectedPanel">
+        <h2>Busqueda y oportunidades</h2>
+        <form className="chatForm" onSubmit={handleSearch}>
+          <input
+            disabled={!selectedPersonId || isSearching}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Buscar vacantes para el perfil activo..."
+            value={searchQuery}
+          />
+          <button
+            className="primaryButton"
+            disabled={!selectedPersonId || isSearching || !searchQuery.trim()}
+            type="submit"
+          >
+            {isSearching ? "Buscando..." : "Buscar"}
+          </button>
+        </form>
+        {searchWarnings.length > 0 ? (
+          <p className="metaText">Avisos: {searchWarnings.join(" | ")}</p>
+        ) : null}
+        <div className="chatList">
+          {searchResults.length === 0 ? (
+            <p className="metaText">No hay resultados de busqueda recientes.</p>
+          ) : (
+            searchResults.map((result) => (
+              <article className="chatBubble chatBubbleAssistant" key={result.search_result_id}>
+                <p className="chatRole">{result.source_provider}</p>
+                <p className="chatContent">{result.title}</p>
+                <p className="metaText">
+                  {result.company || "Empresa no identificada"}
+                  {result.source_url ? ` · ${result.source_url}` : ""}
+                </p>
+                <p className="metaText">{result.snippet}</p>
+                <div className="cardActions">
+                  <button
+                    disabled={savingResultId === result.search_result_id}
+                    onClick={() => void handleSaveSearchResult(result)}
+                    type="button"
+                  >
+                    {savingResultId === result.search_result_id
+                      ? "Guardando..."
+                      : "Guardar como oportunidad"}
+                  </button>
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+        <h3 className="subheading">Oportunidades guardadas</h3>
+        {isLoadingOpportunities ? (
+          <p className="metaText">Cargando oportunidades...</p>
+        ) : savedOpportunities.length === 0 ? (
+          <p className="metaText">No hay oportunidades guardadas para este perfil.</p>
+        ) : (
+          <div className="chatList">
+            {savedOpportunities.map((item) => (
+              <article className="chatBubble chatBubbleUser" key={item.opportunity_id}>
+                <p className="chatRole">{item.status}</p>
+                <p className="chatContent">{item.title}</p>
+                <p className="metaText">
+                  {item.company || "Empresa no identificada"}
+                  {item.source_url ? ` · ${item.source_url}` : ""}
+                </p>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
       {errorMessage ? <p className="errorText">{errorMessage}</p> : null}
     </main>

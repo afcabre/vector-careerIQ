@@ -231,6 +231,7 @@ input {
 .chatContent {
   margin: 0;
   color: var(--ink);
+  overflow-wrap: anywhere;
 }
 
 .chatForm {
@@ -245,6 +246,10 @@ input {
   padding: 10px 12px;
   background: #fff;
   color: var(--ink);
+}
+
+.subheading {
+  margin: 18px 0 10px;
 }
 
 @media (max-width: 720px) {
