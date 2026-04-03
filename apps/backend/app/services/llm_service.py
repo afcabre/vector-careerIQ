@@ -42,7 +42,10 @@ def _build_messages(person: PersonRecord, history: list[MessageRecord]) -> list[
 def _client(settings: Settings) -> OpenAI | None:
     if OpenAI is None or not settings.openai_api_key:
         return None
-    return OpenAI(api_key=settings.openai_api_key)
+    try:
+        return OpenAI(api_key=settings.openai_api_key)
+    except Exception:
+        return None
 
 
 def generate_reply(
