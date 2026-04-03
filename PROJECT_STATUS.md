@@ -2,8 +2,8 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `conversacion persistente por person_id en progreso`
-- repo_status: `implementacion activa con login, sesion backend, seleccion de persona y chat persistente`
+- checkpoint_actual: `chat con proveedor LLM integrado`
+- repo_status: `implementacion activa con login, sesion persistente, seleccion de persona y chat con OpenAI`
 - ultima_actualizacion: `2026-04-03`
 
 ## Progreso Por Fase
@@ -29,6 +29,7 @@
 - `persons` y validacion de operador soportan backend `memory` o `firestore`
 - sesion backend soporta backend `memory` o `firestore`
 - conversacion por `person_id` implementada en backend y conectada en frontend
+- `/chat` y `/chat/stream` integrados con OpenAI (fallback seguro si falta key/dependencia)
 
 ## Bloqueadores
 - no hay bloqueadores funcionales para comenzar implementacion
@@ -37,5 +38,5 @@
 ## Siguiente Actividad
 - instalar dependencias y validar arranque local
 - validar modo `firestore` con credenciales reales de entorno
-- estabilizar endpoint `/chat/stream` con proveedor LLM real
 - continuar con busqueda y oportunidades en contexto conversacional
+- conectar analisis de vacantes al chat por `person_id`
