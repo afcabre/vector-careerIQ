@@ -4,6 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.core.security import SessionData, require_operator_session
+from app.core.settings import Settings, get_settings
+from app.services.artifact_store import ARTIFACT_TYPES, list_current_artifacts, upsert_current_artifact
+from app.services.opportunity_ai_service import analyze_opportunity, prepare_application_materials
 from app.services.opportunity_store import (
     OPPORTUNITY_STATUSES,
     create_opportunity,
@@ -86,6 +89,32 @@ class CreateOpportunityRequest(BaseModel):
 class UpdateOpportunityRequest(BaseModel):
     status: str | None = Field(default=None)
     notes: str | None = Field(default=None)
+
+
+class AnalyzeResponse(BaseModel):
+    opportunity: OpportunityResponse
+    analysis_text: str
+
+
+class ArtifactResponse(BaseModel):
+    artifact_id: str
+    person_id: str
+    opportunity_id: str
+    artifact_type: str
+    content: str
+    is_current: bool
+    created_at: str
+    updated_at: str
+
+
+class ArtifactsResponse(BaseModel):
+    items: list[ArtifactResponse]
+
+
+class PrepareResponse(BaseModel):
+    opportunity: OpportunityResponse
+    guidance_text: str
+    artifacts: list[ArtifactResponse]
 
 
 def _require_person(person_id: str) -> None:
@@ -221,3 +250,120 @@ def update_opportunity(
             detail="Invalid status transition",
         )
     return _to_response(item)
+
+
+@router.get("/{opportunity_id}")
+def get_opportunity(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+) -> OpportunityResponse:
+    _require_person(person_id)
+    item = find_opportunity(person_id, opportunity_id)
+    if not item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+    return _to_response(item)
+
+
+@router.post("/{opportunity_id}/analyze")
+def analyze(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+    settings: Settings = Depends(get_settings),
+) -> AnalyzeResponse:
+    person = get_person(person_id)
+    if not person:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Person not found",
+        )
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    result = analyze_opportunity(person, opportunity, settings)
+    updated = update_saved_opportunity(
+        person_id=person_id,
+        opportunity_id=opportunity_id,
+        status="analyzed",
+        notes=opportunity.get("notes", ""),
+    )
+    final_item = updated or opportunity
+    return AnalyzeResponse(
+        opportunity=_to_response(final_item),
+        analysis_text=result["analysis_text"],
+    )
+
+
+@router.post("/{opportunity_id}/prepare")
+def prepare(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+    settings: Settings = Depends(get_settings),
+) -> PrepareResponse:
+    person = get_person(person_id)
+    if not person:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Person not found",
+        )
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    payload = prepare_application_materials(person, opportunity, settings)
+    cover = upsert_current_artifact(
+        person_id=person_id,
+        opportunity_id=opportunity_id,
+        artifact_type="cover_letter",
+        content=payload["cover_letter"],
+    )
+    summary = upsert_current_artifact(
+        person_id=person_id,
+        opportunity_id=opportunity_id,
+        artifact_type="experience_summary",
+        content=payload["experience_summary"],
+    )
+
+    updated = update_saved_opportunity(
+        person_id=person_id,
+        opportunity_id=opportunity_id,
+        status="application_prepared",
+        notes=opportunity.get("notes", ""),
+    )
+    final_item = updated or opportunity
+    return PrepareResponse(
+        opportunity=_to_response(final_item),
+        guidance_text=payload["guidance_text"],
+        artifacts=[ArtifactResponse(**cover), ArtifactResponse(**summary)],
+    )
+
+
+@router.get("/{opportunity_id}/artifacts")
+def list_artifacts(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+) -> ArtifactsResponse:
+    _require_person(person_id)
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    items = list_current_artifacts(person_id, opportunity_id)
+    filtered = [item for item in items if item["artifact_type"] in ARTIFACT_TYPES]
+    return ArtifactsResponse(items=[ArtifactResponse(**item) for item in filtered])

@@ -59,6 +59,17 @@ export type Opportunity = {
   updated_at: string;
 };
 
+export type ApplicationArtifact = {
+  artifact_id: string;
+  person_id: string;
+  opportunity_id: string;
+  artifact_type: "cover_letter" | "experience_summary";
+  content: string;
+  is_current: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
 
 async function parseResponse<T>(response: Response): Promise<T> {
@@ -180,5 +191,56 @@ export async function listOpportunities(personId: string): Promise<Opportunity[]
     credentials: "include"
   });
   const payload = await parseResponse<{ items: Opportunity[] }>(response);
+  return payload.items;
+}
+
+export async function analyzeOpportunity(
+  personId: string,
+  opportunityId: string
+): Promise<{ opportunity: Opportunity; analysis_text: string }> {
+  const response = await fetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/analyze`,
+    {
+      method: "POST",
+      credentials: "include"
+    }
+  );
+  return parseResponse<{ opportunity: Opportunity; analysis_text: string }>(response);
+}
+
+export async function prepareOpportunity(
+  personId: string,
+  opportunityId: string
+): Promise<{
+  opportunity: Opportunity;
+  guidance_text: string;
+  artifacts: ApplicationArtifact[];
+}> {
+  const response = await fetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/prepare`,
+    {
+      method: "POST",
+      credentials: "include"
+    }
+  );
+  return parseResponse<{
+    opportunity: Opportunity;
+    guidance_text: string;
+    artifacts: ApplicationArtifact[];
+  }>(response);
+}
+
+export async function listOpportunityArtifacts(
+  personId: string,
+  opportunityId: string
+): Promise<ApplicationArtifact[]> {
+  const response = await fetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/artifacts`,
+    {
+      method: "GET",
+      credentials: "include"
+    }
+  );
+  const payload = await parseResponse<{ items: ApplicationArtifact[] }>(response);
   return payload.items;
 }

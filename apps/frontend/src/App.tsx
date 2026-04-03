@@ -1,16 +1,20 @@
 import { FormEvent, useEffect, useState } from "react";
 
 import {
+  ApplicationArtifact,
   Conversation,
   Opportunity,
   Person,
   SearchResult,
+  analyzeOpportunity,
   getConversation,
   getSession,
+  listOpportunityArtifacts,
   listOpportunities,
   listPersons,
   login,
   logout,
+  prepareOpportunity,
   saveOpportunityFromSearch,
   searchOpportunities,
   sendMessage
@@ -38,6 +42,13 @@ export default function App() {
   const [savedOpportunities, setSavedOpportunities] = useState<Opportunity[]>([]);
   const [isLoadingOpportunities, setIsLoadingOpportunities] = useState(false);
   const [savingResultId, setSavingResultId] = useState<string | null>(null);
+  const [selectedOpportunityId, setSelectedOpportunityId] = useState<string | null>(null);
+  const [analysisText, setAnalysisText] = useState("");
+  const [guidanceText, setGuidanceText] = useState("");
+  const [artifacts, setArtifacts] = useState<ApplicationArtifact[]>([]);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isPreparing, setIsPreparing] = useState(false);
+  const [isLoadingArtifacts, setIsLoadingArtifacts] = useState(false);
 
   useEffect(() => {
     const boot = async () => {
@@ -63,8 +74,8 @@ export default function App() {
   useEffect(() => {
     const loadConversation = async () => {
       if (!selectedPersonId || view !== "workspace") {
-        setConversation(null);
-        return;
+      setConversation(null);
+      return;
       }
       setIsConversationLoading(true);
       setErrorMessage(null);
@@ -86,6 +97,10 @@ export default function App() {
     const loadOpportunities = async () => {
       if (!selectedPersonId || view !== "workspace") {
         setSavedOpportunities([]);
+        setSelectedOpportunityId(null);
+        setAnalysisText("");
+        setGuidanceText("");
+        setArtifacts([]);
         return;
       }
       setIsLoadingOpportunities(true);
@@ -103,6 +118,9 @@ export default function App() {
     };
     void loadOpportunities();
   }, [selectedPersonId, view]);
+
+  const selectedOpportunity =
+    savedOpportunities.find((item) => item.opportunity_id === selectedOpportunityId) ?? null;
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -201,6 +219,62 @@ export default function App() {
       setErrorMessage(message);
     } finally {
       setSavingResultId(null);
+    }
+  }
+
+  async function refreshArtifacts(opportunityId: string) {
+    if (!selectedPersonId) {
+      return;
+    }
+    setIsLoadingArtifacts(true);
+    try {
+      const items = await listOpportunityArtifacts(selectedPersonId, opportunityId);
+      setArtifacts(items);
+    } finally {
+      setIsLoadingArtifacts(false);
+    }
+  }
+
+  async function handleAnalyze(opportunityId: string) {
+    if (!selectedPersonId) {
+      return;
+    }
+    setIsAnalyzing(true);
+    setErrorMessage(null);
+    try {
+      const payload = await analyzeOpportunity(selectedPersonId, opportunityId);
+      setAnalysisText(payload.analysis_text);
+      const items = await listOpportunities(selectedPersonId);
+      setSavedOpportunities(items);
+      setSelectedOpportunityId(opportunityId);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo analizar la oportunidad";
+      setErrorMessage(message);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  }
+
+  async function handlePrepare(opportunityId: string) {
+    if (!selectedPersonId) {
+      return;
+    }
+    setIsPreparing(true);
+    setErrorMessage(null);
+    try {
+      const payload = await prepareOpportunity(selectedPersonId, opportunityId);
+      setGuidanceText(payload.guidance_text);
+      setArtifacts(payload.artifacts);
+      const items = await listOpportunities(selectedPersonId);
+      setSavedOpportunities(items);
+      setSelectedOpportunityId(opportunityId);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo preparar postulacion";
+      setErrorMessage(message);
+    } finally {
+      setIsPreparing(false);
     }
   }
 
@@ -430,10 +504,82 @@ export default function App() {
                   {item.company || "Empresa no identificada"}
                   {item.source_url ? ` · ${item.source_url}` : ""}
                 </p>
+                <div className="cardActions">
+                  <button
+                    className={
+                      selectedOpportunityId === item.opportunity_id ? "activeButton" : ""
+                    }
+                    onClick={() => setSelectedOpportunityId(item.opportunity_id)}
+                    type="button"
+                  >
+                    {selectedOpportunityId === item.opportunity_id ? "Activa" : "Abrir"}
+                  </button>
+                  <button
+                    disabled={isAnalyzing}
+                    onClick={() => void handleAnalyze(item.opportunity_id)}
+                    type="button"
+                  >
+                    {isAnalyzing && selectedOpportunityId === item.opportunity_id
+                      ? "Analizando..."
+                      : "Analyze"}
+                  </button>
+                  <button
+                    disabled={isPreparing}
+                    onClick={() => void handlePrepare(item.opportunity_id)}
+                    type="button"
+                  >
+                    {isPreparing && selectedOpportunityId === item.opportunity_id
+                      ? "Preparando..."
+                      : "Prepare"}
+                  </button>
+                  <button
+                    disabled={isLoadingArtifacts}
+                    onClick={() => void refreshArtifacts(item.opportunity_id)}
+                    type="button"
+                  >
+                    {isLoadingArtifacts && selectedOpportunityId === item.opportunity_id
+                      ? "Cargando..."
+                      : "Artifacts"}
+                  </button>
+                </div>
               </article>
             ))}
           </div>
         )}
+      </section>
+      <section className="panel selectedPanel">
+        <h2>Analisis y artefactos</h2>
+        {selectedOpportunity ? (
+          <p className="metaText">
+            Oportunidad activa: <strong>{selectedOpportunity.title}</strong>
+          </p>
+        ) : (
+          <p className="metaText">
+            Selecciona una oportunidad guardada para analizar y preparar postulacion.
+          </p>
+        )}
+        {analysisText ? (
+          <article className="chatBubble chatBubbleAssistant">
+            <p className="chatRole">Analisis</p>
+            <p className="chatContent">{analysisText}</p>
+          </article>
+        ) : null}
+        {guidanceText ? (
+          <article className="chatBubble chatBubbleAssistant">
+            <p className="chatRole">Guidance</p>
+            <p className="chatContent">{guidanceText}</p>
+          </article>
+        ) : null}
+        {artifacts.length > 0 ? (
+          <div className="chatList">
+            {artifacts.map((artifact) => (
+              <article className="chatBubble chatBubbleUser" key={artifact.artifact_id}>
+                <p className="chatRole">{artifact.artifact_type}</p>
+                <p className="chatContent">{artifact.content}</p>
+              </article>
+            ))}
+          </div>
+        ) : null}
       </section>
       {errorMessage ? <p className="errorText">{errorMessage}</p> : null}
     </main>

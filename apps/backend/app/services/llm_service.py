@@ -73,6 +73,34 @@ def generate_reply(
     return content or FALLBACK_MESSAGE
 
 
+def complete_prompt(
+    system_prompt: str,
+    user_prompt: str,
+    settings: Settings,
+    *,
+    temperature: float = 0.2,
+) -> str:
+    client = _client(settings)
+    if client is None:
+        return FALLBACK_MESSAGE
+    try:
+        response = client.chat.completions.create(
+            model=settings.openai_chat_model,
+            temperature=temperature,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+    except Exception:
+        return FALLBACK_MESSAGE
+
+    if not response.choices:
+        return FALLBACK_MESSAGE
+    content = response.choices[0].message.content or ""
+    return content.strip() or FALLBACK_MESSAGE
+
+
 def stream_reply(
     person: PersonRecord,
     history: list[MessageRecord],

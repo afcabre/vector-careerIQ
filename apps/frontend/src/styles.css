@@ -125,6 +125,8 @@ input {
 
 .cardActions {
   display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .cardActions button,
@@ -232,6 +234,7 @@ input {
   margin: 0;
   color: var(--ink);
   overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .chatForm {
