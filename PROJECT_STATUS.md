@@ -37,8 +37,8 @@
 - importacion manual de vacantes por `URL` y por `texto pegado` habilitada en frontend
 
 ## Bloqueadores
-- no hay bloqueadores funcionales para comenzar implementacion
-- falta materializar configuracion local minima antes de desarrollar el primer flujo vertical
+- no hay bloqueadores funcionales de alcance V1
+- pendiente instalar toolchain frontend local completa (`tsc`) para validar build en este entorno
 
 ## Siguiente Actividad
 - completar ingesta de CV (carga, extraccion base y un CV activo por persona)
