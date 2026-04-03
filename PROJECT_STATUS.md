@@ -2,8 +2,8 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `flujo vertical base con persistencia conmutable`
-- repo_status: `implementacion activa con login, sesion backend y seleccion de persona consultada`
+- checkpoint_actual: `conversacion persistente por person_id en progreso`
+- repo_status: `implementacion activa con login, sesion backend, seleccion de persona y chat persistente`
 - ultima_actualizacion: `2026-04-03`
 
 ## Progreso Por Fase
@@ -28,6 +28,7 @@
 - flujo vertical inicial implementado en modo local: login tutor + seleccion de persona consultada
 - `persons` y validacion de operador soportan backend `memory` o `firestore`
 - sesion backend aun en memoria temporal
+- conversacion por `person_id` implementada en backend y conectada en frontend
 
 ## Bloqueadores
 - no hay bloqueadores funcionales para comenzar implementacion
@@ -37,4 +38,5 @@
 - instalar dependencias y validar arranque local
 - validar modo `firestore` con credenciales reales de entorno
 - decidir y aplicar estrategia de sesion persistente para despliegue
-- continuar con capa conversacional persistente por `person_id`
+- estabilizar endpoint `/chat/stream` con proveedor LLM real
+- continuar con busqueda y oportunidades en contexto conversacional
