@@ -2,8 +2,8 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `chat con proveedor LLM integrado`
-- repo_status: `implementacion activa con login, sesion persistente, seleccion de persona y chat con OpenAI`
+- checkpoint_actual: `busqueda y guardado de oportunidades por persona`
+- repo_status: `implementacion activa con login, sesion persistente, chat OpenAI y pipeline base de oportunidades`
 - ultima_actualizacion: `2026-04-03`
 
 ## Progreso Por Fase
@@ -30,6 +30,8 @@
 - sesion backend soporta backend `memory` o `firestore`
 - conversacion por `person_id` implementada en backend y conectada en frontend
 - `/chat` y `/chat/stream` integrados con OpenAI (fallback seguro si falta key/dependencia)
+- `/search` implementado con Tavily (fallback seguro)
+- guardado explicito desde busqueda a oportunidades persistidas por `person_id`
 
 ## Bloqueadores
 - no hay bloqueadores funcionales para comenzar implementacion
@@ -38,5 +40,5 @@
 ## Siguiente Actividad
 - instalar dependencias y validar arranque local
 - validar modo `firestore` con credenciales reales de entorno
-- continuar con busqueda y oportunidades en contexto conversacional
-- conectar analisis de vacantes al chat por `person_id`
+- agregar analisis de ajuste (`analyze`) sobre oportunidades guardadas
+- generar artefactos de postulacion persistidos por oportunidad

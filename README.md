@@ -19,6 +19,7 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
 - persistencia conmutada para sesion backend: `memory` o `firestore`
 - conversacion persistente por `person_id` implementada en backend y frontend
 - `/chat` y `/chat/stream` conectados a OpenAI (`OPENAI_API_KEY`) con fallback seguro
+- `/search` y guardado explicito de oportunidades implementados por `person_id`
 
 ## Siguiente paso
 - instalar dependencias
