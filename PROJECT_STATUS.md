@@ -2,8 +2,8 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `cierre de reorganizacion documental`
-- repo_status: `documentacion normativa consolidada en .specify/ y entrada formal a implementacion`
+- checkpoint_actual: `flujo vertical base con persistencia conmutable`
+- repo_status: `implementacion activa con login, sesion backend y seleccion de persona consultada`
 - ultima_actualizacion: `2026-04-03`
 
 ## Progreso Por Fase
@@ -26,14 +26,15 @@
 - documentos normativos activos en `.specify/`
 - contratos minimos de `auth` y `persons` implementados en backend
 - flujo vertical inicial implementado en modo local: login tutor + seleccion de persona consultada
-- persistencia en memoria temporal para sesiones y personas (sin Firestore aun)
+- `persons` y validacion de operador soportan backend `memory` o `firestore`
+- sesion backend aun en memoria temporal
 
 ## Bloqueadores
 - no hay bloqueadores funcionales para comenzar implementacion
 - falta materializar configuracion local minima antes de desarrollar el primer flujo vertical
 
 ## Siguiente Actividad
-- preparar estructura de configuracion local para frontend y backend
 - instalar dependencias y validar arranque local
-- conectar `auth` y `persons` a persistencia real en `Firestore`
-- mantener control de sesion backend sobre store persistente
+- validar modo `firestore` con credenciales reales de entorno
+- decidir y aplicar estrategia de sesion persistente para despliegue
+- continuar con capa conversacional persistente por `person_id`

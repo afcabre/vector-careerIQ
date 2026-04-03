@@ -14,16 +14,20 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
 ## Estado
 - documentacion normativa base creada
 - scaffolding tecnico minimo creado
-- dependencias no instaladas aun
+- flujo vertical inicial implementado: login tutor + seleccion de persona consultada
+- persistencia conmutada para `persons` y validacion de operador: `memory` o `firestore`
 
 ## Siguiente paso
 - instalar dependencias
 - validar arranque local de backend y frontend
-- implementar persistencia real en Firestore para auth/personas
+- conectar sesion de auth a store persistente (hoy es memoria temporal)
 
 ## Arranque Local Minimo
 ### Backend
 - copiar `apps/backend/.env.example` a `apps/backend/.env`
+- seleccionar backend de persistencia:
+  - local rapido: `PERSISTENCE_BACKEND=memory`
+  - persistente: `PERSISTENCE_BACKEND=firestore`
 - instalar dependencias:
   - `cd apps/backend`
   - `python3 -m venv .venv`
@@ -31,6 +35,11 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
   - `pip install -r requirements.txt`
 - ejecutar API:
   - `uvicorn app.main:app --reload --port 8000`
+
+Si usas `firestore`, define en `.env`:
+- `FIREBASE_CREDENTIALS_FILE` apuntando al JSON de servicio
+o
+- `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`
 
 Credenciales demo por defecto:
 - `username`: `tutor`
