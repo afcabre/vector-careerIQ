@@ -18,3 +18,4 @@ __pycache__/
 **/*.json:Zone.Identifier
 apps/frontend/.vite/
 apps/frontend/dist/
+apps/frontend/tsconfig.tsbuildinfo

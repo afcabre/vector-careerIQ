@@ -35,10 +35,11 @@
 - `analyze` por oportunidad implementado
 - `prepare` implementado con artefactos persistidos (`cover_letter`, `experience_summary`)
 - importacion manual de vacantes por `URL` y por `texto pegado` habilitada en frontend
+- toolchain frontend local operativo (`npm install` + `npm run build` exitoso)
 
 ## Bloqueadores
 - no hay bloqueadores funcionales de alcance V1
-- pendiente instalar toolchain frontend local completa (`tsc`) para validar build en este entorno
+- no hay bloqueadores tecnicos activos reportados en este checkpoint
 
 ## Siguiente Actividad
 - completar ingesta de CV (carga, extraccion base y un CV activo por persona)
