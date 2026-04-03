@@ -6,12 +6,14 @@ from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
 
 from app.core.security import SessionData, require_operator_session
+from app.core.settings import Settings, get_settings
 from app.services.conversation_store import (
     ConversationRecord,
     MessageRecord,
     append_message,
     get_or_create_conversation,
 )
+from app.services.llm_service import generate_reply, stream_reply
 from app.services.person_store import get_person
 
 
@@ -56,7 +58,7 @@ def _to_message_response(message: MessageRecord) -> MessageResponse:
     return MessageResponse(**message)
 
 
-def _build_assistant_reply(person_id: str, raw_message: str) -> str:
+def _fallback_assistant_reply(person_id: str, raw_message: str) -> str:
     person = get_person(person_id)
     if not person:
         return (
@@ -100,10 +102,21 @@ def send_message(
     person_id: str,
     payload: SendMessageRequest,
     _: SessionData = Depends(require_operator_session),
+    settings: Settings = Depends(get_settings),
 ) -> SendMessageResponse:
-    _require_person(person_id)
+    person = get_person(person_id)
+    if not person:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Person not found",
+        )
+
     append_message(person_id, "user", payload.message.strip())
-    assistant_text = _build_assistant_reply(person_id, payload.message.strip())
+    current = get_or_create_conversation(person_id)
+
+    assistant_text = generate_reply(person, current["messages"], settings).strip()
+    if not assistant_text:
+        assistant_text = _fallback_assistant_reply(person_id, payload.message.strip())
     updated = append_message(person_id, "assistant", assistant_text)
     assistant_message = updated["messages"][-1]
     return SendMessageResponse(
@@ -117,17 +130,31 @@ async def stream_message(
     person_id: str,
     payload: SendMessageRequest,
     _: SessionData = Depends(require_operator_session),
+    settings: Settings = Depends(get_settings),
 ) -> StreamingResponse:
-    _require_person(person_id)
+    person = get_person(person_id)
+    if not person:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Person not found",
+        )
+
     append_message(person_id, "user", payload.message.strip())
-    assistant_text = _build_assistant_reply(person_id, payload.message.strip())
-    updated = append_message(person_id, "assistant", assistant_text)
+    current = get_or_create_conversation(person_id)
 
     async def event_generator():
         yield _serialize_sse("message_start", {"person_id": person_id})
-        for token in assistant_text.split(" "):
-            yield _serialize_sse("message_delta", {"delta": f"{token} "})
-            await asyncio.sleep(0.015)
+
+        full_response = ""
+        for delta in stream_reply(person, current["messages"], settings):
+            full_response += delta
+            yield _serialize_sse("message_delta", {"delta": delta})
+            await asyncio.sleep(0)
+
+        if not full_response.strip():
+            full_response = _fallback_assistant_reply(person_id, payload.message.strip())
+
+        updated = append_message(person_id, "assistant", full_response.strip())
         yield _serialize_sse(
             "message_complete",
             {

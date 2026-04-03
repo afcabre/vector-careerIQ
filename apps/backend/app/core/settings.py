@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     firebase_credentials_file: str = ""
     firestore_seed_on_startup: bool = True
     openai_api_key: str = ""
+    openai_chat_model: str = "gpt-4o-mini"
     pinecone_api_key: str = ""
     tavily_api_key: str = ""
     adzuna_app_id: str = ""
