@@ -16,6 +16,7 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
 - scaffolding tecnico minimo creado
 - flujo vertical inicial implementado: login tutor + seleccion de persona consultada
 - persistencia conmutada para `persons` y validacion de operador: `memory` o `firestore`
+- persistencia conmutada para sesion backend: `memory` o `firestore`
 - conversacion persistente por `person_id` implementada en backend y frontend
 
 ## Siguiente paso

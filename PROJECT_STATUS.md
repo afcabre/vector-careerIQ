@@ -27,7 +27,7 @@
 - contratos minimos de `auth` y `persons` implementados en backend
 - flujo vertical inicial implementado en modo local: login tutor + seleccion de persona consultada
 - `persons` y validacion de operador soportan backend `memory` o `firestore`
-- sesion backend aun en memoria temporal
+- sesion backend soporta backend `memory` o `firestore`
 - conversacion por `person_id` implementada en backend y conectada en frontend
 
 ## Bloqueadores
@@ -37,6 +37,5 @@
 ## Siguiente Actividad
 - instalar dependencias y validar arranque local
 - validar modo `firestore` con credenciales reales de entorno
-- decidir y aplicar estrategia de sesion persistente para despliegue
 - estabilizar endpoint `/chat/stream` con proveedor LLM real
 - continuar con busqueda y oportunidades en contexto conversacional
