@@ -19,15 +19,15 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
 - persistencia conmutada para sesion backend: `memory` o `firestore`
 - conversacion persistente por `person_id` implementada en backend y frontend
 - `/chat` y `/chat/stream` conectados a OpenAI (`OPENAI_API_KEY`) con fallback seguro
-- `/search` y guardado explicito de oportunidades implementados por `person_id`
+- `/search` multi-provider y guardado explicito de oportunidades implementados por `person_id`
 - `analyze` y `prepare` por oportunidad implementados con artefactos persistidos
 - importacion manual de vacantes por URL y texto pegado desde frontend
 - carga de CV por persona (`/cv`) con un CV activo por perfil y extraccion base de texto
 
 ## Siguiente paso
-- integrar `Adzuna` y `Remotive API` en busqueda multi-provider
 - ampliar trazabilidad de evidencia para fit cultural
 - conectar indexacion vectorial del CV (Pinecone) sobre el CV activo
+- activar embeddings reales con `text-embedding-3-small`
 
 ## Arranque Local Minimo
 ### Backend
@@ -51,6 +51,10 @@ o
 Modelos OpenAI recomendados en V1:
 - `OPENAI_CHAT_MODEL=gpt-4o-mini`
 - `OPENAI_EMBEDDING_MODEL=text-embedding-3-small`
+
+Variables de busqueda para Adzuna via RapidAPI:
+- `RAPIDAPI_KEY`
+- `RAPIDAPI_ADZUNA_HOST`
 
 Credenciales demo por defecto:
 - `username`: `tutor`

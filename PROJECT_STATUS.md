@@ -2,8 +2,8 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `ingesta de CV activa por persona (upload + extraccion base + preview)`
-- repo_status: `implementacion activa con login, chat OpenAI, busqueda, importacion manual, CV activo por persona y ciclo base de postulacion`
+- checkpoint_actual: `busqueda multi-provider activa (Adzuna RapidAPI + Remotive + Tavily)`
+- repo_status: `implementacion activa con login, chat OpenAI, busqueda multi-provider, importacion manual, CV activo por persona y ciclo base de postulacion`
 - ultima_actualizacion: `2026-04-03`
 
 ## Progreso Por Fase
@@ -42,12 +42,15 @@
 - extraccion base de texto de CV habilitada con soporte PDF/texto y preview en UI
 - configuracion OpenAI alineada para V1: `gpt-4o-mini` (inferencia) y `text-embedding-3-small` (embeddings)
 - decision de proveedor: `Adzuna` se integrara via `RapidAPI` (`RAPIDAPI_KEY` + `RAPIDAPI_ADZUNA_HOST`)
+- busqueda multi-provider implementada en backend (`Adzuna via RapidAPI`, `Remotive`, `Tavily`)
+- degradacion parcial por proveedor implementada con warnings por fuente
+- deduplicacion de resultados implementada con clave principal por `source_url`
 
 ## Bloqueadores
 - no hay bloqueadores funcionales de alcance V1
 - no hay bloqueadores tecnicos activos reportados en este checkpoint
 
 ## Siguiente Actividad
-- incorporar `Adzuna` y `Remotive API` en capa multi-provider de busqueda
 - ampliar analisis de fit cultural con trazabilidad de evidencia por fuente
 - preparar integracion de indexacion vectorial del CV en Pinecone
+- incorporar embeddings reales con `text-embedding-3-small` sobre CV activo

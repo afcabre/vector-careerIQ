@@ -2,8 +2,8 @@ from datetime import UTC, datetime
 from hashlib import sha1
 import json
 from typing import Any, TypedDict
-from urllib.error import URLError
-from urllib.parse import urlparse
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote_plus, urlparse
 from urllib.request import Request, urlopen
 
 from app.core.settings import Settings
@@ -43,6 +43,20 @@ def _company_from_url(source_url: str) -> str:
     return host.split(".")[0].replace("-", " ").title()
 
 
+def _short_text(raw: str, max_chars: int = 360) -> str:
+    text = (raw or "").strip()
+    if len(text) <= max_chars:
+        return text
+    return f"{text[:max_chars].rstrip()}..."
+
+
+def _normalize_url(source_url: str) -> str:
+    cleaned = source_url.strip()
+    if cleaned.endswith("/"):
+        cleaned = cleaned[:-1]
+    return cleaned
+
+
 def _fallback_results(person: PersonRecord, query: str) -> list[SearchResult]:
     role = person["target_roles"][0] if person["target_roles"] else "Role"
     title = f"Resultado local para {role}"
@@ -66,7 +80,16 @@ def _fallback_results(person: PersonRecord, query: str) -> list[SearchResult]:
     ]
 
 
-def _tavily_search(query: str, max_results: int, settings: Settings) -> list[dict[str, Any]]:
+def _request_json(request: Request, timeout: int = 20) -> dict[str, Any]:
+    with urlopen(request, timeout=timeout) as response:
+        raw = response.read().decode("utf-8")
+    payload = json.loads(raw)
+    if isinstance(payload, dict):
+        return payload
+    return {}
+
+
+def _tavily_search(query: str, max_results: int, settings: Settings) -> list[SearchResult]:
     payload = json.dumps(
         {
             "api_key": settings.tavily_api_key,
@@ -82,10 +105,160 @@ def _tavily_search(query: str, max_results: int, settings: Settings) -> list[dic
         data=payload,
         headers={"Content-Type": "application/json"},
     )
-    with urlopen(request, timeout=20) as response:
-        raw = response.read().decode("utf-8")
-    body = json.loads(raw)
-    return body.get("results", [])
+    body = _request_json(request)
+
+    items: list[SearchResult] = []
+    for result in body.get("results", []):
+        source_url = _normalize_url(str(result.get("url", "")))
+        title = str(result.get("title", "")).strip() or "Untitled opportunity"
+        snippet = _short_text(str(result.get("content", "")))
+        company = _company_from_url(source_url)
+        items.append(
+            {
+                "search_result_id": _result_id(source_url, title, company),
+                "source_provider": "tavily",
+                "source_url": source_url,
+                "title": title,
+                "company": company,
+                "location": "",
+                "snippet": snippet,
+                "captured_at": _now_iso(),
+                "normalized_payload": {
+                    "score": result.get("score"),
+                    "provider": "tavily",
+                },
+            }
+        )
+    return items
+
+
+def _adzuna_search_via_rapidapi(
+    query: str,
+    max_results: int,
+    settings: Settings,
+) -> list[SearchResult]:
+    if not settings.rapidapi_key or not settings.rapidapi_adzuna_host:
+        return []
+
+    encoded_query = quote_plus(query)
+    url = (
+        f"https://{settings.rapidapi_adzuna_host}/v1/api/jobs/us/search/1"
+        f"?what={encoded_query}&results_per_page={max_results}&content-type=application/json"
+    )
+    request = Request(
+        url=url,
+        method="GET",
+        headers={
+            "X-RapidAPI-Key": settings.rapidapi_key,
+            "X-RapidAPI-Host": settings.rapidapi_adzuna_host,
+        },
+    )
+    body = _request_json(request)
+
+    items: list[SearchResult] = []
+    for result in body.get("results", []):
+        title = str(result.get("title", "")).strip() or "Untitled opportunity"
+        company_data = result.get("company", {})
+        if isinstance(company_data, dict):
+            company = str(company_data.get("display_name", "")).strip()
+        else:
+            company = str(company_data or "").strip()
+
+        location_data = result.get("location", {})
+        if isinstance(location_data, dict):
+            location = str(location_data.get("display_name", "")).strip()
+        else:
+            location = str(location_data or "").strip()
+
+        source_url = _normalize_url(
+            str(
+                result.get("redirect_url")
+                or result.get("url")
+                or result.get("adref")
+                or ""
+            )
+        )
+        snippet = _short_text(str(result.get("description", "")))
+        items.append(
+            {
+                "search_result_id": _result_id(source_url, title, company),
+                "source_provider": "adzuna",
+                "source_url": source_url,
+                "title": title,
+                "company": company,
+                "location": location,
+                "snippet": snippet,
+                "captured_at": _now_iso(),
+                "normalized_payload": {
+                    "provider": "adzuna_rapidapi",
+                    "id": result.get("id"),
+                    "salary_min": result.get("salary_min"),
+                    "salary_max": result.get("salary_max"),
+                },
+            }
+        )
+    return items
+
+
+def _remotive_search(
+    query: str,
+    max_results: int,
+    settings: Settings,
+) -> list[SearchResult]:
+    encoded_query = quote_plus(query)
+    url = f"https://remotive.com/api/remote-jobs?search={encoded_query}"
+    headers: dict[str, str] = {}
+    if settings.remotive_api_key:
+        headers["Authorization"] = f"Bearer {settings.remotive_api_key}"
+
+    request = Request(url=url, method="GET", headers=headers)
+    body = _request_json(request)
+
+    items: list[SearchResult] = []
+    for result in body.get("jobs", [])[:max_results]:
+        title = str(result.get("title", "")).strip() or "Untitled opportunity"
+        company = str(result.get("company_name", "")).strip()
+        location = str(result.get("candidate_required_location", "")).strip()
+        source_url = _normalize_url(str(result.get("url", "")))
+        snippet = _short_text(str(result.get("description", "")))
+        items.append(
+            {
+                "search_result_id": _result_id(source_url, title, company),
+                "source_provider": "remotive",
+                "source_url": source_url,
+                "title": title,
+                "company": company,
+                "location": location,
+                "snippet": snippet,
+                "captured_at": _now_iso(),
+                "normalized_payload": {
+                    "provider": "remotive",
+                    "id": result.get("id"),
+                    "job_type": result.get("job_type"),
+                    "publication_date": result.get("publication_date"),
+                },
+            }
+        )
+    return items
+
+
+def _dedupe(items: list[SearchResult]) -> list[SearchResult]:
+    deduped: list[SearchResult] = []
+    seen: set[str] = set()
+    for item in items:
+        source_url = _normalize_url(item["source_url"]).lower()
+        if source_url:
+            key = f"url:{source_url}"
+        else:
+            key = (
+                f"fallback:{item['source_provider'].lower()}|"
+                f"{item['title'].lower()}|{item['company'].lower()}"
+            )
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+    return deduped
 
 
 def search_opportunities(
@@ -99,46 +272,44 @@ def search_opportunities(
     if not query:
         return {"items": [], "warnings": ["Empty query"]}
 
-    if not settings.tavily_api_key:
-        warnings.append("Missing Tavily API key, using fallback results")
-        return {"items": _fallback_results(person, query), "warnings": warnings}
+    items: list[SearchResult] = []
+    provider_max_results = max(3, max_results)
+
+    if not settings.rapidapi_key or not settings.rapidapi_adzuna_host:
+        warnings.append("Adzuna via RapidAPI is not configured")
+    else:
+        try:
+            items.extend(_adzuna_search_via_rapidapi(query, provider_max_results, settings))
+        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
+            warnings.append("Adzuna provider failed, continuing with partial results")
+        except Exception:
+            warnings.append("Adzuna provider unexpected error, continuing")
 
     try:
-        raw_results = _tavily_search(query, max_results, settings)
-    except (URLError, TimeoutError, json.JSONDecodeError):
-        warnings.append("Tavily search failed, using fallback results")
-        return {"items": _fallback_results(person, query), "warnings": warnings}
+        items.extend(_remotive_search(query, provider_max_results, settings))
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
+        warnings.append("Remotive provider failed, continuing with partial results")
     except Exception:
-        warnings.append("Unexpected search provider error, using fallback results")
-        return {"items": _fallback_results(person, query), "warnings": warnings}
+        warnings.append("Remotive provider unexpected error, continuing")
 
-    items: list[SearchResult] = []
-    for result in raw_results:
-        source_url = str(result.get("url", "")).strip()
-        title = str(result.get("title", "")).strip() or "Untitled opportunity"
-        snippet = str(result.get("content", "")).strip()
-        company = _company_from_url(source_url)
-        normalized_payload = {
-            "score": result.get("score"),
-            "query": query,
-            "provider": "tavily",
-        }
-        items.append(
-            {
-                "search_result_id": _result_id(source_url, title, company),
-                "source_provider": "tavily",
-                "source_url": source_url,
-                "title": title,
-                "company": company,
-                "location": person["location"],
-                "snippet": snippet,
-                "captured_at": _now_iso(),
-                "normalized_payload": normalized_payload,
-            }
-        )
+    if settings.tavily_api_key:
+        try:
+            tavily_items = _tavily_search(query, provider_max_results, settings)
+            for item in tavily_items:
+                item["location"] = item["location"] or person["location"]
+            items.extend(tavily_items)
+        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
+            warnings.append("Tavily provider failed, continuing with partial results")
+        except Exception:
+            warnings.append("Tavily provider unexpected error, continuing")
+    else:
+        warnings.append("Tavily API key is missing")
 
-    if not items:
-        warnings.append("Provider returned no results, using fallback result")
+    deduped = _dedupe(items)
+    if not deduped:
+        warnings.append("All providers returned empty or failed, using fallback result")
         items = _fallback_results(person, query)
+    else:
+        items = deduped[:max_results]
 
     return {"items": items, "warnings": warnings}
