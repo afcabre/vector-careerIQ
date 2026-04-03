@@ -3,6 +3,7 @@ from typing import Iterator
 from app.core.settings import Settings
 from app.services.conversation_store import MessageRecord
 from app.services.cv_store import get_active_cv
+from app.services.cv_vector_service import query_cv_context
 from app.services.person_store import PersonRecord
 
 try:
@@ -17,15 +18,36 @@ FALLBACK_MESSAGE = (
 )
 
 
-def _system_prompt(person: PersonRecord) -> str:
+def _latest_user_message(history: list[MessageRecord]) -> str:
+    for item in reversed(history):
+        if item.get("role") == "user":
+            return str(item.get("content", "")).strip()
+    return ""
+
+
+def _system_prompt(person: PersonRecord, history: list[MessageRecord], settings: Settings) -> str:
     target_roles = ", ".join(person["target_roles"]) or "sin rol objetivo definido"
     skills = ", ".join(person["skills"]) or "sin skills registradas"
     cv_context = ""
+    cv_context_source = "none"
     active_cv = get_active_cv(person["person_id"])
     if active_cv:
-        text = active_cv["extracted_text"].strip()
-        if text:
-            cv_context = text[:1200]
+        query_text = _latest_user_message(history)
+        snippets = query_cv_context(
+            person_id=person["person_id"],
+            cv_id=active_cv["cv_id"],
+            query_text=query_text,
+            settings=settings,
+            top_k=4,
+        )
+        if snippets:
+            cv_context = "\n\n".join(snippets)[:1800]
+            cv_context_source = "semantic_retrieval"
+        else:
+            text = active_cv["extracted_text"].strip()
+            if text:
+                cv_context = text[:1200]
+                cv_context_source = "fallback_preview"
     return (
         "Eres un asistente de empleabilidad que responde para la persona consultada "
         "activa, nunca para el operador.\n"
@@ -33,6 +55,7 @@ def _system_prompt(person: PersonRecord) -> str:
         f"UBICACION: {person['location']}\n"
         f"ROLES OBJETIVO: {target_roles}\n"
         f"SKILLS: {skills}\n"
+        f"FUENTE_CONTEXTO_CV: {cv_context_source}\n"
         f"CONTEXTO_CV: {cv_context or 'sin CV activo'}\n"
         "Responde en espanol, de forma clara y accionable."
     )
@@ -43,8 +66,12 @@ def _history_messages(history: list[MessageRecord], max_items: int = 12) -> list
     return [{"role": item["role"], "content": item["content"]} for item in trimmed]
 
 
-def _build_messages(person: PersonRecord, history: list[MessageRecord]) -> list[dict[str, str]]:
-    return [{"role": "system", "content": _system_prompt(person)}, *_history_messages(history)]
+def _build_messages(
+    person: PersonRecord,
+    history: list[MessageRecord],
+    settings: Settings,
+) -> list[dict[str, str]]:
+    return [{"role": "system", "content": _system_prompt(person, history, settings)}, *_history_messages(history)]
 
 
 def _client(settings: Settings) -> OpenAI | None:
@@ -69,7 +96,7 @@ def generate_reply(
         response = client.chat.completions.create(
             model=settings.openai_chat_model,
             temperature=0.2,
-            messages=_build_messages(person, history),
+            messages=_build_messages(person, history, settings),
         )
     except Exception:
         return FALLBACK_MESSAGE
@@ -124,7 +151,7 @@ def stream_reply(
         stream = client.chat.completions.create(
             model=settings.openai_chat_model,
             temperature=0.2,
-            messages=_build_messages(person, history),
+            messages=_build_messages(person, history, settings),
             stream=True,
         )
     except Exception:

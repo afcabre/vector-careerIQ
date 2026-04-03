@@ -23,11 +23,12 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
 - `analyze` y `prepare` por oportunidad implementados con artefactos persistidos
 - importacion manual de vacantes por URL y texto pegado desde frontend
 - carga de CV por persona (`/cv`) con un CV activo por perfil y extraccion base de texto
+- indexacion vectorial del CV activo habilitada (embeddings OpenAI + upsert/query en Pinecone cuando hay configuracion)
 
 ## Siguiente paso
 - ampliar trazabilidad de evidencia para fit cultural
-- conectar indexacion vectorial del CV (Pinecone) sobre el CV activo
-- activar embeddings reales con `text-embedding-3-small`
+- conectar analisis de fit y preparacion para reutilizar retrieval semantico de Pinecone
+- endurecer observabilidad/metricas de proveedores externos y pipeline CV
 
 ## Arranque Local Minimo
 ### Backend
@@ -59,6 +60,11 @@ Variables de busqueda para Adzuna via RapidAPI:
 Remotive API en V1:
 - uso publico sin API key obligatoria
 - `REMOTIVE_API_KEY` se mantiene como variable opcional
+
+Variables Pinecone para indexacion CV:
+- `PINECONE_API_KEY`
+- `PINECONE_INDEX_NAME`
+- `PINECONE_INDEX_HOST`
 
 Credenciales demo por defecto:
 - `username`: `tutor`

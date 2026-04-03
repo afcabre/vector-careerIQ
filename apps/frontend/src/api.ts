@@ -76,6 +76,9 @@ export type ActiveCV = {
   source_filename: string;
   mime_type: string;
   extraction_status: string;
+  vector_index_status: string;
+  vector_chunks_indexed: number;
+  vector_last_indexed_at: string;
   text_length: number;
   text_truncated: boolean;
   extracted_text_preview: string;

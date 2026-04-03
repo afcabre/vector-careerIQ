@@ -559,6 +559,10 @@ export default function App() {
               {activeCv.extraction_status}
             </p>
             <p className="metaText">
+              Indexacion vectorial: {activeCv.vector_index_status} · chunks:{" "}
+              {activeCv.vector_chunks_indexed}
+            </p>
+            <p className="metaText">
               Longitud detectada: {activeCv.text_length} caracteres
               {activeCv.text_truncated ? " (truncado para V1)" : ""}
             </p>

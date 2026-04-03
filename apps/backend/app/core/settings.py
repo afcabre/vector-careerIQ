@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     openai_chat_model: str = "gpt-4o-mini"
     openai_embedding_model: str = "text-embedding-3-small"
     pinecone_api_key: str = ""
+    pinecone_index_name: str = ""
+    pinecone_index_host: str = ""
     tavily_api_key: str = ""
     rapidapi_key: str = ""
     rapidapi_adzuna_host: str = ""

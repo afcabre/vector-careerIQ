@@ -2,8 +2,8 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `busqueda multi-provider activa (Adzuna RapidAPI + Remotive + Tavily)`
-- repo_status: `implementacion activa con login, chat OpenAI, busqueda multi-provider, importacion manual, CV activo por persona y ciclo base de postulacion`
+- checkpoint_actual: `embeddings y retrieval semantico sobre CV activo (Pinecone)`
+- repo_status: `implementacion activa con login, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
 - ultima_actualizacion: `2026-04-03`
 
 ## Progreso Por Fase
@@ -46,6 +46,9 @@
 - degradacion parcial por proveedor implementada con warnings por fuente
 - deduplicacion de resultados implementada con clave principal por `source_url`
 - `Remotive API` operando en modo publico V1; `REMOTIVE_API_KEY` queda opcional
+- indexacion vectorial de CV activo implementada con `text-embedding-3-small` y upsert a Pinecone
+- estado de indexacion CV expuesto en API/UI (`vector_index_status`, `vector_chunks_indexed`)
+- chat enriquecido con retrieval semantico de Pinecone con fallback a preview de CV
 
 ## Bloqueadores
 - no hay bloqueadores funcionales de alcance V1
@@ -53,5 +56,5 @@
 
 ## Siguiente Actividad
 - ampliar analisis de fit cultural con trazabilidad de evidencia por fuente
-- preparar integracion de indexacion vectorial del CV en Pinecone
-- incorporar embeddings reales con `text-embedding-3-small` sobre CV activo
+- reutilizar retrieval semantico en `analyze` y `prepare`
+- completar hardening de errores y observabilidad del pipeline semantico

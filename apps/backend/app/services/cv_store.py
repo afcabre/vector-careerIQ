@@ -6,6 +6,7 @@ import uuid
 
 from app.core.settings import get_settings
 from app.services.firestore_client import get_firestore_client
+from app.services.cv_vector_service import upsert_cv_vectors
 
 try:
     from pypdf import PdfReader
@@ -25,6 +26,9 @@ class CVRecord(TypedDict):
     text_length: int
     text_truncated: bool
     extraction_status: str
+    vector_index_status: str
+    vector_chunks_indexed: int
+    vector_last_indexed_at: str
     is_active: bool
     created_at: str
     updated_at: str
@@ -102,6 +106,9 @@ def _normalize(record: dict | None) -> CVRecord:
         "text_length": int(source.get("text_length", 0)),
         "text_truncated": bool(source.get("text_truncated", False)),
         "extraction_status": str(source.get("extraction_status", "unknown")),
+        "vector_index_status": str(source.get("vector_index_status", "not_indexed")),
+        "vector_chunks_indexed": int(source.get("vector_chunks_indexed", 0)),
+        "vector_last_indexed_at": str(source.get("vector_last_indexed_at", "")),
         "is_active": bool(source.get("is_active", False)),
         "created_at": str(source.get("created_at", "")),
         "updated_at": str(source.get("updated_at", "")),
@@ -170,11 +177,23 @@ def upsert_active_cv(
         "text_length": original_length,
         "text_truncated": text_truncated,
         "extraction_status": extraction_status,
+        "vector_index_status": "pending",
+        "vector_chunks_indexed": 0,
+        "vector_last_indexed_at": "",
         "is_active": True,
         "created_at": now,
         "updated_at": now,
     }
-    return _save(record)
+    saved = _save(record)
+
+    settings = get_settings()
+    vector_status, chunks_indexed = upsert_cv_vectors(saved, settings)
+    saved["vector_index_status"] = vector_status
+    saved["vector_chunks_indexed"] = chunks_indexed
+    if vector_status == "indexed":
+        saved["vector_last_indexed_at"] = _now_iso()
+    saved["updated_at"] = _now_iso()
+    return _save(saved)
 
 
 def get_active_cv(person_id: str) -> CVRecord | None:
