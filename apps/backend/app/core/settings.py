@@ -4,18 +4,30 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 DEFAULT_TUTOR_PASSWORD_HASH = (
-    "d67eb631bc4496840bbb59e74f57e9e6f36f3f4f2367d7fad81f4f652d49a6b5"
+    "fb86fb757d1241d512865070e05ccb5d17dfaa11a4b2ca04b89bacad17530ad4"
 )
 
 
 class Settings(BaseSettings):
     app_env: str = "local"
+    persistence_backend: str = "memory"
     session_cookie_name: str = "session_id"
     session_ttl_minutes: int = 480
     session_cookie_secure: bool = False
     tutor_username: str = "tutor"
     tutor_password_hash: str = DEFAULT_TUTOR_PASSWORD_HASH
     session_secret: str = "change-this-session-secret"
+    firebase_project_id: str = ""
+    firebase_client_email: str = ""
+    firebase_private_key: str = ""
+    firebase_credentials_file: str = ""
+    firestore_seed_on_startup: bool = True
+    openai_api_key: str = ""
+    pinecone_api_key: str = ""
+    tavily_api_key: str = ""
+    adzuna_app_id: str = ""
+    adzuna_app_key: str = ""
+    remotive_api_key: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

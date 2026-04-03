@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import router as api_router
+from app.services.operator_store import seed_operator
 from app.services.person_store import seed_persons
 
 
@@ -24,6 +25,7 @@ app.include_router(api_router, prefix="/api")
 
 @app.on_event("startup")
 def startup() -> None:
+    seed_operator()
     seed_persons()
 
 

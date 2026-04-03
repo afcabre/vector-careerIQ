@@ -14,5 +14,7 @@ __pycache__/
 .codex
 .codex/
 ~$*.docx
+**/*firebase-adminsdk*.json
+**/*.json:Zone.Identifier
 apps/frontend/.vite/
 apps/frontend/dist/
