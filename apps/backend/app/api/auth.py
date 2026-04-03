@@ -69,7 +69,7 @@ def logout(
 ) -> dict[str, str]:
     session_id = request.cookies.get(settings.session_cookie_name)
     if session_id:
-        destroy_session(session_id)
+        destroy_session(session_id, settings)
     response.delete_cookie(key=settings.session_cookie_name)
     return {"message": "logged out"}
 

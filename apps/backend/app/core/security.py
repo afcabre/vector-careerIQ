@@ -3,22 +3,21 @@ from datetime import UTC, datetime, timedelta
 import hashlib
 import hmac
 import secrets
-from threading import Lock
 
 from fastapi import Depends, HTTPException, Request, status
 
 from app.core.settings import Settings, get_settings
+from app.services.session_store import (
+    delete_session,
+    get_session as get_session_record,
+    upsert_session,
+)
 
 
 @dataclass
 class SessionData:
     username: str
     expires_at: datetime
-
-
-_sessions: dict[str, SessionData] = {}
-_sessions_lock = Lock()
-
 
 def hash_password(raw_password: str) -> str:
     return hashlib.sha256(raw_password.encode("utf-8")).hexdigest()
@@ -32,25 +31,30 @@ def create_session(username: str, settings: Settings) -> tuple[str, SessionData]
     session_id = secrets.token_urlsafe(32)
     expires_at = datetime.now(tz=UTC) + timedelta(minutes=settings.session_ttl_minutes)
     session = SessionData(username=username, expires_at=expires_at)
-    with _sessions_lock:
-        _sessions[session_id] = session
+    upsert_session(
+        session_id=session_id,
+        username=username,
+        expires_at=expires_at.isoformat(),
+        settings=settings,
+    )
     return session_id, session
 
 
-def get_session(session_id: str) -> SessionData | None:
-    with _sessions_lock:
-        session = _sessions.get(session_id)
-        if session is None:
-            return None
-        if session.expires_at <= datetime.now(tz=UTC):
-            _sessions.pop(session_id, None)
-            return None
-    return session
+def get_session(session_id: str, settings: Settings) -> SessionData | None:
+    record = get_session_record(session_id=session_id, settings=settings)
+    if not record:
+        return None
+    expires_at = datetime.fromisoformat(record["expires_at"])
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    return SessionData(
+        username=record["username"],
+        expires_at=expires_at,
+    )
 
 
-def destroy_session(session_id: str) -> None:
-    with _sessions_lock:
-        _sessions.pop(session_id, None)
+def destroy_session(session_id: str, settings: Settings) -> None:
+    delete_session(session_id=session_id, settings=settings)
 
 
 def require_operator_session(
@@ -64,7 +68,7 @@ def require_operator_session(
             detail="Not authenticated",
         )
 
-    session = get_session(session_id)
+    session = get_session(session_id, settings)
     if not session:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
