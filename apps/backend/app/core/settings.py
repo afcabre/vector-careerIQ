@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     firestore_seed_on_startup: bool = True
     openai_api_key: str = ""
     openai_chat_model: str = "gpt-4o-mini"
+    openai_embedding_model: str = "text-embedding-3-small"
     pinecone_api_key: str = ""
     tavily_api_key: str = ""
     adzuna_app_id: str = ""

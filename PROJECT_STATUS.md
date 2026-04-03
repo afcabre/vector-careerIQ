@@ -40,6 +40,7 @@
 - consulta de CV activo por persona implementada (`GET /api/persons/{person_id}/cv/active`)
 - regla V1 de un solo CV activo por persona aplicada en store (`memory` y `firestore`)
 - extraccion base de texto de CV habilitada con soporte PDF/texto y preview en UI
+- configuracion OpenAI alineada para V1: `gpt-4o-mini` (inferencia) y `text-embedding-3-small` (embeddings)
 
 ## Bloqueadores
 - no hay bloqueadores funcionales de alcance V1

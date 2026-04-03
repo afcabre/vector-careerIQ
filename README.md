@@ -48,6 +48,10 @@ Si usas `firestore`, define en `.env`:
 o
 - `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`
 
+Modelos OpenAI recomendados en V1:
+- `OPENAI_CHAT_MODEL=gpt-4o-mini`
+- `OPENAI_EMBEDDING_MODEL=text-embedding-3-small`
+
 Credenciales demo por defecto:
 - `username`: `tutor`
 - `password`: `change_me`
