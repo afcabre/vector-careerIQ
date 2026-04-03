@@ -26,6 +26,10 @@ button {
   font: inherit;
 }
 
+input {
+  font: inherit;
+}
+
 .shell {
   min-height: 100vh;
   padding: 48px 20px 64px;
@@ -50,6 +54,11 @@ button {
   font-size: clamp(2.2rem, 5vw, 4.3rem);
   line-height: 0.96;
   max-width: 12ch;
+}
+
+.compactTitle {
+  margin: 0;
+  font-size: clamp(1.6rem, 4vw, 2.2rem);
 }
 
 .lede {
@@ -131,9 +140,65 @@ button {
   color: white;
 }
 
+.cardActions button.activeButton {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
 .ghostButton {
   background: transparent;
   color: var(--accent-strong);
+}
+
+.selectedPanel {
+  margin-top: 18px;
+}
+
+.metaText {
+  margin: 0;
+  color: var(--muted);
+}
+
+.authPanel {
+  max-width: 560px;
+}
+
+.authForm {
+  display: grid;
+  gap: 14px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.field input {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  color: var(--ink);
+}
+
+.primaryButton {
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  padding: 10px 16px;
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+}
+
+.primaryButton:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.errorText {
+  color: #9a1f24;
+  margin: 0;
 }
 
 @media (max-width: 720px) {
