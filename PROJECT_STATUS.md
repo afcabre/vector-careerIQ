@@ -2,8 +2,8 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `busqueda y guardado de oportunidades por persona`
-- repo_status: `implementacion activa con login, sesion persistente, chat OpenAI y pipeline base de oportunidades`
+- checkpoint_actual: `analyze y prepare por oportunidad`
+- repo_status: `implementacion activa con login, chat OpenAI, busqueda y ciclo base de postulacion`
 - ultima_actualizacion: `2026-04-03`
 
 ## Progreso Por Fase
@@ -32,6 +32,8 @@
 - `/chat` y `/chat/stream` integrados con OpenAI (fallback seguro si falta key/dependencia)
 - `/search` implementado con Tavily (fallback seguro)
 - guardado explicito desde busqueda a oportunidades persistidas por `person_id`
+- `analyze` por oportunidad implementado
+- `prepare` implementado con artefactos persistidos (`cover_letter`, `experience_summary`)
 
 ## Bloqueadores
 - no hay bloqueadores funcionales para comenzar implementacion
@@ -40,5 +42,5 @@
 ## Siguiente Actividad
 - instalar dependencias y validar arranque local
 - validar modo `firestore` con credenciales reales de entorno
-- agregar analisis de ajuste (`analyze`) sobre oportunidades guardadas
-- generar artefactos de postulacion persistidos por oportunidad
+- ampliar evaluacion de fit cultural con señales externas dedicadas
+- agregar carga manual de vacante por URL/texto desde UI
