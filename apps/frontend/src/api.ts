@@ -79,6 +79,17 @@ export type ApplicationArtifact = {
   updated_at: string;
 };
 
+export type AIRun = {
+  run_id: string;
+  person_id: string;
+  opportunity_id: string;
+  action_key: string;
+  result_payload: Record<string, unknown>;
+  is_current: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
 export type CulturalSignal = {
   source_provider: string;
   source_url: string;
@@ -730,6 +741,27 @@ export async function listOpportunityArtifacts(
     }
   );
   const payload = await parseResponse<{ items: ApplicationArtifact[] }>(response);
+  return payload.items;
+}
+
+export async function listOpportunityAiRuns(
+  personId: string,
+  opportunityId: string,
+  actionKey?: string
+): Promise<AIRun[]> {
+  const params = new URLSearchParams();
+  if (actionKey && actionKey.trim()) {
+    params.set("action_key", actionKey.trim());
+  }
+  const querySuffix = params.toString() ? `?${params.toString()}` : "";
+  const response = await fetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/ai-runs${querySuffix}`,
+    {
+      method: "GET",
+      credentials: "include"
+    }
+  );
+  const payload = await parseResponse<{ items: AIRun[] }>(response);
   return payload.items;
 }
 

@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 
 import {
+  AIRun,
   ActiveCV,
   ApplicationArtifact,
   Conversation,
@@ -19,6 +20,7 @@ import {
   getSession,
   importOpportunityByText,
   importOpportunityByUrl,
+  listOpportunityAiRuns,
   listOpportunityArtifacts,
   listOpportunities,
   listPersons,
@@ -45,6 +47,23 @@ const OPPORTUNITY_STATUSES = [
   "applied",
   "discarded"
 ] as const;
+
+const AI_RUN_ACTION_LABELS: Record<string, string> = {
+  analyze_profile_match: "Analyze perfil-vacante",
+  analyze_cultural_fit: "Analyze fit cultural",
+  prepare_guidance_text: "Prepare ayuda textual",
+  prepare_cover_letter: "Prepare carta de presentacion",
+  prepare_experience_summary: "Prepare resumen de experiencia"
+};
+
+const AI_RUN_ACTION_FILTERS: Array<{ value: string; label: string }> = [
+  { value: "", label: "Todas las acciones" },
+  { value: "analyze_profile_match", label: "Analyze perfil-vacante" },
+  { value: "analyze_cultural_fit", label: "Analyze fit cultural" },
+  { value: "prepare_guidance_text", label: "Prepare ayuda textual" },
+  { value: "prepare_cover_letter", label: "Prepare carta de presentacion" },
+  { value: "prepare_experience_summary", label: "Prepare resumen de experiencia" }
+];
 
 const PROMPT_FLOW_LABELS: Record<string, string> = {
   search_jobs_tavily: "Busqueda de vacantes (Tavily)",
@@ -202,6 +221,26 @@ function buildPromptConfigDrafts(
   return drafts;
 }
 
+function getAiRunPreviewText(run: AIRun): string {
+  const analysisText = run.result_payload["analysis_text"];
+  if (typeof analysisText === "string" && analysisText.trim()) {
+    return analysisText;
+  }
+  const content = run.result_payload["content"];
+  if (typeof content === "string" && content.trim()) {
+    return content;
+  }
+  return "";
+}
+
+function formatAiRunTimestamp(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString();
+}
+
 export default function App() {
   const [view, setView] = useState<ViewState>("checking");
   const [username, setUsername] = useState("tutor");
@@ -260,6 +299,9 @@ export default function App() {
   const [semanticEvidence, setSemanticEvidence] = useState<SemanticEvidence | null>(null);
   const [guidanceText, setGuidanceText] = useState("");
   const [artifacts, setArtifacts] = useState<ApplicationArtifact[]>([]);
+  const [aiRuns, setAiRuns] = useState<AIRun[]>([]);
+  const [isLoadingAiRuns, setIsLoadingAiRuns] = useState(false);
+  const [aiRunActionFilter, setAiRunActionFilter] = useState("");
   const [isAnalyzingProfile, setIsAnalyzingProfile] = useState(false);
   const [isAnalyzingCultural, setIsAnalyzingCultural] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
@@ -373,6 +415,8 @@ export default function App() {
         setSemanticEvidence(null);
         setGuidanceText("");
         setArtifacts([]);
+        setAiRuns([]);
+        setAiRunActionFilter("");
         setOpportunityNotes("");
         setOpportunityStatus("detected");
         return;
@@ -417,6 +461,14 @@ export default function App() {
 
   const selectedOpportunity =
     savedOpportunities.find((item) => item.opportunity_id === selectedOpportunityId) ?? null;
+
+  useEffect(() => {
+    if (!selectedPersonId || !selectedOpportunityId) {
+      setAiRuns([]);
+      return;
+    }
+    void refreshAiRunsFor(selectedPersonId, selectedOpportunityId, aiRunActionFilter);
+  }, [selectedPersonId, selectedOpportunityId, aiRunActionFilter]);
 
   useEffect(() => {
     setSearchQuery("");
@@ -553,6 +605,8 @@ export default function App() {
     setPrepareGuidanceSelected(true);
     setPrepareCoverSelected(true);
     setPrepareSummarySelected(true);
+    setAiRuns([]);
+    setAiRunActionFilter("");
     setActiveCv(null);
     setSelectedCvFile(null);
   }
@@ -851,6 +905,28 @@ export default function App() {
     }
   }
 
+  async function refreshAiRunsFor(
+    personId: string,
+    opportunityId: string,
+    actionKey: string
+  ) {
+    setIsLoadingAiRuns(true);
+    try {
+      const items = await listOpportunityAiRuns(
+        personId,
+        opportunityId,
+        actionKey || undefined
+      );
+      setAiRuns(items);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo cargar el historico IA";
+      setErrorMessage(message);
+    } finally {
+      setIsLoadingAiRuns(false);
+    }
+  }
+
   async function refreshArtifacts(opportunityId: string) {
     if (!selectedPersonId) {
       return;
@@ -880,6 +956,7 @@ export default function App() {
       const items = await listOpportunities(personId);
       setSavedOpportunities(items);
       setSelectedOpportunityId(opportunityId);
+      await refreshAiRunsFor(personId, opportunityId, aiRunActionFilter);
       if (payload.served_from_cache) {
         setErrorMessage("Se mostro el ultimo resultado persistido (sin recalculo).");
       }
@@ -912,6 +989,7 @@ export default function App() {
       const items = await listOpportunities(personId);
       setSavedOpportunities(items);
       setSelectedOpportunityId(opportunityId);
+      await refreshAiRunsFor(personId, opportunityId, aiRunActionFilter);
       if (payload.served_from_cache) {
         setErrorMessage("Se mostro el ultimo resultado persistido (sin recalculo).");
       }
@@ -969,6 +1047,7 @@ export default function App() {
       const items = await listOpportunities(personId);
       setSavedOpportunities(items);
       setSelectedOpportunityId(opportunityId);
+      await refreshAiRunsFor(personId, opportunityId, aiRunActionFilter);
       if (payload.served_from_cache) {
         setErrorMessage("Se mostraron materiales persistidos (sin recalculo).");
       }
@@ -2004,6 +2083,38 @@ export default function App() {
                 <span>Resumen adaptado</span>
               </label>
             </div>
+            <div className="manualRow">
+              <label className="field">
+                Filtro historico IA
+                <select
+                  onChange={(event) => setAiRunActionFilter(event.target.value)}
+                  value={aiRunActionFilter}
+                >
+                  {AI_RUN_ACTION_FILTERS.map((item) => (
+                    <option key={item.value || "all"} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="cardActions alignEnd">
+                <button
+                  disabled={isLoadingAiRuns}
+                  onClick={() =>
+                    selectedPersonId && selectedOpportunity
+                      ? void refreshAiRunsFor(
+                          selectedPersonId,
+                          selectedOpportunity.opportunity_id,
+                          aiRunActionFilter
+                        )
+                      : undefined
+                  }
+                  type="button"
+                >
+                  {isLoadingAiRuns ? "Cargando historico..." : "Refrescar historico IA"}
+                </button>
+              </div>
+            </div>
           </div>
         ) : (
           <p className="metaText">
@@ -2073,6 +2184,49 @@ export default function App() {
               </article>
             ))}
           </div>
+        ) : null}
+        {selectedOpportunity ? (
+          <article className="manualCard">
+            <p className="chatRole">Historico IA (persistido)</p>
+            {isLoadingAiRuns ? (
+              <p className="metaText">Cargando ejecuciones...</p>
+            ) : aiRuns.length === 0 ? (
+              <p className="metaText">
+                No hay ejecuciones para el filtro seleccionado.
+              </p>
+            ) : (
+              <div className="chatList">
+                {aiRuns.map((run) => {
+                  const previewText = getAiRunPreviewText(run);
+                  return (
+                    <article className="chatBubble chatBubbleAssistant" key={run.run_id}>
+                      <p className="chatRole">
+                        {AI_RUN_ACTION_LABELS[run.action_key] ?? run.action_key}
+                      </p>
+                      <p className="metaText">
+                        run_id: {run.run_id} · actualizado:{" "}
+                        {formatAiRunTimestamp(run.updated_at)}
+                        {run.is_current ? " · vigente" : ""}
+                      </p>
+                      {previewText ? (
+                        <p className="chatContent">{previewText}</p>
+                      ) : (
+                        <p className="metaText">
+                          Sin resumen textual directo. Revisa payload estructurado.
+                        </p>
+                      )}
+                      <details className="payloadDetails">
+                        <summary>Ver payload</summary>
+                        <pre className="payloadPre">
+                          {JSON.stringify(run.result_payload, null, 2)}
+                        </pre>
+                      </details>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </article>
         ) : null}
       </section>
       {errorMessage ? <p className="errorText">{errorMessage}</p> : null}

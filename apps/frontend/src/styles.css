@@ -360,6 +360,10 @@ textarea {
   grid-template-columns: 1fr 1fr;
 }
 
+.alignEnd {
+  align-items: end;
+}
+
 .checkboxRow {
   display: flex;
   align-items: center;
@@ -371,6 +375,12 @@ textarea {
 .optionList {
   display: grid;
   gap: 6px;
+}
+
+.payloadDetails summary {
+  cursor: pointer;
+  color: var(--accent-strong);
+  font-size: 0.9rem;
 }
 
 .subheading {
