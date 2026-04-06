@@ -232,6 +232,102 @@ export async function sendMessage(
   return payload.conversation;
 }
 
+type StreamDeltaHandler = (delta: string) => void;
+
+function consumeSseBuffer(
+  chunk: string,
+  onDelta: StreamDeltaHandler
+): { remainder: string } {
+  let buffer = chunk;
+  let separatorIndex = buffer.indexOf("\n\n");
+  while (separatorIndex >= 0) {
+    const rawEvent = buffer.slice(0, separatorIndex);
+    buffer = buffer.slice(separatorIndex + 2);
+
+    const lines = rawEvent.split("\n");
+    let eventName = "";
+    let dataText = "";
+    for (const line of lines) {
+      if (line.startsWith("event:")) {
+        eventName = line.slice("event:".length).trim();
+      } else if (line.startsWith("data:")) {
+        dataText += `${line.slice("data:".length).trim()}\n`;
+      }
+    }
+    dataText = dataText.trim();
+    if (!eventName || !dataText) {
+      separatorIndex = buffer.indexOf("\n\n");
+      continue;
+    }
+
+    try {
+      const payload = JSON.parse(dataText) as { delta?: string; detail?: string };
+      if (eventName === "message_delta" && payload.delta) {
+        onDelta(payload.delta);
+      }
+      if (eventName === "error") {
+        throw new Error(payload.detail || "Stream error");
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error("Invalid SSE payload");
+    }
+
+    separatorIndex = buffer.indexOf("\n\n");
+  }
+  return { remainder: buffer };
+}
+
+export async function sendMessageStream(
+  personId: string,
+  message: string,
+  onDelta: StreamDeltaHandler
+): Promise<Conversation> {
+  const response = await fetch(`${API_BASE}/persons/${personId}/chat/stream`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message })
+  });
+  if (!response.ok) {
+    let messageText = `Request failed: ${response.status}`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) {
+        messageText = payload.detail;
+      }
+    } catch {
+      // Ignore parsing errors for stream setup failures.
+    }
+    throw new Error(messageText);
+  }
+
+  if (!response.body) {
+    throw new Error("Streaming response body is empty");
+  }
+
+  const decoder = new TextDecoder();
+  const reader = response.body.getReader();
+  let pending = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+    pending += decoder.decode(value, { stream: true });
+    const consumed = consumeSseBuffer(pending, onDelta);
+    pending = consumed.remainder;
+  }
+
+  if (pending.trim()) {
+    consumeSseBuffer(`${pending}\n\n`, onDelta);
+  }
+  return getConversation(personId);
+}
+
 export async function searchOpportunities(
   personId: string,
   query: string,

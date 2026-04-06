@@ -32,12 +32,15 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
 - edicion de perfil base por persona en UI (`full_name`, `target_roles`, `location`, `years_experience`, `skills`) via `PATCH /persons/{person_id}`
 - perfil de persona con preferencias culturales/condiciones de trabajo estructuradas por campo (`enabled`, `selected_values`, `criticality`) y notas abiertas
 - en fit cultural, ausencia de evidencia para campos criticos se reporta como `indeterminado` + red flag (sin descarte automatico)
+- chat frontend usa streaming SSE real sobre `/chat/stream` con render incremental y fallback a `/chat` no-stream
+- criterio de producto: el streaming SSE no debe quedar restringido a chat; debe aplicarse tambien a salidas IA de `analyze` y `prepare`
 - observabilidad basica agregada en backend para errores/fallbacks de proveedores y retrieval semantico
 
 ## Siguiente paso
-- evaluar soporte de streaming SSE real en frontend usando `/chat/stream`
+- extender SSE a endpoints IA de `analyze` y `prepare` (hoy implementado en `chat`)
 - agregar pruebas unitarias para transiciones de estado y manejo de `cultural_fit_preferences`
 - ampliar cobertura de pruebas para `prepare` y artefactos por oportunidad/persona
+- agregar pruebas de flujo SSE para `chat` y para `analyze/prepare` cuando queden habilitados
 
 ## Testing Backend
 - ejecutar aislamiento por `person_id` (API+store):

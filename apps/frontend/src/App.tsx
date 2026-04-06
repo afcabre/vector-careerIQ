@@ -25,6 +25,7 @@ import {
   saveOpportunityFromSearch,
   searchOpportunities,
   sendMessage,
+  sendMessageStream,
   updatePerson as updatePersonProfile,
   updateOpportunity,
   uploadCV
@@ -162,6 +163,7 @@ export default function App() {
   const [isConversationLoading, setIsConversationLoading] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [streamingAssistantText, setStreamingAssistantText] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchWarnings, setSearchWarnings] = useState<string[]>([]);
@@ -236,6 +238,7 @@ export default function App() {
     const loadConversation = async () => {
       if (!selectedPersonId || view !== "workspace") {
         setConversation(null);
+        setStreamingAssistantText("");
         return;
       }
       setIsConversationLoading(true);
@@ -410,6 +413,7 @@ export default function App() {
     setPassword("");
     setSelectedPersonId(null);
     setConversation(null);
+    setStreamingAssistantText("");
     setChatInput("");
     setAnalysisText("");
     setCulturalConfidence("");
@@ -425,17 +429,38 @@ export default function App() {
     if (!selectedPersonId || !chatInput.trim() || isSendingMessage) {
       return;
     }
+    const messageToSend = chatInput.trim();
     setIsSendingMessage(true);
+    setStreamingAssistantText("");
     setErrorMessage(null);
+    let streamedAnyDelta = false;
     try {
-      const updatedConversation = await sendMessage(selectedPersonId, chatInput.trim());
+      const updatedConversation = await sendMessageStream(
+        selectedPersonId,
+        messageToSend,
+        (delta) => {
+          streamedAnyDelta = true;
+          setStreamingAssistantText((current) => `${current}${delta}`);
+        }
+      );
       setConversation(updatedConversation);
       setChatInput("");
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "No se pudo enviar el mensaje";
+      if (!streamedAnyDelta) {
+        try {
+          const updatedConversation = await sendMessage(selectedPersonId, messageToSend);
+          setConversation(updatedConversation);
+          setChatInput("");
+          setErrorMessage("Streaming no disponible. Se uso envio no-stream como fallback.");
+          return;
+        } catch {
+          // Keep original stream failure message below.
+        }
+      }
+      const message = error instanceof Error ? error.message : "No se pudo enviar el mensaje";
       setErrorMessage(message);
     } finally {
+      setStreamingAssistantText("");
       setIsSendingMessage(false);
     }
   }
@@ -1119,7 +1144,7 @@ export default function App() {
           <p className="metaText">Cargando conversacion...</p>
         ) : (
           <div className="chatList">
-            {(conversation?.messages ?? []).length === 0 ? (
+            {(conversation?.messages ?? []).length === 0 && !isSendingMessage ? (
               <p className="metaText">No hay mensajes aun para este perfil.</p>
             ) : (
               conversation?.messages.map((message) => (
@@ -1136,6 +1161,14 @@ export default function App() {
                 </article>
               ))
             )}
+            {isSendingMessage ? (
+              <article className="chatBubble chatBubbleAssistant">
+                <p className="chatRole">Asistente (stream)</p>
+                <p className="chatContent">
+                  {streamingAssistantText || "Procesando respuesta..."}
+                </p>
+              </article>
+            ) : null}
           </div>
         )}
         <form className="chatForm" onSubmit={handleSendMessage}>
