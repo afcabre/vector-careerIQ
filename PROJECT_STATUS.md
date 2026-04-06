@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `detalle no persistente de resultados de busqueda + guardado explicito validado por contrato`
+- checkpoint_actual: `backend de administracion de prompts implementado y aplicado a queries Tavily`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
 - ultima_actualizacion: `2026-04-06`
 
@@ -45,6 +45,13 @@
 - busqueda multi-provider implementada en backend (`Adzuna via RapidAPI`, `Remotive`, `Tavily`)
 - UI permite abrir detalle efimero de resultados de busqueda sin persistir; el guardado sigue como accion separada `Guardar como oportunidad`
 - UX de `Abrir detalle` ajustada para mostrar/ocultar detalle inline en la misma tarjeta de resultado (feedback inmediato visible)
+- requerimientos normativos actualizados para incluir modulo/seccion de administracion de prompts en V1
+- arquitectura actualizada con `Prompt Admin`, `Prompt Config Router/Service` y endpoints admin de configuracion
+- backend incorpora `prompt_config_store` con defaults V1, validacion y persistencia `memory/firestore`
+- backend expone endpoints admin `GET /api/admin/prompt-configs`, `GET /api/admin/prompt-configs/{flow_key}` y `PATCH /api/admin/prompt-configs/{flow_key}`
+- busqueda Tavily de vacantes usa construccion de query configurable via `prompt_configs` (`search_jobs_tavily`)
+- fit cultural Tavily usa construccion de query configurable via `prompt_configs` (`search_culture_tavily`)
+- pruebas de contrato/admin de prompt configs agregadas en `apps/backend/tests/test_prompt_config_admin.py` (`5 tests` en `OK`)
 - degradacion parcial por proveedor implementada con warnings por fuente
 - deduplicacion de resultados implementada con clave principal por `source_url`
 - `Remotive API` operando en modo publico V1; `REMOTIVE_API_KEY` queda opcional
@@ -110,5 +117,5 @@
 - riesgo operativo local: entorno de desarrollo modificado para diagnostico (`anyio` downgraded en `.venv`) sin solucion aun para el bloqueo ASGI
 
 ## Siguiente Actividad
-- implementar rate limiting basico de login en backend para cerrar baseline de seguridad V1 (`RF-04`, `RNF-08`)
-- agregar tests de contrato para intentos fallidos repetidos y ventana de bloqueo temporal
+- implementar UI de administracion de prompts para editar `template_text`, `target_sources` e `is_active` por flujo
+- agregar validaciones y mensajes de error en frontend para evitar guardar plantillas invalidas
