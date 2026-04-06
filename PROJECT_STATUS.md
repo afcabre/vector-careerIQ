@@ -75,6 +75,10 @@
 - pruebas de integracion de `prepare` y persistencia/reemplazo de artefactos agregadas en `apps/backend/tests/test_prepare_artifacts.py`
 - pruebas de flujo SSE para `chat`, `analyze` y `prepare` agregadas en `apps/backend/tests/test_sse_flows.py`
 - suite backend actualizada y verificada localmente: `12 tests` en `OK`
+- pruebas de contratos API para errores (`422` status invalido, `409` transicion invalida) y aislamiento por `person_id` en `artifacts`/`analyze_stream`/`prepare_stream` agregadas en `apps/backend/tests/test_api_error_and_fallbacks.py`
+- pruebas de fallback para proveedores de busqueda y fallback LLM (`analyze`/`prepare`) agregadas en `apps/backend/tests/test_api_error_and_fallbacks.py`
+- prueba SSE adicional de evento `error` en `prepare/stream` agregada en `apps/backend/tests/test_sse_flows.py`
+- suite backend actualizada y verificada localmente: `19 tests` en `OK`
 
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada de CV a Markdown (PyMuPDF/LlamaIndex) para mejorar jerarquia semantica
@@ -85,5 +89,5 @@
 - no hay bloqueadores tecnicos activos reportados en este checkpoint
 
 ## Siguiente Actividad
-- ampliar pruebas de contratos API para errores y fallback (proveedores externos y LLM)
-- reforzar cobertura de aislamiento por `person_id` en artefactos y endpoints de streaming
+- agregar prueba de aislamiento por `person_id` en endpoint de artifacts usando router HTTP completo (TestClient) y no solo handlers
+- ampliar pruebas de persistencia `firestore` en modo mocked para validar paridad minima con `memory`

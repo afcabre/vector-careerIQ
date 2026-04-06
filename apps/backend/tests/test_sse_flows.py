@@ -221,6 +221,38 @@ class SseFlowsTests(unittest.TestCase):
         assert stored is not None
         self.assertEqual(stored["status"], "application_prepared")
 
+    def test_prepare_stream_emits_error_event_when_generation_fails(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Platform Engineer",
+            company="Infra Co",
+            location="Remote",
+            raw_text="Infra role",
+        )
+        opportunity_id = created["opportunity_id"]
+
+        with patch.object(
+            opportunities_api,
+            "stream_prepare_sections",
+            side_effect=RuntimeError("stream failed"),
+        ):
+            response = asyncio.run(
+                opportunities_api.prepare_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                    settings=get_settings(),
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        names = [name for name, _ in events]
+        self.assertIn("message_start", names)
+        self.assertIn("error", names)
+        error_payload = next(payload for name, payload in events if name == "error")
+        self.assertIn("stream failed", str(error_payload.get("detail", "")))
+
 
 if __name__ == "__main__":
     unittest.main()
