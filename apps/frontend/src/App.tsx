@@ -8,10 +8,11 @@ import {
   CulturalSignal,
   Opportunity,
   Person,
+  PromptConfig,
   SearchResult,
   SemanticEvidence,
-  analyzeOpportunity,
-  analyzeOpportunityStream,
+  analyzeCulturalFit,
+  analyzeProfileMatch,
   createPerson,
   getConversation,
   getActiveCV,
@@ -21,14 +22,15 @@ import {
   listOpportunityArtifacts,
   listOpportunities,
   listPersons,
+  listPromptConfigs,
   login,
   logout,
   prepareOpportunity,
-  prepareOpportunityStream,
   saveOpportunityFromSearch,
   searchOpportunities,
   sendMessage,
   sendMessageStream,
+  updatePromptConfig as updatePromptConfigApi,
   updatePerson as updatePersonProfile,
   updateOpportunity,
   uploadCV
@@ -43,6 +45,39 @@ const OPPORTUNITY_STATUSES = [
   "applied",
   "discarded"
 ] as const;
+
+const PROMPT_FLOW_LABELS: Record<string, string> = {
+  search_jobs_tavily: "Busqueda de vacantes (Tavily)",
+  search_culture_tavily: "Fit cultural (Tavily)",
+  guardrails_core: "Guardrails Core (global)",
+  system_identity: "System Identity (global)",
+  task_chat: "Task Prompt: Chat",
+  task_analyze_profile_match: "Task Prompt: Analyze Perfil-Vacante",
+  task_analyze_cultural_fit: "Task Prompt: Analyze Fit Cultural",
+  task_prepare_guidance: "Task Prompt: Prepare Guidance",
+  task_prepare_cover_letter: "Task Prompt: Prepare Carta",
+  task_prepare_experience_summary: "Task Prompt: Prepare Resumen"
+};
+
+const PROMPT_FLOW_ORDER: string[] = [
+  "search_jobs_tavily",
+  "search_culture_tavily",
+  "guardrails_core",
+  "system_identity",
+  "task_chat",
+  "task_analyze_profile_match",
+  "task_analyze_cultural_fit",
+  "task_prepare_guidance",
+  "task_prepare_cover_letter",
+  "task_prepare_experience_summary"
+];
+const PROMPT_SOURCE_FLOW_KEYS = new Set(["search_jobs_tavily", "search_culture_tavily"]);
+
+type PromptConfigDraft = {
+  template_text: string;
+  target_sources_input: string;
+  is_active: boolean;
+};
 
 const CRITICALITY_OPTIONS: Array<{
   value: CulturalFieldPreference["criticality"];
@@ -153,6 +188,20 @@ function buildDefaultCulturalPreferences(): Record<string, CulturalFieldPreferen
   return defaults;
 }
 
+function buildPromptConfigDrafts(
+  configs: PromptConfig[]
+): Record<string, PromptConfigDraft> {
+  const drafts: Record<string, PromptConfigDraft> = {};
+  for (const config of configs) {
+    drafts[config.flow_key] = {
+      template_text: config.template_text,
+      target_sources_input: config.target_sources.join("\n"),
+      is_active: config.is_active
+    };
+  }
+  return drafts;
+}
+
 export default function App() {
   const [view, setView] = useState<ViewState>("checking");
   const [username, setUsername] = useState("tutor");
@@ -160,6 +209,13 @@ export default function App() {
   const [operatorName, setOperatorName] = useState("");
   const [people, setPeople] = useState<Person[]>([]);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
+  const [promptConfigs, setPromptConfigs] = useState<PromptConfig[]>([]);
+  const [promptConfigDrafts, setPromptConfigDrafts] = useState<
+    Record<string, PromptConfigDraft>
+  >({});
+  const [isLoadingPromptConfigs, setIsLoadingPromptConfigs] = useState(false);
+  const [promptConfigReloadToken, setPromptConfigReloadToken] = useState(0);
+  const [savingPromptFlowKey, setSavingPromptFlowKey] = useState<string | null>(null);
   const [newPersonFullName, setNewPersonFullName] = useState("");
   const [newPersonTargetRolesInput, setNewPersonTargetRolesInput] = useState("");
   const [newPersonLocation, setNewPersonLocation] = useState("");
@@ -204,9 +260,14 @@ export default function App() {
   const [semanticEvidence, setSemanticEvidence] = useState<SemanticEvidence | null>(null);
   const [guidanceText, setGuidanceText] = useState("");
   const [artifacts, setArtifacts] = useState<ApplicationArtifact[]>([]);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isAnalyzingProfile, setIsAnalyzingProfile] = useState(false);
+  const [isAnalyzingCultural, setIsAnalyzingCultural] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
   const [isLoadingArtifacts, setIsLoadingArtifacts] = useState(false);
+  const [forceRecomputeAi, setForceRecomputeAi] = useState(false);
+  const [prepareGuidanceSelected, setPrepareGuidanceSelected] = useState(true);
+  const [prepareCoverSelected, setPrepareCoverSelected] = useState(true);
+  const [prepareSummarySelected, setPrepareSummarySelected] = useState(true);
   const [opportunityNotes, setOpportunityNotes] = useState("");
   const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [opportunityStatus, setOpportunityStatus] = useState<string>("detected");
@@ -241,8 +302,41 @@ export default function App() {
     void boot();
   }, []);
 
+  useEffect(() => {
+    const loadPromptConfigs = async () => {
+      if (view !== "workspace") {
+        setPromptConfigs([]);
+        setPromptConfigDrafts({});
+        return;
+      }
+      setIsLoadingPromptConfigs(true);
+      setErrorMessage(null);
+      try {
+        const items = await listPromptConfigs();
+        setPromptConfigs(items);
+        setPromptConfigDrafts(buildPromptConfigDrafts(items));
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "No se pudo cargar la configuracion de prompts";
+        setErrorMessage(message);
+      } finally {
+        setIsLoadingPromptConfigs(false);
+      }
+    };
+    void loadPromptConfigs();
+  }, [view, promptConfigReloadToken]);
+
   const selectedPerson =
     people.find((person) => person.person_id === selectedPersonId) ?? null;
+  const orderedPromptConfigs = [...promptConfigs].sort((a, b) => {
+    const indexA = PROMPT_FLOW_ORDER.indexOf(a.flow_key);
+    const indexB = PROMPT_FLOW_ORDER.indexOf(b.flow_key);
+    const rankA = indexA >= 0 ? indexA : Number.MAX_SAFE_INTEGER;
+    const rankB = indexB >= 0 ? indexB : Number.MAX_SAFE_INTEGER;
+    return rankA - rankB;
+  });
 
   useEffect(() => {
     const loadConversation = async () => {
@@ -440,6 +534,8 @@ export default function App() {
     setPassword("");
     setSelectedPersonId(null);
     setPeople([]);
+    setPromptConfigs([]);
+    setPromptConfigDrafts({});
     setNewPersonFullName("");
     setNewPersonTargetRolesInput("");
     setNewPersonLocation("");
@@ -453,6 +549,10 @@ export default function App() {
     setCulturalWarnings([]);
     setCulturalSignals([]);
     setSemanticEvidence(null);
+    setForceRecomputeAi(false);
+    setPrepareGuidanceSelected(true);
+    setPrepareCoverSelected(true);
+    setPrepareSummarySelected(true);
     setActiveCv(null);
     setSelectedCvFile(null);
   }
@@ -510,6 +610,77 @@ export default function App() {
       setErrorMessage(message);
     } finally {
       setIsCreatingPerson(false);
+    }
+  }
+
+  function handlePromptDraftChange(
+    flowKey: string,
+    patch: Partial<PromptConfigDraft>
+  ) {
+    setPromptConfigDrafts((current) => {
+      const currentDraft = current[flowKey] ?? {
+        template_text: "",
+        target_sources_input: "",
+        is_active: true
+      };
+      return {
+        ...current,
+        [flowKey]: {
+          ...currentDraft,
+          ...patch
+        }
+      };
+    });
+  }
+
+  async function handleSavePromptConfig(flowKey: string) {
+    const draft = promptConfigDrafts[flowKey];
+    if (!draft || savingPromptFlowKey) {
+      return;
+    }
+
+    const templateText = draft.template_text.trim();
+    const targetSources = draft.target_sources_input
+      .split(/[\n,]/g)
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    if (!templateText) {
+      setErrorMessage("La plantilla de prompt no puede estar vacia.");
+      return;
+    }
+    if (PROMPT_SOURCE_FLOW_KEYS.has(flowKey) && targetSources.length === 0) {
+      setErrorMessage("Debes incluir al menos una fuente objetivo.");
+      return;
+    }
+
+    setSavingPromptFlowKey(flowKey);
+    setErrorMessage(null);
+    try {
+      const updated = await updatePromptConfigApi(flowKey, {
+        template_text: templateText,
+        target_sources: PROMPT_SOURCE_FLOW_KEYS.has(flowKey) ? targetSources : [],
+        is_active: draft.is_active
+      });
+      setPromptConfigs((current) =>
+        current.map((item) => (item.flow_key === updated.flow_key ? updated : item))
+      );
+      setPromptConfigDrafts((current) => ({
+        ...current,
+        [flowKey]: {
+          template_text: updated.template_text,
+          target_sources_input: updated.target_sources.join("\n"),
+          is_active: updated.is_active
+        }
+      }));
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "No se pudo guardar la configuracion del prompt";
+      setErrorMessage(message);
+    } finally {
+      setSavingPromptFlowKey(null);
     }
   }
 
@@ -693,56 +864,62 @@ export default function App() {
     }
   }
 
-  async function handleAnalyze(opportunityId: string) {
+  async function handleAnalyzeProfileMatch(opportunityId: string) {
     if (!selectedPersonId) {
       return;
     }
     const personId = selectedPersonId;
     setSelectedOpportunityId(opportunityId);
-    setIsAnalyzing(true);
+    setIsAnalyzingProfile(true);
     setErrorMessage(null);
     setAnalysisText("");
-    let streamedAnyDelta = false;
     try {
-      const payload = await analyzeOpportunityStream(
-        personId,
-        opportunityId,
-        (delta) => {
-          streamedAnyDelta = true;
-          setAnalysisText((current) => `${current}${delta}`);
-        }
-      );
+      const payload = await analyzeProfileMatch(personId, opportunityId, forceRecomputeAi);
       setAnalysisText(payload.analysis_text);
-      setCulturalConfidence(payload.cultural_confidence);
-      setCulturalWarnings(payload.cultural_warnings);
-      setCulturalSignals(payload.cultural_signals);
       setSemanticEvidence(payload.semantic_evidence);
       const items = await listOpportunities(personId);
       setSavedOpportunities(items);
       setSelectedOpportunityId(opportunityId);
-    } catch (error) {
-      if (!streamedAnyDelta) {
-        try {
-          const payload = await analyzeOpportunity(personId, opportunityId);
-          setAnalysisText(payload.analysis_text);
-          setCulturalConfidence(payload.cultural_confidence);
-          setCulturalWarnings(payload.cultural_warnings);
-          setCulturalSignals(payload.cultural_signals);
-          setSemanticEvidence(payload.semantic_evidence);
-          const items = await listOpportunities(personId);
-          setSavedOpportunities(items);
-          setSelectedOpportunityId(opportunityId);
-          setErrorMessage("Streaming no disponible. Se uso analyze no-stream como fallback.");
-          return;
-        } catch {
-          // Keep original stream failure message below.
-        }
+      if (payload.served_from_cache) {
+        setErrorMessage("Se mostro el ultimo resultado persistido (sin recalculo).");
       }
+    } catch (error) {
       const message =
-        error instanceof Error ? error.message : "No se pudo analizar la oportunidad";
+        error instanceof Error ? error.message : "No se pudo analizar perfil-vacante";
       setErrorMessage(message);
     } finally {
-      setIsAnalyzing(false);
+      setIsAnalyzingProfile(false);
+    }
+  }
+
+  async function handleAnalyzeCulturalFit(opportunityId: string) {
+    if (!selectedPersonId) {
+      return;
+    }
+    const personId = selectedPersonId;
+    setSelectedOpportunityId(opportunityId);
+    setIsAnalyzingCultural(true);
+    setErrorMessage(null);
+    setCulturalConfidence("");
+    setCulturalWarnings([]);
+    setCulturalSignals([]);
+    try {
+      const payload = await analyzeCulturalFit(personId, opportunityId, forceRecomputeAi);
+      setAnalysisText(payload.analysis_text);
+      setCulturalConfidence(payload.cultural_confidence);
+      setCulturalWarnings(payload.cultural_warnings);
+      setCulturalSignals(payload.cultural_signals);
+      const items = await listOpportunities(personId);
+      setSavedOpportunities(items);
+      setSelectedOpportunityId(opportunityId);
+      if (payload.served_from_cache) {
+        setErrorMessage("Se mostro el ultimo resultado persistido (sin recalculo).");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "No se pudo analizar fit cultural";
+      setErrorMessage(message);
+    } finally {
+      setIsAnalyzingCultural(false);
     }
   }
 
@@ -751,61 +928,39 @@ export default function App() {
       return;
     }
     const personId = selectedPersonId;
+    const targets: Array<"guidance_text" | "cover_letter" | "experience_summary"> = [];
+    if (prepareGuidanceSelected) {
+      targets.push("guidance_text");
+    }
+    if (prepareCoverSelected) {
+      targets.push("cover_letter");
+    }
+    if (prepareSummarySelected) {
+      targets.push("experience_summary");
+    }
+    if (targets.length === 0) {
+      setErrorMessage("Selecciona al menos un material para preparar.");
+      return;
+    }
+
     setSelectedOpportunityId(opportunityId);
     setIsPreparing(true);
     setErrorMessage(null);
     setGuidanceText("");
-    setArtifacts([]);
-    const draftTimestamp = new Date().toISOString();
-    let draftCover = "";
-    let draftSummary = "";
-    let streamedAnyDelta = false;
-
-    const setDraftArtifacts = () => {
-      const draftItems: ApplicationArtifact[] = [];
-      if (draftCover) {
-        draftItems.push({
-          artifact_id: "stream-cover-letter",
-          person_id: personId,
-          opportunity_id: opportunityId,
-          artifact_type: "cover_letter",
-          content: draftCover,
-          is_current: true,
-          created_at: draftTimestamp,
-          updated_at: draftTimestamp
-        });
-      }
-      if (draftSummary) {
-        draftItems.push({
-          artifact_id: "stream-experience-summary",
-          person_id: personId,
-          opportunity_id: opportunityId,
-          artifact_type: "experience_summary",
-          content: draftSummary,
-          is_current: true,
-          created_at: draftTimestamp,
-          updated_at: draftTimestamp
-        });
-      }
-      setArtifacts(draftItems);
-    };
+    if (!targets.includes("guidance_text")) {
+      setGuidanceText("");
+    }
+    if (!targets.includes("cover_letter") && !targets.includes("experience_summary")) {
+      setArtifacts([]);
+    }
 
     try {
-      const payload = await prepareOpportunityStream(
+      const payload = await prepareOpportunity(
         personId,
         opportunityId,
-        (channel, delta) => {
-          streamedAnyDelta = true;
-          if (channel === "guidance_text") {
-            setGuidanceText((current) => `${current}${delta}`);
-            return;
-          }
-          if (channel === "cover_letter") {
-            draftCover += delta;
-          } else {
-            draftSummary += delta;
-          }
-          setDraftArtifacts();
+        {
+          targets,
+          force_recompute: forceRecomputeAi
         }
       );
       setGuidanceText(payload.guidance_text);
@@ -814,22 +969,10 @@ export default function App() {
       const items = await listOpportunities(personId);
       setSavedOpportunities(items);
       setSelectedOpportunityId(opportunityId);
-    } catch (error) {
-      if (!streamedAnyDelta) {
-        try {
-          const payload = await prepareOpportunity(personId, opportunityId);
-          setGuidanceText(payload.guidance_text);
-          setArtifacts(payload.artifacts);
-          setSemanticEvidence(payload.semantic_evidence);
-          const items = await listOpportunities(personId);
-          setSavedOpportunities(items);
-          setSelectedOpportunityId(opportunityId);
-          setErrorMessage("Streaming no disponible. Se uso prepare no-stream como fallback.");
-          return;
-        } catch {
-          // Keep original stream failure message below.
-        }
+      if (payload.served_from_cache) {
+        setErrorMessage("Se mostraron materiales persistidos (sin recalculo).");
       }
+    } catch (error) {
       const message =
         error instanceof Error ? error.message : "No se pudo preparar postulacion";
       setErrorMessage(message);
@@ -1162,6 +1305,106 @@ export default function App() {
             </button>
           </div>
         </form>
+      </section>
+
+      <section className="panel selectedPanel">
+        <header className="panelHeader">
+          <div>
+            <h2>Administracion de prompts (global V1)</h2>
+            <p>
+              Ajusta guardrails, identidad y task prompts de chat/analyze/prepare. Tambien
+              puedes editar consultas Tavily para busqueda y fit cultural.
+            </p>
+          </div>
+          <button
+            className="ghostButton"
+            disabled={isLoadingPromptConfigs}
+            onClick={() => setPromptConfigReloadToken((current) => current + 1)}
+            type="button"
+          >
+            {isLoadingPromptConfigs ? "Actualizando..." : "Refrescar"}
+          </button>
+        </header>
+        {isLoadingPromptConfigs ? (
+          <p className="metaText">Cargando configuracion de prompts...</p>
+        ) : promptConfigs.length === 0 ? (
+          <p className="metaText">No hay flujos de prompts configurados.</p>
+        ) : (
+          <div className="promptConfigGrid">
+            {orderedPromptConfigs.map((config) => {
+              const draft = promptConfigDrafts[config.flow_key] ?? {
+                template_text: config.template_text,
+                target_sources_input: config.target_sources.join("\n"),
+                is_active: config.is_active
+              };
+              const isSaving = savingPromptFlowKey === config.flow_key;
+              return (
+                <article className="manualCard" key={config.flow_key}>
+                  <p className="chatRole">
+                    {PROMPT_FLOW_LABELS[config.flow_key] ?? config.flow_key}
+                  </p>
+                  <p className="metaText">flow_key: {config.flow_key}</p>
+                  <label className="checkboxRow">
+                    <input
+                      checked={draft.is_active}
+                      disabled={isSaving}
+                      onChange={(event) =>
+                        handlePromptDraftChange(config.flow_key, {
+                          is_active: event.target.checked
+                        })
+                      }
+                      type="checkbox"
+                    />
+                    <span>Configuracion activa</span>
+                  </label>
+                  <label className="field">
+                    Plantilla de prompt
+                    <textarea
+                      disabled={isSaving}
+                      onChange={(event) =>
+                        handlePromptDraftChange(config.flow_key, {
+                          template_text: event.target.value
+                        })
+                      }
+                      rows={5}
+                      value={draft.template_text}
+                    />
+                  </label>
+                  {PROMPT_SOURCE_FLOW_KEYS.has(config.flow_key) ? (
+                    <label className="field">
+                      Fuentes objetivo (coma o salto de linea)
+                      <textarea
+                        disabled={isSaving}
+                        onChange={(event) =>
+                          handlePromptDraftChange(config.flow_key, {
+                            target_sources_input: event.target.value
+                          })
+                        }
+                        rows={5}
+                        value={draft.target_sources_input}
+                      />
+                    </label>
+                  ) : (
+                    <p className="metaText">Este flujo no usa fuentes objetivo.</p>
+                  )}
+                  <p className="metaText">
+                    Ultima actualizacion: {new Date(config.updated_at).toLocaleString()} por{" "}
+                    {config.updated_by}
+                  </p>
+                  <div className="cardActions">
+                    <button
+                      disabled={isSaving}
+                      onClick={() => void handleSavePromptConfig(config.flow_key)}
+                      type="button"
+                    >
+                      {isSaving ? "Guardando..." : "Guardar configuracion"}
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       <section className="panel selectedPanel">
@@ -1637,13 +1880,22 @@ export default function App() {
                     {selectedOpportunityId === item.opportunity_id ? "Activa" : "Abrir"}
                   </button>
                   <button
-                    disabled={isAnalyzing}
-                    onClick={() => void handleAnalyze(item.opportunity_id)}
+                    disabled={isAnalyzingProfile}
+                    onClick={() => void handleAnalyzeProfileMatch(item.opportunity_id)}
                     type="button"
                   >
-                    {isAnalyzing && selectedOpportunityId === item.opportunity_id
-                      ? "Analizando..."
-                      : "Analyze"}
+                    {isAnalyzingProfile && selectedOpportunityId === item.opportunity_id
+                      ? "Analizando perfil..."
+                      : "Analyze perfil"}
+                  </button>
+                  <button
+                    disabled={isAnalyzingCultural}
+                    onClick={() => void handleAnalyzeCulturalFit(item.opportunity_id)}
+                    type="button"
+                  >
+                    {isAnalyzingCultural && selectedOpportunityId === item.opportunity_id
+                      ? "Analizando cultura..."
+                      : "Analyze cultura"}
                   </button>
                   <button
                     disabled={isPreparing}
@@ -1652,7 +1904,7 @@ export default function App() {
                   >
                     {isPreparing && selectedOpportunityId === item.opportunity_id
                       ? "Preparando..."
-                      : "Prepare"}
+                      : "Prepare seleccionado"}
                   </button>
                   <button
                     disabled={isLoadingArtifacts}
@@ -1716,6 +1968,41 @@ export default function App() {
               >
                 {isSavingNotes ? "Guardando notas..." : "Guardar notas"}
               </button>
+            </div>
+            <label className="checkboxRow">
+              <input
+                checked={forceRecomputeAi}
+                onChange={(event) => setForceRecomputeAi(event.target.checked)}
+                type="checkbox"
+              />
+              <span>Forzar recalculo IA (si no, usa ultimo persistido)</span>
+            </label>
+            <p className="metaText">Preparar materiales: selecciona lo que quieras generar.</p>
+            <div className="optionList">
+              <label className="checkboxRow">
+                <input
+                  checked={prepareGuidanceSelected}
+                  onChange={(event) => setPrepareGuidanceSelected(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>Ayuda textual</span>
+              </label>
+              <label className="checkboxRow">
+                <input
+                  checked={prepareCoverSelected}
+                  onChange={(event) => setPrepareCoverSelected(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>Carta de presentacion</span>
+              </label>
+              <label className="checkboxRow">
+                <input
+                  checked={prepareSummarySelected}
+                  onChange={(event) => setPrepareSummarySelected(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>Resumen adaptado</span>
+              </label>
             </div>
           </div>
         ) : (

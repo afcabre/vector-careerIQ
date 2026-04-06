@@ -320,6 +320,12 @@ textarea {
   margin: 10px 0 14px;
 }
 
+.promptConfigGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
 .cultureGrid {
   display: grid;
   gap: 12px;

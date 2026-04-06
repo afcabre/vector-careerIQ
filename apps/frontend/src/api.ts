@@ -103,11 +103,28 @@ export type AnalyzeOpportunityPayload = {
   semantic_evidence: SemanticEvidence;
 };
 
+export type AnalyzeProfileMatchPayload = {
+  opportunity: Opportunity;
+  analysis_text: string;
+  semantic_evidence: SemanticEvidence;
+  served_from_cache: boolean;
+};
+
+export type AnalyzeCulturalFitPayload = {
+  opportunity: Opportunity;
+  analysis_text: string;
+  cultural_confidence: string;
+  cultural_warnings: string[];
+  cultural_signals: CulturalSignal[];
+  served_from_cache: boolean;
+};
+
 export type PrepareOpportunityPayload = {
   opportunity: Opportunity;
   guidance_text: string;
   artifacts: ApplicationArtifact[];
   semantic_evidence: SemanticEvidence;
+  served_from_cache: boolean;
 };
 
 export type ActiveCV = {
@@ -123,6 +140,18 @@ export type ActiveCV = {
   text_truncated: boolean;
   extracted_text_preview: string;
   is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type PromptConfig = {
+  config_id: string;
+  scope: string;
+  flow_key: string;
+  template_text: string;
+  target_sources: string[];
+  is_active: boolean;
+  updated_by: string;
   created_at: string;
   updated_at: string;
 };
@@ -218,6 +247,32 @@ export async function updatePerson(
     body: JSON.stringify(payload)
   });
   return parseResponse<Person>(response);
+}
+
+export async function listPromptConfigs(): Promise<PromptConfig[]> {
+  const response = await fetch(`${API_BASE}/admin/prompt-configs`, {
+    method: "GET",
+    credentials: "include"
+  });
+  const payload = await parseResponse<{ items: PromptConfig[] }>(response);
+  return payload.items;
+}
+
+export async function updatePromptConfig(
+  flowKey: string,
+  payload: {
+    template_text?: string;
+    target_sources?: string[];
+    is_active?: boolean;
+  }
+): Promise<PromptConfig> {
+  const response = await fetch(`${API_BASE}/admin/prompt-configs/${flowKey}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  return parseResponse<PromptConfig>(response);
 }
 
 export async function getActiveCV(personId: string): Promise<ActiveCV | null> {
@@ -456,15 +511,52 @@ export async function analyzeOpportunity(
   return parseResponse<AnalyzeOpportunityPayload>(response);
 }
 
+export async function analyzeProfileMatch(
+  personId: string,
+  opportunityId: string,
+  forceRecompute: boolean
+): Promise<AnalyzeProfileMatchPayload> {
+  const response = await fetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/analyze/profile-match`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ force_recompute: forceRecompute })
+    }
+  );
+  return parseResponse<AnalyzeProfileMatchPayload>(response);
+}
+
+export async function analyzeCulturalFit(
+  personId: string,
+  opportunityId: string,
+  forceRecompute: boolean
+): Promise<AnalyzeCulturalFitPayload> {
+  const response = await fetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/analyze/cultural-fit`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ force_recompute: forceRecompute })
+    }
+  );
+  return parseResponse<AnalyzeCulturalFitPayload>(response);
+}
+
 export async function prepareOpportunity(
   personId: string,
-  opportunityId: string
+  opportunityId: string,
+  payload: { targets: Array<"guidance_text" | "cover_letter" | "experience_summary">; force_recompute: boolean }
 ): Promise<PrepareOpportunityPayload> {
   const response = await fetch(
     `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/prepare`,
     {
       method: "POST",
-      credentials: "include"
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
     }
   );
   return parseResponse<PrepareOpportunityPayload>(response);
