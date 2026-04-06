@@ -82,6 +82,8 @@
 - prueba de paridad minima `memory` vs `firestore` mocked para stores de oportunidades/artefactos agregada en `apps/backend/tests/test_firestore_mock_parity.py`
 - prueba HTTP de aislamiento por `person_id` en endpoint de artifacts agregada en `apps/backend/tests/test_http_artifacts_isolation.py` (marcada `skip` por bloqueo del harness ASGI en entorno local)
 - suite backend actualizada y verificada localmente: `21 tests` en `OK` (`skipped=1`)
+- pruebas adicionales de contratos de error para oportunidad inexistente en `analyze`/`prepare` y sus endpoints SSE agregadas en `apps/backend/tests/test_api_error_and_fallbacks.py`
+- suite backend actualizada y verificada localmente: `23 tests` en `OK` (`skipped=1`)
 
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada de CV a Markdown (PyMuPDF/LlamaIndex) para mejorar jerarquia semantica
@@ -93,4 +95,4 @@
 
 ## Siguiente Actividad
 - investigar causa raiz del bloqueo ASGI en tests locales y habilitar prueba HTTP no-skip para artifacts
-- continuar hardening de pruebas de contratos API en ramas de error poco frecuentes (payloads incompletos, oportunidades inexistentes en rutas de streaming)
+- continuar hardening de pruebas de contratos API en ramas de error poco frecuentes (payloads incompletos y validaciones de entrada)

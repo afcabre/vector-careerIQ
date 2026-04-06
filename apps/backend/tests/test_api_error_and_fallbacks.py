@@ -150,6 +150,56 @@ class ApiContractsAndIsolationTests(unittest.TestCase):
             )
         self.assertEqual(cross_prepare.exception.status_code, 404)
 
+    def test_analyze_and_prepare_reject_missing_opportunity(self) -> None:
+        missing_opportunity_id = "o-missing"
+
+        with self.assertRaises(HTTPException) as missing_analyze:
+            opportunities_api.analyze(
+                person_id="p-001",
+                opportunity_id=missing_opportunity_id,
+                _=self.session,
+                settings=get_settings(),
+            )
+        self.assertEqual(missing_analyze.exception.status_code, 404)
+        self.assertEqual(missing_analyze.exception.detail, "Opportunity not found")
+
+        with self.assertRaises(HTTPException) as missing_prepare:
+            opportunities_api.prepare(
+                person_id="p-001",
+                opportunity_id=missing_opportunity_id,
+                _=self.session,
+                settings=get_settings(),
+            )
+        self.assertEqual(missing_prepare.exception.status_code, 404)
+        self.assertEqual(missing_prepare.exception.detail, "Opportunity not found")
+
+    def test_stream_endpoints_reject_missing_opportunity(self) -> None:
+        missing_opportunity_id = "o-missing"
+
+        with self.assertRaises(HTTPException) as missing_analyze_stream:
+            asyncio.run(
+                opportunities_api.analyze_stream(
+                    person_id="p-001",
+                    opportunity_id=missing_opportunity_id,
+                    _=self.session,
+                    settings=get_settings(),
+                )
+            )
+        self.assertEqual(missing_analyze_stream.exception.status_code, 404)
+        self.assertEqual(missing_analyze_stream.exception.detail, "Opportunity not found")
+
+        with self.assertRaises(HTTPException) as missing_prepare_stream:
+            asyncio.run(
+                opportunities_api.prepare_stream(
+                    person_id="p-001",
+                    opportunity_id=missing_opportunity_id,
+                    _=self.session,
+                    settings=get_settings(),
+                )
+            )
+        self.assertEqual(missing_prepare_stream.exception.status_code, 404)
+        self.assertEqual(missing_prepare_stream.exception.detail, "Opportunity not found")
+
 
 class FallbackBehaviorTests(unittest.TestCase):
     def setUp(self) -> None:
