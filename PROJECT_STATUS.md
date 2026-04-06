@@ -72,6 +72,9 @@
 - frontend consume SSE de `analyze/prepare` con render incremental y fallback automatico a endpoints no-stream
 - suite backend verificada localmente: `8 tests` en `OK`
 - build frontend verificado localmente: `npm run build` en `OK`
+- pruebas de integracion de `prepare` y persistencia/reemplazo de artefactos agregadas en `apps/backend/tests/test_prepare_artifacts.py`
+- pruebas de flujo SSE para `chat`, `analyze` y `prepare` agregadas en `apps/backend/tests/test_sse_flows.py`
+- suite backend actualizada y verificada localmente: `12 tests` en `OK`
 
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada de CV a Markdown (PyMuPDF/LlamaIndex) para mejorar jerarquia semantica
@@ -82,5 +85,5 @@
 - no hay bloqueadores tecnicos activos reportados en este checkpoint
 
 ## Siguiente Actividad
-- ampliar cobertura de pruebas para `prepare` y artefactos por oportunidad/persona
-- agregar pruebas de flujo SSE para `chat`, `analyze` y `prepare`
+- ampliar pruebas de contratos API para errores y fallback (proveedores externos y LLM)
+- reforzar cobertura de aislamiento por `person_id` en artefactos y endpoints de streaming
