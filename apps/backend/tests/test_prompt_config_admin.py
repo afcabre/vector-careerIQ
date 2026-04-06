@@ -20,6 +20,7 @@ from app.services.prompt_config_store import (
     reset_prompt_configs,
     update_prompt_config,
 )
+from app.services.request_trace_store import reset_request_traces
 
 
 def _clear_in_memory_state() -> None:
@@ -31,6 +32,7 @@ def _clear_in_memory_state() -> None:
     cv_store._cvs.clear()  # type: ignore[attr-defined]
     reset_prompt_configs()
     reset_ai_runs()
+    reset_request_traces()
 
 
 class _DummyUrlopenResponse:

@@ -23,6 +23,8 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
 - `analyze` separado por accion (`perfil-vacante` y `fit cultural`) con cache por defecto, `forzar recalculo` y historico backend por accion
 - `prepare` con seleccion de materiales (`guidance`, `cover_letter`, `experience_summary`), cache por defecto y historico backend por accion
 - frontend permite consulta explicita de historico IA persistido por oportunidad (filtro opcional por `action_key`)
+- backend persiste trazas de request exacto enviado a `OpenAI`, `Tavily`, `Adzuna` y `Remotive` (sin secretos)
+- frontend muestra trazas de request por persona con filtros de destino y oportunidad activa
 - importacion manual de vacantes por URL y texto pegado desde frontend
 - carga de CV por persona (`/cv`) con un CV activo por perfil y extraccion base de texto
 - indexacion vectorial del CV activo habilitada (embeddings OpenAI + upsert/query en Pinecone cuando hay configuracion)
@@ -146,7 +148,9 @@ Mapa rapido endpoint -> flow:
 - `POST /api/persons/{person_id}/opportunities/{opportunity_id}/analyze/profile-match`: `guardrails_core + system_identity + task_analyze_profile_match`
 - `POST /api/persons/{person_id}/opportunities/{opportunity_id}/analyze/cultural-fit`: `guardrails_core + system_identity + task_analyze_cultural_fit`
 - `POST /api/persons/{person_id}/opportunities/{opportunity_id}/prepare`: `guardrails_core + system_identity + task_prepare_*` segun `targets`
+- `POST /api/persons/{person_id}/opportunities/{opportunity_id}/prepare/stream`: misma composicion de `prepare` con SSE por canal y soporte de `targets` + `force_recompute`
 - `GET /api/persons/{person_id}/opportunities/{opportunity_id}/ai-runs`: historico backend por accion IA (`action_key` opcional)
+- `GET /api/persons/{person_id}/request-traces`: historial de request payload exacto por destino (`destination`, `opportunity_id`, `limit` opcionales)
 - `POST /api/persons/{person_id}/search`: `search_jobs_tavily`
 - senales culturales en `analyze_cultural_fit`: `search_culture_tavily`
 

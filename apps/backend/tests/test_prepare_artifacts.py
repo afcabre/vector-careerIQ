@@ -9,6 +9,7 @@ from app.core.settings import get_settings
 from app.services import artifact_store, conversation_store, cv_store, opportunity_store, person_store, session_store
 from app.services.ai_run_store import reset_ai_runs
 from app.services.person_store import seed_persons
+from app.services.request_trace_store import reset_request_traces
 
 
 def _clear_in_memory_state() -> None:
@@ -19,6 +20,7 @@ def _clear_in_memory_state() -> None:
     conversation_store._conversations.clear()  # type: ignore[attr-defined]
     cv_store._cvs.clear()  # type: ignore[attr-defined]
     reset_ai_runs()
+    reset_request_traces()
 
 
 class PrepareArtifactsIntegrationTests(unittest.TestCase):

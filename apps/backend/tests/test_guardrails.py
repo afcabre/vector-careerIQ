@@ -13,6 +13,7 @@ from app.services.guardrail_service import (
 )
 from app.services.llm_service import _system_prompt
 from app.services.person_store import get_person, seed_persons
+from app.services.request_trace_store import reset_request_traces
 import app.services.opportunity_ai_service as opportunity_ai_service
 import app.api.opportunities as opportunities_api
 
@@ -23,6 +24,7 @@ def _clear_in_memory_state() -> None:
     session_store._sessions.clear()  # type: ignore[attr-defined]
     conversation_store._conversations.clear()  # type: ignore[attr-defined]
     cv_store._cvs.clear()  # type: ignore[attr-defined]
+    reset_request_traces()
 
 
 class GuardrailsTests(unittest.TestCase):

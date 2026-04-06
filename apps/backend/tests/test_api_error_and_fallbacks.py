@@ -17,6 +17,7 @@ from app.services import artifact_store, conversation_store, cv_store, opportuni
 from app.services.ai_run_store import reset_ai_runs
 from app.services.person_store import get_person, seed_persons
 from app.services.prompt_config_store import reset_prompt_configs
+from app.services.request_trace_store import reset_request_traces
 
 
 def _clear_in_memory_state() -> None:
@@ -28,6 +29,7 @@ def _clear_in_memory_state() -> None:
     cv_store._cvs.clear()  # type: ignore[attr-defined]
     reset_prompt_configs()
     reset_ai_runs()
+    reset_request_traces()
 
 
 class ApiContractsAndIsolationTests(unittest.TestCase):

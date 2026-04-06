@@ -11,9 +11,14 @@ import app.api.opportunities as opportunities_api
 from app.core.security import SessionData
 from app.core.settings import get_settings
 from app.services import artifact_store, conversation_store, cv_store, opportunity_store, person_store, session_store
-from app.services.ai_run_store import reset_ai_runs
+from app.services.ai_run_store import (
+    ACTION_PREPARE_GUIDANCE,
+    reset_ai_runs,
+    upsert_current_ai_run,
+)
 from app.services.conversation_store import get_or_create_conversation
 from app.services.person_store import seed_persons
+from app.services.request_trace_store import reset_request_traces
 
 
 def _clear_in_memory_state() -> None:
@@ -24,6 +29,7 @@ def _clear_in_memory_state() -> None:
     conversation_store._conversations.clear()  # type: ignore[attr-defined]
     cv_store._cvs.clear()  # type: ignore[attr-defined]
     reset_ai_runs()
+    reset_request_traces()
 
 
 async def _collect_sse_text(streaming_response: Any) -> str:
@@ -377,6 +383,110 @@ class SseFlowsTests(unittest.TestCase):
         )
         for item in current_items:
             self.assertTrue(item["content"].strip())
+
+    def test_prepare_stream_respects_selected_targets(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Targeted Prepare",
+            company="Acme",
+            location="Remote",
+            raw_text="Role details",
+        )
+        opportunity_id = created["opportunity_id"]
+
+        bundle = {
+            "system_prompt": "sys",
+            "guidance_prompt": "g",
+            "cover_letter_prompt": "c",
+            "experience_summary_prompt": "s",
+            "semantic_evidence": {
+                "source": "semantic_retrieval",
+                "query": "query",
+                "top_k": 24,
+                "snippets": ["s1"],
+            },
+        }
+        with patch.object(
+            opportunities_api,
+            "stream_prepare_sections",
+            return_value=(
+                bundle,
+                iter(["Gu", "ia"]),
+                iter(["Car", "ta"]),
+                iter(["Res", "umen"]),
+            ),
+        ):
+            response = asyncio.run(
+                opportunities_api.prepare_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    payload=opportunities_api.PrepareRequest(
+                        targets=["guidance_text"],
+                        force_recompute=True,
+                    ),
+                    _=self.session,
+                    settings=get_settings(),
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        delta_channels = [payload["channel"] for name, payload in events if name == "message_delta"]
+        self.assertEqual(delta_channels, ["guidance_text", "guidance_text"])
+        complete_payload = next(payload for name, payload in events if name == "message_complete")
+        self.assertEqual(complete_payload["guidance_text"], "Guia")
+        self.assertEqual(complete_payload["artifacts"], [])
+        self.assertFalse(bool(complete_payload.get("served_from_cache", True)))
+
+    def test_prepare_stream_uses_cached_targets_when_not_forced(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Cached Prepare",
+            company="Acme",
+            location="Remote",
+            raw_text="Role details",
+        )
+        opportunity_id = created["opportunity_id"]
+        upsert_current_ai_run(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            action_key=ACTION_PREPARE_GUIDANCE,
+            result_payload={
+                "content": "Guidance cached",
+                "semantic_evidence": {
+                    "source": "cached",
+                    "query": "q",
+                    "top_k": 24,
+                    "snippets": ["cached snippet"],
+                },
+            },
+        )
+
+        with patch.object(
+            opportunities_api,
+            "stream_prepare_sections",
+            side_effect=AssertionError("should not recompute"),
+        ):
+            response = asyncio.run(
+                opportunities_api.prepare_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    payload=opportunities_api.PrepareRequest(
+                        targets=["guidance_text"],
+                        force_recompute=False,
+                    ),
+                    _=self.session,
+                    settings=get_settings(),
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        deltas = [payload["delta"] for name, payload in events if name == "message_delta"]
+        self.assertEqual(deltas, ["Guidance cached"])
+        complete_payload = next(payload for name, payload in events if name == "message_complete")
+        self.assertEqual(complete_payload["guidance_text"], "Guidance cached")
+        self.assertTrue(bool(complete_payload.get("served_from_cache", False)))
 
     def test_prepare_stream_emits_error_event_when_generation_fails(self) -> None:
         created = opportunity_store.import_text_opportunity(

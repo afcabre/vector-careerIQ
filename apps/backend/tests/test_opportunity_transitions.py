@@ -3,10 +3,12 @@ import unittest
 
 from app.core.settings import get_settings
 from app.services import opportunity_store
+from app.services.request_trace_store import reset_request_traces
 
 
 def _reset_state() -> None:
     opportunity_store._opportunities.clear()  # type: ignore[attr-defined]
+    reset_request_traces()
 
 
 class OpportunityTransitionsTests(unittest.TestCase):

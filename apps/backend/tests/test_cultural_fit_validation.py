@@ -4,10 +4,12 @@ import unittest
 from app.core.settings import get_settings
 from app.services import person_store
 from app.services.person_store import CULTURAL_FIELD_OPTIONS, create_person, sanitize_cultural_fit_preferences
+from app.services.request_trace_store import reset_request_traces
 
 
 def _reset_state() -> None:
     person_store._persons.clear()  # type: ignore[attr-defined]
+    reset_request_traces()
 
 
 class CulturalFitValidationTests(unittest.TestCase):

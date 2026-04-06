@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `prompt layering global + historico IA en UI + paridad SSE con persistencia en chat/analyze/prepare`
+- checkpoint_actual: `prompt layering global + historico IA + trazas exactas de request por proveedor en backend/UI`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
 - ultima_actualizacion: `2026-04-06`
 
@@ -61,6 +61,9 @@
 - backend incorpora store `ai_action_runs` para persistir resultado vigente + historico por accion IA
 - backend expone consulta de historico por accion IA: `GET /api/persons/{person_id}/opportunities/{opportunity_id}/ai-runs` con filtro opcional `action_key`
 - frontend incorpora consulta explicita de historico IA persistido por oportunidad con filtro opcional por accion y refresco manual
+- backend persiste request payload exacto enviado a proveedores IA/busqueda en `request_traces` (sin API keys/secretos)
+- backend expone trazas por persona con filtros: `GET /api/persons/{person_id}/request-traces` (`destination`, `opportunity_id`, `limit`)
+- frontend incorpora panel de trazas para visualizar request exacto por destino y filtrar por oportunidad activa
 - API agrega acciones separadas de analisis: `POST .../analyze/profile-match` y `POST .../analyze/cultural-fit`
 - API `prepare` permite `targets` seleccionables (`guidance_text`, `cover_letter`, `experience_summary`) y `force_recompute`
 - comportamiento por defecto de acciones IA: leer ultimo resultado persistido; regenerar solo con `force_recompute=true`
@@ -102,6 +105,8 @@
 - backend expone `POST /api/persons/{person_id}/opportunities/{opportunity_id}/analyze/stream` con eventos SSE y payload final estructurado
 - backend expone `POST /api/persons/{person_id}/opportunities/{opportunity_id}/prepare/stream` con eventos SSE por canal (`guidance_text`, `cover_letter`, `experience_summary`)
 - frontend consume SSE de `analyze/prepare` con render incremental y fallback automatico a endpoints no-stream
+- frontend usa `analyze/stream` y `prepare/stream` como camino primario desde acciones de UI (`Analyze`/`Prepare`) con fallback no-stream si falla el canal SSE
+- `prepare/stream` alineado a control de consumo de V1: recibe `targets` y `force_recompute`, sirve cache por accion cuando aplica y solo genera/streaming de materiales seleccionados
 - suite backend verificada localmente: `8 tests` en `OK`
 - build frontend verificado localmente: `npm run build` en `OK`
 - pruebas de integracion de `prepare` y persistencia/reemplazo de artefactos agregadas en `apps/backend/tests/test_prepare_artifacts.py`
@@ -132,6 +137,7 @@
 - intento de mitigacion local ejecutado: downgrade de `anyio` de `4.13.0` a `4.4.0` en `.venv`; el bloqueo de `TestClient` persiste
 - suite backend revalidada tras hardening SSE: `51 tests` en `OK` (`skipped=1`)
 - suite backend revalidada tras refuerzo de contratos HTTP fallback/degradacion: `55 tests` en `OK` (`skipped=1`)
+- suite backend actualizada con contratos de `request-traces`: `60 tests` en `OK` (`skipped=1`)
 
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada de CV a Markdown (PyMuPDF/LlamaIndex) para mejorar jerarquia semantica
