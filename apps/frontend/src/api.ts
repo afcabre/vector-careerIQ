@@ -167,6 +167,16 @@ export type PromptConfig = {
   updated_at: string;
 };
 
+export type RequestTrace = {
+  trace_id: string;
+  person_id: string;
+  opportunity_id: string;
+  destination: string;
+  flow_key: string;
+  request_payload: Record<string, unknown>;
+  created_at: string;
+};
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
 
 async function parseResponse<T>(response: Response): Promise<T> {
@@ -219,6 +229,29 @@ export async function listPersons(): Promise<Person[]> {
     credentials: "include"
   });
   const payload = await parseResponse<{ items: Person[] }>(response);
+  return payload.items;
+}
+
+export async function listRequestTraces(
+  personId: string,
+  params?: { opportunityId?: string; destination?: string; limit?: number }
+): Promise<RequestTrace[]> {
+  const query = new URLSearchParams();
+  if (params?.opportunityId?.trim()) {
+    query.set("opportunity_id", params.opportunityId.trim());
+  }
+  if (params?.destination?.trim()) {
+    query.set("destination", params.destination.trim().toLowerCase());
+  }
+  if (typeof params?.limit === "number" && Number.isFinite(params.limit)) {
+    query.set("limit", String(Math.max(1, Math.min(200, Math.trunc(params.limit)))));
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  const response = await fetch(`${API_BASE}/persons/${personId}/request-traces${suffix}`, {
+    method: "GET",
+    credentials: "include"
+  });
+  const payload = await parseResponse<{ items: RequestTrace[] }>(response);
   return payload.items;
 }
 
@@ -648,13 +681,16 @@ export async function analyzeOpportunityStream(
 export async function prepareOpportunityStream(
   personId: string,
   opportunityId: string,
+  payload: { targets: Array<"guidance_text" | "cover_letter" | "experience_summary">; force_recompute: boolean },
   onDelta: (channel: "guidance_text" | "cover_letter" | "experience_summary", delta: string) => void
 ): Promise<PrepareOpportunityPayload> {
   const response = await fetch(
     `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/prepare/stream`,
     {
       method: "POST",
-      credentials: "include"
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
     }
   );
   if (!response.ok) {

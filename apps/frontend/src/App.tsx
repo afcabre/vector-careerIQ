@@ -10,8 +10,10 @@ import {
   Opportunity,
   Person,
   PromptConfig,
+  RequestTrace,
   SearchResult,
   SemanticEvidence,
+  analyzeOpportunityStream,
   analyzeCulturalFit,
   analyzeProfileMatch,
   createPerson,
@@ -25,8 +27,10 @@ import {
   listOpportunities,
   listPersons,
   listPromptConfigs,
+  listRequestTraces,
   login,
   logout,
+  prepareOpportunityStream,
   prepareOpportunity,
   saveOpportunityFromSearch,
   searchOpportunities,
@@ -63,6 +67,14 @@ const AI_RUN_ACTION_FILTERS: Array<{ value: string; label: string }> = [
   { value: "prepare_guidance_text", label: "Prepare ayuda textual" },
   { value: "prepare_cover_letter", label: "Prepare carta de presentacion" },
   { value: "prepare_experience_summary", label: "Prepare resumen de experiencia" }
+];
+
+const TRACE_DESTINATION_FILTERS: Array<{ value: string; label: string }> = [
+  { value: "", label: "Todos los destinos" },
+  { value: "openai", label: "OpenAI" },
+  { value: "tavily", label: "Tavily" },
+  { value: "adzuna", label: "Adzuna" },
+  { value: "remotive", label: "Remotive" }
 ];
 
 const PROMPT_FLOW_LABELS: Record<string, string> = {
@@ -241,6 +253,10 @@ function formatAiRunTimestamp(value: string): string {
   return date.toLocaleString();
 }
 
+function formatRequestTraceTimestamp(value: string): string {
+  return formatAiRunTimestamp(value);
+}
+
 export default function App() {
   const [view, setView] = useState<ViewState>("checking");
   const [username, setUsername] = useState("tutor");
@@ -302,6 +318,10 @@ export default function App() {
   const [aiRuns, setAiRuns] = useState<AIRun[]>([]);
   const [isLoadingAiRuns, setIsLoadingAiRuns] = useState(false);
   const [aiRunActionFilter, setAiRunActionFilter] = useState("");
+  const [requestTraces, setRequestTraces] = useState<RequestTrace[]>([]);
+  const [isLoadingRequestTraces, setIsLoadingRequestTraces] = useState(false);
+  const [traceDestinationFilter, setTraceDestinationFilter] = useState("");
+  const [traceOnlyActiveOpportunity, setTraceOnlyActiveOpportunity] = useState(false);
   const [isAnalyzingProfile, setIsAnalyzingProfile] = useState(false);
   const [isAnalyzingCultural, setIsAnalyzingCultural] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
@@ -417,6 +437,9 @@ export default function App() {
         setArtifacts([]);
         setAiRuns([]);
         setAiRunActionFilter("");
+        setRequestTraces([]);
+        setTraceDestinationFilter("");
+        setTraceOnlyActiveOpportunity(false);
         setOpportunityNotes("");
         setOpportunityStatus("detected");
         return;
@@ -471,6 +494,24 @@ export default function App() {
   }, [selectedPersonId, selectedOpportunityId, aiRunActionFilter]);
 
   useEffect(() => {
+    if (!selectedPersonId) {
+      setRequestTraces([]);
+      return;
+    }
+    void refreshRequestTracesFor(
+      selectedPersonId,
+      traceDestinationFilter,
+      traceOnlyActiveOpportunity,
+      selectedOpportunityId
+    );
+  }, [
+    selectedPersonId,
+    selectedOpportunityId,
+    traceDestinationFilter,
+    traceOnlyActiveOpportunity
+  ]);
+
+  useEffect(() => {
     setSearchQuery("");
     setSearchResults([]);
     setSelectedSearchResultId(null);
@@ -486,6 +527,12 @@ export default function App() {
     }
     setSelectedSearchResultId(null);
   }, [searchResults, selectedSearchResultId]);
+
+  useEffect(() => {
+    if (!selectedOpportunityId && traceOnlyActiveOpportunity) {
+      setTraceOnlyActiveOpportunity(false);
+    }
+  }, [selectedOpportunityId, traceOnlyActiveOpportunity]);
 
   useEffect(() => {
     setOpportunityNotes(selectedOpportunity?.notes ?? "");
@@ -607,6 +654,9 @@ export default function App() {
     setPrepareSummarySelected(true);
     setAiRuns([]);
     setAiRunActionFilter("");
+    setRequestTraces([]);
+    setTraceDestinationFilter("");
+    setTraceOnlyActiveOpportunity(false);
     setActiveCv(null);
     setSelectedCvFile(null);
   }
@@ -759,12 +809,24 @@ export default function App() {
       );
       setConversation(updatedConversation);
       setChatInput("");
+      await refreshRequestTracesFor(
+        selectedPersonId,
+        traceDestinationFilter,
+        traceOnlyActiveOpportunity,
+        selectedOpportunityId
+      );
     } catch (error) {
       if (!streamedAnyDelta) {
         try {
           const updatedConversation = await sendMessage(selectedPersonId, messageToSend);
           setConversation(updatedConversation);
           setChatInput("");
+          await refreshRequestTracesFor(
+            selectedPersonId,
+            traceDestinationFilter,
+            traceOnlyActiveOpportunity,
+            selectedOpportunityId
+          );
           setErrorMessage("Streaming no disponible. Se uso envio no-stream como fallback.");
           return;
         } catch {
@@ -791,6 +853,12 @@ export default function App() {
       setSearchResults(payload.items);
       setSearchWarnings(payload.warnings);
       setSelectedSearchResultId(null);
+      await refreshRequestTracesFor(
+        selectedPersonId,
+        traceDestinationFilter,
+        traceOnlyActiveOpportunity,
+        selectedOpportunityId
+      );
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "No se pudo ejecutar la busqueda";
@@ -927,6 +995,32 @@ export default function App() {
     }
   }
 
+  async function refreshRequestTracesFor(
+    personId: string,
+    destination: string,
+    onlyActiveOpportunity: boolean,
+    selectedOpportunityForScope: string | null
+  ) {
+    setIsLoadingRequestTraces(true);
+    try {
+      const items = await listRequestTraces(personId, {
+        destination: destination || undefined,
+        opportunityId:
+          onlyActiveOpportunity && selectedOpportunityForScope
+            ? selectedOpportunityForScope
+            : undefined,
+        limit: 60
+      });
+      setRequestTraces(items);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo cargar trazas de prompts/API";
+      setErrorMessage(message);
+    } finally {
+      setIsLoadingRequestTraces(false);
+    }
+  }
+
   async function refreshArtifacts(opportunityId: string) {
     if (!selectedPersonId) {
       return;
@@ -950,20 +1044,51 @@ export default function App() {
     setErrorMessage(null);
     setAnalysisText("");
     try {
-      const payload = await analyzeProfileMatch(personId, opportunityId, forceRecomputeAi);
+      const payload = await analyzeOpportunityStream(
+        personId,
+        opportunityId,
+        (delta) => {
+          setAnalysisText((current) => `${current}${delta}`);
+        }
+      );
       setAnalysisText(payload.analysis_text);
       setSemanticEvidence(payload.semantic_evidence);
+      setCulturalConfidence(payload.cultural_confidence);
+      setCulturalWarnings(payload.cultural_warnings);
+      setCulturalSignals(payload.cultural_signals);
       const items = await listOpportunities(personId);
       setSavedOpportunities(items);
       setSelectedOpportunityId(opportunityId);
       await refreshAiRunsFor(personId, opportunityId, aiRunActionFilter);
-      if (payload.served_from_cache) {
-        setErrorMessage("Se mostro el ultimo resultado persistido (sin recalculo).");
-      }
+      await refreshRequestTracesFor(
+        personId,
+        traceDestinationFilter,
+        traceOnlyActiveOpportunity,
+        opportunityId
+      );
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "No se pudo analizar perfil-vacante";
-      setErrorMessage(message);
+      try {
+        const payload = await analyzeProfileMatch(personId, opportunityId, forceRecomputeAi);
+        setAnalysisText(payload.analysis_text);
+        setSemanticEvidence(payload.semantic_evidence);
+        const items = await listOpportunities(personId);
+        setSavedOpportunities(items);
+        setSelectedOpportunityId(opportunityId);
+        await refreshAiRunsFor(personId, opportunityId, aiRunActionFilter);
+        await refreshRequestTracesFor(
+          personId,
+          traceDestinationFilter,
+          traceOnlyActiveOpportunity,
+          opportunityId
+        );
+        setErrorMessage(
+          "Streaming de analyze no disponible. Se uso endpoint no-stream como fallback."
+        );
+      } catch {
+        const message =
+          error instanceof Error ? error.message : "No se pudo analizar perfil-vacante";
+        setErrorMessage(message);
+      }
     } finally {
       setIsAnalyzingProfile(false);
     }
@@ -980,22 +1105,54 @@ export default function App() {
     setCulturalConfidence("");
     setCulturalWarnings([]);
     setCulturalSignals([]);
+    setAnalysisText("");
     try {
-      const payload = await analyzeCulturalFit(personId, opportunityId, forceRecomputeAi);
+      const payload = await analyzeOpportunityStream(
+        personId,
+        opportunityId,
+        (delta) => {
+          setAnalysisText((current) => `${current}${delta}`);
+        }
+      );
       setAnalysisText(payload.analysis_text);
       setCulturalConfidence(payload.cultural_confidence);
       setCulturalWarnings(payload.cultural_warnings);
       setCulturalSignals(payload.cultural_signals);
+      setSemanticEvidence(payload.semantic_evidence);
       const items = await listOpportunities(personId);
       setSavedOpportunities(items);
       setSelectedOpportunityId(opportunityId);
       await refreshAiRunsFor(personId, opportunityId, aiRunActionFilter);
-      if (payload.served_from_cache) {
-        setErrorMessage("Se mostro el ultimo resultado persistido (sin recalculo).");
-      }
+      await refreshRequestTracesFor(
+        personId,
+        traceDestinationFilter,
+        traceOnlyActiveOpportunity,
+        opportunityId
+      );
     } catch (error) {
-      const message = error instanceof Error ? error.message : "No se pudo analizar fit cultural";
-      setErrorMessage(message);
+      try {
+        const payload = await analyzeCulturalFit(personId, opportunityId, forceRecomputeAi);
+        setAnalysisText(payload.analysis_text);
+        setCulturalConfidence(payload.cultural_confidence);
+        setCulturalWarnings(payload.cultural_warnings);
+        setCulturalSignals(payload.cultural_signals);
+        const items = await listOpportunities(personId);
+        setSavedOpportunities(items);
+        setSelectedOpportunityId(opportunityId);
+        await refreshAiRunsFor(personId, opportunityId, aiRunActionFilter);
+        await refreshRequestTracesFor(
+          personId,
+          traceDestinationFilter,
+          traceOnlyActiveOpportunity,
+          opportunityId
+        );
+        setErrorMessage(
+          "Streaming de analyze no disponible. Se uso endpoint no-stream como fallback."
+        );
+      } catch {
+        const message = error instanceof Error ? error.message : "No se pudo analizar fit cultural";
+        setErrorMessage(message);
+      }
     } finally {
       setIsAnalyzingCultural(false);
     }
@@ -1033,12 +1190,17 @@ export default function App() {
     }
 
     try {
-      const payload = await prepareOpportunity(
+      const payload = await prepareOpportunityStream(
         personId,
         opportunityId,
         {
           targets,
           force_recompute: forceRecomputeAi
+        },
+        (channel, delta) => {
+          if (channel === "guidance_text") {
+            setGuidanceText((current) => `${current}${delta}`);
+          }
         }
       );
       setGuidanceText(payload.guidance_text);
@@ -1048,13 +1210,43 @@ export default function App() {
       setSavedOpportunities(items);
       setSelectedOpportunityId(opportunityId);
       await refreshAiRunsFor(personId, opportunityId, aiRunActionFilter);
-      if (payload.served_from_cache) {
-        setErrorMessage("Se mostraron materiales persistidos (sin recalculo).");
-      }
+      await refreshRequestTracesFor(
+        personId,
+        traceDestinationFilter,
+        traceOnlyActiveOpportunity,
+        opportunityId
+      );
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "No se pudo preparar postulacion";
-      setErrorMessage(message);
+      try {
+        const payload = await prepareOpportunity(
+          personId,
+          opportunityId,
+          {
+            targets,
+            force_recompute: forceRecomputeAi
+          }
+        );
+        setGuidanceText(payload.guidance_text);
+        setArtifacts(payload.artifacts);
+        setSemanticEvidence(payload.semantic_evidence);
+        const items = await listOpportunities(personId);
+        setSavedOpportunities(items);
+        setSelectedOpportunityId(opportunityId);
+        await refreshAiRunsFor(personId, opportunityId, aiRunActionFilter);
+        await refreshRequestTracesFor(
+          personId,
+          traceDestinationFilter,
+          traceOnlyActiveOpportunity,
+          opportunityId
+        );
+        setErrorMessage(
+          "Streaming de prepare no disponible. Se uso endpoint no-stream como fallback."
+        );
+      } catch {
+        const message =
+          error instanceof Error ? error.message : "No se pudo preparar postulacion";
+        setErrorMessage(message);
+      }
     } finally {
       setIsPreparing(false);
     }
@@ -2228,6 +2420,90 @@ export default function App() {
             )}
           </article>
         ) : null}
+      </section>
+      <section className="panel selectedPanel">
+        <header className="panelHeader">
+          <div>
+            <h2>Trazas de requests IA/API</h2>
+            <p>
+              Guarda y muestra el request exacto enviado a OpenAI, Tavily y proveedores
+              de busqueda.
+            </p>
+          </div>
+          <button
+            className="ghostButton"
+            disabled={!selectedPersonId || isLoadingRequestTraces}
+            onClick={() =>
+              selectedPersonId
+                ? void refreshRequestTracesFor(
+                    selectedPersonId,
+                    traceDestinationFilter,
+                    traceOnlyActiveOpportunity,
+                    selectedOpportunityId
+                  )
+                : undefined
+            }
+            type="button"
+          >
+            {isLoadingRequestTraces ? "Refrescando..." : "Refrescar trazas"}
+          </button>
+        </header>
+        {!selectedPersonId ? (
+          <p className="metaText">Selecciona una persona para consultar trazas.</p>
+        ) : (
+          <>
+            <div className="manualRow">
+              <label className="field">
+                Destino
+                <select
+                  onChange={(event) => setTraceDestinationFilter(event.target.value)}
+                  value={traceDestinationFilter}
+                >
+                  {TRACE_DESTINATION_FILTERS.map((item) => (
+                    <option key={item.value || "all"} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="checkboxRow alignEnd">
+                <input
+                  checked={traceOnlyActiveOpportunity}
+                  disabled={!selectedOpportunityId}
+                  onChange={(event) => setTraceOnlyActiveOpportunity(event.target.checked)}
+                  type="checkbox"
+                />
+                <span>Solo oportunidad activa</span>
+              </label>
+            </div>
+            {isLoadingRequestTraces ? (
+              <p className="metaText">Cargando trazas...</p>
+            ) : requestTraces.length === 0 ? (
+              <p className="metaText">No hay trazas para los filtros seleccionados.</p>
+            ) : (
+              <div className="chatList">
+                {requestTraces.map((trace) => (
+                  <article className="chatBubble chatBubbleAssistant" key={trace.trace_id}>
+                    <p className="chatRole">
+                      {trace.destination.toUpperCase()} · {trace.flow_key}
+                    </p>
+                    <p className="metaText">
+                      trace_id: {trace.trace_id} · oportunidad:{" "}
+                      {trace.opportunity_id || "N/A"} · fecha:{" "}
+                      {formatRequestTraceTimestamp(trace.created_at)}
+                    </p>
+                    <details className="payloadDetails">
+                      <summary>Ver request exacto</summary>
+                      <pre className="payloadPre">
+                        {JSON.stringify(trace.request_payload, null, 2)}
+                      </pre>
+                    </details>
+                  </article>
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </section>
       {errorMessage ? <p className="errorText">{errorMessage}</p> : null}
     </main>
