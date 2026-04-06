@@ -2,9 +2,9 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `embeddings y retrieval semantico sobre CV activo (Pinecone)`
+- checkpoint_actual: `chunking token-aware + retrieval exhaustivo CV`
 - repo_status: `implementacion activa con login, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
-- ultima_actualizacion: `2026-04-03`
+- ultima_actualizacion: `2026-04-06`
 
 ## Progreso Por Fase
 - `Fase 0`: completada
@@ -49,6 +49,12 @@
 - indexacion vectorial de CV activo implementada con `text-embedding-3-small` y upsert a Pinecone
 - estado de indexacion CV expuesto en API/UI (`vector_index_status`, `vector_chunks_indexed`)
 - chat enriquecido con retrieval semantico de Pinecone con fallback a preview de CV
+- chunking CV mejorado a estrategia token-aware con solapamiento (~700 tokens, overlap ~12%)
+- recuperacion semantica ajustada a `top_k` alto para analisis mas exhaustivo en namespace por persona
+
+## Mejoras Identificadas (Diferidas)
+- extraccion estructurada de CV a Markdown (PyMuPDF/LlamaIndex) para mejorar jerarquia semantica
+- vector `profile_summary` por persona (`type=profile_summary`) para match ejecutivo de alto nivel
 
 ## Bloqueadores
 - no hay bloqueadores funcionales de alcance V1

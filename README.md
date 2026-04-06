@@ -24,6 +24,7 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
 - importacion manual de vacantes por URL y texto pegado desde frontend
 - carga de CV por persona (`/cv`) con un CV activo por perfil y extraccion base de texto
 - indexacion vectorial del CV activo habilitada (embeddings OpenAI + upsert/query en Pinecone cuando hay configuracion)
+- chunking token-aware con solapamiento aplicado al pipeline de CV para embeddings
 
 ## Siguiente paso
 - ampliar trazabilidad de evidencia para fit cultural
@@ -65,6 +66,10 @@ Variables Pinecone para indexacion CV:
 - `PINECONE_API_KEY`
 - `PINECONE_INDEX_NAME`
 - `PINECONE_INDEX_HOST`
+
+Mejoras diferidas (no implementadas en V1 actual):
+- extraccion estructurada CV a Markdown para enriquecer jerarquia semantica
+- vector de `profile_summary` por persona para matching ejecutivo rapido
 
 Credenciales demo por defecto:
 - `username`: `tutor`

@@ -16,6 +16,9 @@ FALLBACK_MESSAGE = (
     "No pude consultar el proveedor LLM en este momento. El mensaje quedo "
     "registrado y puedes reintentar."
 )
+CV_RETRIEVAL_TOP_K = 24
+CV_RETRIEVAL_MAX_CONTEXT_CHARS = 7000
+CV_FALLBACK_PREVIEW_CHARS = 1600
 
 
 def _latest_user_message(history: list[MessageRecord]) -> str:
@@ -23,6 +26,24 @@ def _latest_user_message(history: list[MessageRecord]) -> str:
         if item.get("role") == "user":
             return str(item.get("content", "")).strip()
     return ""
+
+
+def _join_snippets(snippets: list[str], max_chars: int) -> str:
+    parts: list[str] = []
+    total = 0
+    for raw in snippets:
+        text = raw.strip()
+        if not text:
+            continue
+        chunk = text if not parts else f"\n\n{text}"
+        if total + len(chunk) > max_chars:
+            remaining = max_chars - total
+            if remaining > 120:
+                parts.append(chunk[:remaining].rstrip())
+            break
+        parts.append(chunk)
+        total += len(chunk)
+    return "".join(parts)
 
 
 def _system_prompt(person: PersonRecord, history: list[MessageRecord], settings: Settings) -> str:
@@ -38,15 +59,15 @@ def _system_prompt(person: PersonRecord, history: list[MessageRecord], settings:
             cv_id=active_cv["cv_id"],
             query_text=query_text,
             settings=settings,
-            top_k=4,
+            top_k=CV_RETRIEVAL_TOP_K,
         )
         if snippets:
-            cv_context = "\n\n".join(snippets)[:1800]
+            cv_context = _join_snippets(snippets, CV_RETRIEVAL_MAX_CONTEXT_CHARS)
             cv_context_source = "semantic_retrieval"
         else:
             text = active_cv["extracted_text"].strip()
             if text:
-                cv_context = text[:1200]
+                cv_context = text[:CV_FALLBACK_PREVIEW_CHARS]
                 cv_context_source = "fallback_preview"
     return (
         "Eres un asistente de empleabilidad que responde para la persona consultada "

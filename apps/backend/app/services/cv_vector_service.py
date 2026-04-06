@@ -11,9 +11,18 @@ try:
 except ImportError:  # pragma: no cover - fallback path when package is missing.
     OpenAI = None  # type: ignore[assignment]
 
+try:
+    import tiktoken
+except ImportError:  # pragma: no cover - fallback when dependency is missing.
+    tiktoken = None  # type: ignore[assignment]
 
-CHUNK_SIZE = 900
-CHUNK_OVERLAP = 180
+CHUNK_TARGET_TOKENS = 700
+CHUNK_OVERLAP_RATIO = 0.12
+CHUNK_OVERLAP_TOKENS = int(CHUNK_TARGET_TOKENS * CHUNK_OVERLAP_RATIO)
+CHUNK_STEP_TOKENS = CHUNK_TARGET_TOKENS - CHUNK_OVERLAP_TOKENS
+CHAR_FALLBACK_PER_TOKEN = 4
+CHUNK_TARGET_CHARS = CHUNK_TARGET_TOKENS * CHAR_FALLBACK_PER_TOKEN
+CHUNK_OVERLAP_CHARS = CHUNK_OVERLAP_TOKENS * CHAR_FALLBACK_PER_TOKEN
 MAX_CHUNKS = 120
 
 
@@ -26,15 +35,54 @@ def _is_ready(settings: Settings) -> bool:
     )
 
 
-def _chunk_text(raw_text: str) -> list[str]:
+def _token_encoder(settings: Settings):
+    if tiktoken is None:
+        return None
+    try:
+        return tiktoken.encoding_for_model(settings.openai_embedding_model)
+    except Exception:
+        try:
+            return tiktoken.get_encoding("cl100k_base")
+        except Exception:
+            return None
+
+
+def _chunk_text_fallback(raw_text: str) -> list[str]:
     text = raw_text.strip()
     if not text:
         return []
     chunks: list[str] = []
     start = 0
-    step = max(1, CHUNK_SIZE - CHUNK_OVERLAP)
+    step = max(1, CHUNK_TARGET_CHARS - CHUNK_OVERLAP_CHARS)
     while start < len(text) and len(chunks) < MAX_CHUNKS:
-        chunk = text[start : start + CHUNK_SIZE].strip()
+        chunk = text[start : start + CHUNK_TARGET_CHARS].strip()
+        if chunk:
+            chunks.append(chunk)
+        start += step
+    return chunks
+
+
+def _chunk_text(raw_text: str, settings: Settings) -> list[str]:
+    text = raw_text.strip()
+    if not text:
+        return []
+
+    encoder = _token_encoder(settings)
+    if encoder is None:
+        return _chunk_text_fallback(text)
+
+    token_ids = encoder.encode(text)
+    if not token_ids:
+        return []
+
+    chunks: list[str] = []
+    start = 0
+    step = max(1, CHUNK_STEP_TOKENS)
+    while start < len(token_ids) and len(chunks) < MAX_CHUNKS:
+        chunk_ids = token_ids[start : start + CHUNK_TARGET_TOKENS]
+        if not chunk_ids:
+            break
+        chunk = encoder.decode(chunk_ids).strip()
         if chunk:
             chunks.append(chunk)
         start += step
@@ -95,7 +143,7 @@ def upsert_cv_vectors(
         return "skipped_missing_vector_config", 0
 
     text = str(record.get("extracted_text", "")).strip()
-    chunks = _chunk_text(text)
+    chunks = _chunk_text(text, settings)
     if not chunks:
         return "skipped_empty_cv_text", 0
 
@@ -146,7 +194,7 @@ def query_cv_context(
     cv_id: str,
     query_text: str,
     settings: Settings,
-    top_k: int = 4,
+    top_k: int = 24,
 ) -> list[str]:
     if not _is_ready(settings):
         return []
