@@ -84,6 +84,8 @@
 - suite backend actualizada y verificada localmente: `21 tests` en `OK` (`skipped=1`)
 - pruebas adicionales de contratos de error para oportunidad inexistente en `analyze`/`prepare` y sus endpoints SSE agregadas en `apps/backend/tests/test_api_error_and_fallbacks.py`
 - suite backend actualizada y verificada localmente: `23 tests` en `OK` (`skipped=1`)
+- pruebas de contratos de validacion para payloads incompletos/invalidos en modelos API agregadas en `apps/backend/tests/test_request_validation_contracts.py`
+- suite backend actualizada y verificada localmente: `28 tests` en `OK` (`skipped=1`)
 
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada de CV a Markdown (PyMuPDF/LlamaIndex) para mejorar jerarquia semantica
@@ -95,4 +97,4 @@
 
 ## Siguiente Actividad
 - investigar causa raiz del bloqueo ASGI en tests locales y habilitar prueba HTTP no-skip para artifacts
-- continuar hardening de pruebas de contratos API en ramas de error poco frecuentes (payloads incompletos y validaciones de entrada)
+- endurecer casos de error de integraciones externas en capa API (mensajes de warning y degradacion parcial por proveedor)
