@@ -154,7 +154,7 @@ async def stream_message(
         if not full_response.strip():
             full_response = _fallback_assistant_reply(person_id, payload.message.strip())
 
-        updated = append_message(person_id, "assistant", full_response.strip())
+        updated = append_message(person_id, "assistant", full_response)
         yield _serialize_sse(
             "message_complete",
             {

@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `prompt layering global + analyze por accion + prepare por seleccion con cache e historico backend`
+- checkpoint_actual: `prompt layering global + historico IA en UI + paridad SSE con persistencia en chat/analyze/prepare`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
 - ultima_actualizacion: `2026-04-06`
 
@@ -60,6 +60,7 @@
 - arquitectura normativa extendida con trazabilidad endpoint->composicion->variables y reglas de fallback por flow
 - backend incorpora store `ai_action_runs` para persistir resultado vigente + historico por accion IA
 - backend expone consulta de historico por accion IA: `GET /api/persons/{person_id}/opportunities/{opportunity_id}/ai-runs` con filtro opcional `action_key`
+- frontend incorpora consulta explicita de historico IA persistido por oportunidad con filtro opcional por accion y refresco manual
 - API agrega acciones separadas de analisis: `POST .../analyze/profile-match` y `POST .../analyze/cultural-fit`
 - API `prepare` permite `targets` seleccionables (`guidance_text`, `cover_letter`, `experience_summary`) y `force_recompute`
 - comportamiento por defecto de acciones IA: leer ultimo resultado persistido; regenerar solo con `force_recompute=true`
@@ -69,6 +70,8 @@
 - capa de prompt en chat/analyze/prepare alineada a composicion: `guardrails_core + system_identity + task_prompt`
 - hardening de guardrails implementado: piso no editable, deteccion basica de prompt injection y saneo de salida ante intento de divulgacion de prompt interno
 - pruebas de hardening de guardrails agregadas (`apps/backend/tests/test_guardrails.py`)
+- flujos streaming ajustados para paridad operativa: lo emitido por `message_delta` coincide con `message_complete` y con contenido persistido en `chat`, `analyze/stream` y `prepare/stream`
+- pruebas edge de seguridad en SSE agregadas para prompt leak/prompt injection en `chat`, `analyze` y `prepare` (`apps/backend/tests/test_sse_flows.py`, `apps/backend/tests/test_guardrails.py`)
 - pruebas de rate limiting de login agregadas (`apps/backend/tests/test_auth_rate_limit.py`)
 - README actualizado con seccion de placeholders validos (`{placeholder}`) y variables disponibles por flujo de prompt
 - degradacion parcial por proveedor implementada con warnings por fuente
@@ -125,6 +128,7 @@
 - diagnostico tecnico registrado: bloqueo reproducido en inicializacion de portal AnyIO de `TestClient` (antes del procesamiento de request)
 - bloqueo ASGI validado tambien en app FastAPI minima (`/ping`), confirmando limitacion del harness local y no regresion del codigo de negocio
 - intento de mitigacion local ejecutado: downgrade de `anyio` de `4.13.0` a `4.4.0` en `.venv`; el bloqueo de `TestClient` persiste
+- suite backend revalidada tras hardening SSE: `51 tests` en `OK` (`skipped=1`)
 
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada de CV a Markdown (PyMuPDF/LlamaIndex) para mejorar jerarquia semantica
@@ -136,5 +140,5 @@
 - riesgo operativo local: entorno de desarrollo modificado para diagnostico (`anyio` downgraded en `.venv`) sin solucion aun para el bloqueo ASGI
 
 ## Siguiente Actividad
-- exponer historico por accion IA en UI (diferido) si se prioriza visibilidad operativa
-- ampliar pruebas de seguridad para casos edge de prompt injection en flujos streaming
+- reforzar cobertura de contratos HTTP sobre degradacion parcial de proveedores y fallback controlado
+- evaluar mejora futura de saneo incremental por deltas SSE sin romper paridad ni latencia

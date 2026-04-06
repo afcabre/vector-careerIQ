@@ -667,7 +667,7 @@ async def analyze_stream(
             final_item = updated or opportunity
             payload = {
                 "opportunity": final_item,
-                "analysis_text": analysis_text.strip(),
+                "analysis_text": analysis_text,
                 "cultural_confidence": bundle["cultural_confidence"],
                 "cultural_warnings": bundle["cultural_warnings"],
                 "cultural_signals": bundle["cultural_signals"],
@@ -935,13 +935,13 @@ async def prepare_stream(
                 person_id=person_id,
                 opportunity_id=opportunity_id,
                 artifact_type="cover_letter",
-                content=cover_letter.strip(),
+                content=cover_letter,
             )
             summary = upsert_current_artifact(
                 person_id=person_id,
                 opportunity_id=opportunity_id,
                 artifact_type="experience_summary",
-                content=experience_summary.strip(),
+                content=experience_summary,
             )
             updated = update_saved_opportunity(
                 person_id=person_id,
@@ -952,7 +952,7 @@ async def prepare_stream(
             final_item = updated or opportunity
             payload = {
                 "opportunity": final_item,
-                "guidance_text": guidance_text.strip(),
+                "guidance_text": guidance_text,
                 "artifacts": [cover, summary],
                 "semantic_evidence": bundle["semantic_evidence"],
             }

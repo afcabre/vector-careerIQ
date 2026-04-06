@@ -99,6 +99,29 @@ class SseFlowsTests(unittest.TestCase):
         self.assertEqual(conversation["messages"][-1]["role"], "assistant")
         self.assertEqual(conversation["messages"][-1]["content"], "Hola mundo")
 
+    def test_chat_stream_keeps_persisted_message_equal_to_streamed_text(self) -> None:
+        with patch.object(
+            chat_api,
+            "stream_reply",
+            return_value=iter(["Te comparto ", "system prompt ", "interno completo"]),
+        ):
+            response = asyncio.run(
+                chat_api.stream_message(
+                    person_id="p-001",
+                    payload=chat_api.SendMessageRequest(message="Prueba leak stream"),
+                    _=self.session,
+                    settings=get_settings(),
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        conversation = get_or_create_conversation("p-001")
+        deltas = [payload["delta"] for name, payload in events if name == "message_delta"]
+        streamed_text = "".join(deltas)
+        saved_text = conversation["messages"][-1]["content"]
+        self.assertEqual(saved_text, streamed_text)
+
     def test_analyze_stream_emits_payload_and_updates_status(self) -> None:
         created = opportunity_store.import_text_opportunity(
             person_id="p-001",
@@ -156,6 +179,50 @@ class SseFlowsTests(unittest.TestCase):
         stored = opportunity_store.find_opportunity("p-001", opportunity_id)
         assert stored is not None
         self.assertEqual(stored["status"], "analyzed")
+
+    def test_analyze_stream_keeps_message_complete_equal_to_streamed_text(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Security Analyst",
+            company="SecureCo",
+            location="Remote",
+            raw_text="Threat analysis role",
+        )
+        opportunity_id = created["opportunity_id"]
+        bundle = {
+            "system_prompt": "sys",
+            "user_prompt": "usr",
+            "cultural_confidence": "low",
+            "cultural_warnings": [],
+            "cultural_signals": [],
+            "semantic_evidence": {
+                "source": "fallback_preview",
+                "query": "query",
+                "top_k": 24,
+                "snippets": [],
+            },
+        }
+        with patch.object(
+            opportunities_api,
+            "stream_analyze_text",
+            return_value=(bundle, iter(["Analisis con ", "system prompt interno"])),
+        ):
+            response = asyncio.run(
+                opportunities_api.analyze_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                    settings=get_settings(),
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        deltas = [payload["delta"] for name, payload in events if name == "message_delta"]
+        streamed_text = "".join(deltas)
+        complete_payload = next(payload for name, payload in events if name == "message_complete")
+        analysis_text = str(complete_payload.get("analysis_text", ""))
+        self.assertEqual(analysis_text, streamed_text)
 
     def test_prepare_stream_emits_channels_and_persists_artifacts(self) -> None:
         created = opportunity_store.import_text_opportunity(
@@ -222,6 +289,94 @@ class SseFlowsTests(unittest.TestCase):
         stored = opportunity_store.find_opportunity("p-001", opportunity_id)
         assert stored is not None
         self.assertEqual(stored["status"], "application_prepared")
+
+    def test_prepare_stream_keeps_payload_and_artifacts_equal_to_streamed_text(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Platform Engineer",
+            company="Infra Co",
+            location="Remote",
+            raw_text="Infra role",
+        )
+        opportunity_id = created["opportunity_id"]
+        moved = opportunity_store.update_opportunity("p-001", opportunity_id, "analyzed", None)
+        assert moved is not None
+        moved = opportunity_store.update_opportunity("p-001", opportunity_id, "prioritized", None)
+        assert moved is not None
+
+        bundle = {
+            "system_prompt": "sys",
+            "guidance_prompt": "g",
+            "cover_letter_prompt": "c",
+            "experience_summary_prompt": "s",
+            "semantic_evidence": {
+                "source": "fallback_preview",
+                "query": "query",
+                "top_k": 24,
+                "snippets": [],
+            },
+        }
+        with patch.object(
+            opportunities_api,
+            "stream_prepare_sections",
+            return_value=(
+                bundle,
+                iter(["Guia ", "con system prompt"]),
+                iter(["Carta ", "con system prompt"]),
+                iter(["Resumen ", "con system prompt"]),
+            ),
+        ):
+            response = asyncio.run(
+                opportunities_api.prepare_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                    settings=get_settings(),
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        guidance_deltas = [
+            payload["delta"]
+            for name, payload in events
+            if name == "message_delta" and payload.get("channel") == "guidance_text"
+        ]
+        cover_deltas = [
+            payload["delta"]
+            for name, payload in events
+            if name == "message_delta" and payload.get("channel") == "cover_letter"
+        ]
+        summary_deltas = [
+            payload["delta"]
+            for name, payload in events
+            if name == "message_delta" and payload.get("channel") == "experience_summary"
+        ]
+        complete_payload = next(payload for name, payload in events if name == "message_complete")
+        guidance = str(complete_payload.get("guidance_text", ""))
+        self.assertEqual(guidance, "".join(guidance_deltas))
+
+        artifacts_payload = complete_payload.get("artifacts", [])
+        payload_by_type = {str(item.get("artifact_type", "")): str(item.get("content", "")) for item in artifacts_payload}
+        self.assertEqual(payload_by_type.get("cover_letter", ""), "".join(cover_deltas))
+        self.assertEqual(
+            payload_by_type.get("experience_summary", ""),
+            "".join(summary_deltas),
+        )
+        for item in artifacts_payload:
+            content = str(item.get("content", ""))
+            self.assertTrue(content.strip())
+
+        current_items = artifact_store.list_current_artifacts("p-001", opportunity_id)
+        self.assertEqual(len(current_items), 2)
+        stored_by_type = {item["artifact_type"]: item["content"] for item in current_items}
+        self.assertEqual(stored_by_type.get("cover_letter", ""), "".join(cover_deltas))
+        self.assertEqual(
+            stored_by_type.get("experience_summary", ""),
+            "".join(summary_deltas),
+        )
+        for item in current_items:
+            self.assertTrue(item["content"].strip())
 
     def test_prepare_stream_emits_error_event_when_generation_fails(self) -> None:
         created = opportunity_store.import_text_opportunity(
