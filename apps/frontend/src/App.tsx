@@ -11,6 +11,7 @@ import {
   SearchResult,
   SemanticEvidence,
   analyzeOpportunity,
+  analyzeOpportunityStream,
   getConversation,
   getActiveCV,
   getSession,
@@ -22,6 +23,7 @@ import {
   login,
   logout,
   prepareOpportunity,
+  prepareOpportunityStream,
   saveOpportunityFromSearch,
   searchOpportunities,
   sendMessage,
@@ -607,19 +609,47 @@ export default function App() {
     if (!selectedPersonId) {
       return;
     }
+    const personId = selectedPersonId;
+    setSelectedOpportunityId(opportunityId);
     setIsAnalyzing(true);
     setErrorMessage(null);
+    setAnalysisText("");
+    let streamedAnyDelta = false;
     try {
-      const payload = await analyzeOpportunity(selectedPersonId, opportunityId);
+      const payload = await analyzeOpportunityStream(
+        personId,
+        opportunityId,
+        (delta) => {
+          streamedAnyDelta = true;
+          setAnalysisText((current) => `${current}${delta}`);
+        }
+      );
       setAnalysisText(payload.analysis_text);
       setCulturalConfidence(payload.cultural_confidence);
       setCulturalWarnings(payload.cultural_warnings);
       setCulturalSignals(payload.cultural_signals);
       setSemanticEvidence(payload.semantic_evidence);
-      const items = await listOpportunities(selectedPersonId);
+      const items = await listOpportunities(personId);
       setSavedOpportunities(items);
       setSelectedOpportunityId(opportunityId);
     } catch (error) {
+      if (!streamedAnyDelta) {
+        try {
+          const payload = await analyzeOpportunity(personId, opportunityId);
+          setAnalysisText(payload.analysis_text);
+          setCulturalConfidence(payload.cultural_confidence);
+          setCulturalWarnings(payload.cultural_warnings);
+          setCulturalSignals(payload.cultural_signals);
+          setSemanticEvidence(payload.semantic_evidence);
+          const items = await listOpportunities(personId);
+          setSavedOpportunities(items);
+          setSelectedOpportunityId(opportunityId);
+          setErrorMessage("Streaming no disponible. Se uso analyze no-stream como fallback.");
+          return;
+        } catch {
+          // Keep original stream failure message below.
+        }
+      }
       const message =
         error instanceof Error ? error.message : "No se pudo analizar la oportunidad";
       setErrorMessage(message);
@@ -632,17 +662,86 @@ export default function App() {
     if (!selectedPersonId) {
       return;
     }
+    const personId = selectedPersonId;
+    setSelectedOpportunityId(opportunityId);
     setIsPreparing(true);
     setErrorMessage(null);
+    setGuidanceText("");
+    setArtifacts([]);
+    const draftTimestamp = new Date().toISOString();
+    let draftCover = "";
+    let draftSummary = "";
+    let streamedAnyDelta = false;
+
+    const setDraftArtifacts = () => {
+      const draftItems: ApplicationArtifact[] = [];
+      if (draftCover) {
+        draftItems.push({
+          artifact_id: "stream-cover-letter",
+          person_id: personId,
+          opportunity_id: opportunityId,
+          artifact_type: "cover_letter",
+          content: draftCover,
+          is_current: true,
+          created_at: draftTimestamp,
+          updated_at: draftTimestamp
+        });
+      }
+      if (draftSummary) {
+        draftItems.push({
+          artifact_id: "stream-experience-summary",
+          person_id: personId,
+          opportunity_id: opportunityId,
+          artifact_type: "experience_summary",
+          content: draftSummary,
+          is_current: true,
+          created_at: draftTimestamp,
+          updated_at: draftTimestamp
+        });
+      }
+      setArtifacts(draftItems);
+    };
+
     try {
-      const payload = await prepareOpportunity(selectedPersonId, opportunityId);
+      const payload = await prepareOpportunityStream(
+        personId,
+        opportunityId,
+        (channel, delta) => {
+          streamedAnyDelta = true;
+          if (channel === "guidance_text") {
+            setGuidanceText((current) => `${current}${delta}`);
+            return;
+          }
+          if (channel === "cover_letter") {
+            draftCover += delta;
+          } else {
+            draftSummary += delta;
+          }
+          setDraftArtifacts();
+        }
+      );
       setGuidanceText(payload.guidance_text);
       setArtifacts(payload.artifacts);
       setSemanticEvidence(payload.semantic_evidence);
-      const items = await listOpportunities(selectedPersonId);
+      const items = await listOpportunities(personId);
       setSavedOpportunities(items);
       setSelectedOpportunityId(opportunityId);
     } catch (error) {
+      if (!streamedAnyDelta) {
+        try {
+          const payload = await prepareOpportunity(personId, opportunityId);
+          setGuidanceText(payload.guidance_text);
+          setArtifacts(payload.artifacts);
+          setSemanticEvidence(payload.semantic_evidence);
+          const items = await listOpportunities(personId);
+          setSavedOpportunities(items);
+          setSelectedOpportunityId(opportunityId);
+          setErrorMessage("Streaming no disponible. Se uso prepare no-stream como fallback.");
+          return;
+        } catch {
+          // Keep original stream failure message below.
+        }
+      }
       const message =
         error instanceof Error ? error.message : "No se pudo preparar postulacion";
       setErrorMessage(message);

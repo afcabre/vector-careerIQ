@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `streaming SSE real habilitado en frontend con fallback no-stream`
+- checkpoint_actual: `SSE extendido a chat, analyze y prepare con fallback no-stream`
 - repo_status: `implementacion activa con login, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
 - ultima_actualizacion: `2026-04-06`
 
@@ -63,8 +63,15 @@
 - el analisis cultural trata falta de evidencia en campos criticos como `indeterminado` con red flag (no exclusion automatica)
 - backend incorpora logs basicos de fallos por proveedor y fallback semantico (`search`, `cv_vector`, `opportunity_ai`)
 - pruebas de integracion API+store para aislamiento por `person_id` en oportunidades y `analyze` agregadas en `apps/backend/tests/test_person_isolation.py`
+- pruebas unitarias de transiciones de estado (`is_valid_transition`, `update_opportunity`) agregadas en `apps/backend/tests/test_opportunity_transitions.py`
+- pruebas unitarias de saneamiento/normalizacion de `cultural_fit_preferences` agregadas en `apps/backend/tests/test_cultural_fit_validation.py`
 - frontend envia chat por `/chat/stream` con render incremental de deltas SSE y fallback automatico a `/chat` si streaming no disponible
 - criterio de arquitectura confirmado: el streaming SSE debe cubrir todas las salidas IA relevantes (`chat`, `analyze`, `prepare`), no solo conversacion
+- backend expone `POST /api/persons/{person_id}/opportunities/{opportunity_id}/analyze/stream` con eventos SSE y payload final estructurado
+- backend expone `POST /api/persons/{person_id}/opportunities/{opportunity_id}/prepare/stream` con eventos SSE por canal (`guidance_text`, `cover_letter`, `experience_summary`)
+- frontend consume SSE de `analyze/prepare` con render incremental y fallback automatico a endpoints no-stream
+- suite backend verificada localmente: `8 tests` en `OK`
+- build frontend verificado localmente: `npm run build` en `OK`
 
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada de CV a Markdown (PyMuPDF/LlamaIndex) para mejorar jerarquia semantica
@@ -75,7 +82,5 @@
 - no hay bloqueadores tecnicos activos reportados en este checkpoint
 
 ## Siguiente Actividad
-- extender patron SSE desde `chat` hacia `analyze` y `prepare` con trazabilidad por `person_id` y `opportunity_id`
-- agregar pruebas unitarias para transiciones de estado y validacion de `cultural_fit_preferences`
 - ampliar cobertura de pruebas para `prepare` y artefactos por oportunidad/persona
-- agregar pruebas de flujo SSE para `chat` y, al extender, para `analyze/prepare`
+- agregar pruebas de flujo SSE para `chat`, `analyze` y `prepare`

@@ -94,6 +94,22 @@ export type SemanticEvidence = {
   snippets: string[];
 };
 
+export type AnalyzeOpportunityPayload = {
+  opportunity: Opportunity;
+  analysis_text: string;
+  cultural_confidence: string;
+  cultural_warnings: string[];
+  cultural_signals: CulturalSignal[];
+  semantic_evidence: SemanticEvidence;
+};
+
+export type PrepareOpportunityPayload = {
+  opportunity: Opportunity;
+  guidance_text: string;
+  artifacts: ApplicationArtifact[];
+  semantic_evidence: SemanticEvidence;
+};
+
 export type ActiveCV = {
   cv_id: string;
   person_id: string;
@@ -232,11 +248,11 @@ export async function sendMessage(
   return payload.conversation;
 }
 
-type StreamDeltaHandler = (delta: string) => void;
+type StreamEventHandler = (eventName: string, payload: Record<string, unknown>) => void;
 
 function consumeSseBuffer(
   chunk: string,
-  onDelta: StreamDeltaHandler
+  onEvent: StreamEventHandler
 ): { remainder: string } {
   let buffer = chunk;
   let separatorIndex = buffer.indexOf("\n\n");
@@ -261,13 +277,15 @@ function consumeSseBuffer(
     }
 
     try {
-      const payload = JSON.parse(dataText) as { delta?: string; detail?: string };
-      if (eventName === "message_delta" && payload.delta) {
-        onDelta(payload.delta);
-      }
+      const payload = JSON.parse(dataText) as Record<string, unknown>;
       if (eventName === "error") {
-        throw new Error(payload.detail || "Stream error");
+        const detail =
+          typeof payload.detail === "string" && payload.detail.trim()
+            ? payload.detail
+            : "Stream error";
+        throw new Error(detail);
       }
+      onEvent(eventName, payload);
     } catch (error) {
       if (error instanceof Error) {
         throw error;
@@ -283,7 +301,7 @@ function consumeSseBuffer(
 export async function sendMessageStream(
   personId: string,
   message: string,
-  onDelta: StreamDeltaHandler
+  onDelta: (delta: string) => void
 ): Promise<Conversation> {
   const response = await fetch(`${API_BASE}/persons/${personId}/chat/stream`, {
     method: "POST",
@@ -318,12 +336,28 @@ export async function sendMessageStream(
       break;
     }
     pending += decoder.decode(value, { stream: true });
-    const consumed = consumeSseBuffer(pending, onDelta);
+    const consumed = consumeSseBuffer(pending, (eventName, payload) => {
+      if (eventName !== "message_delta") {
+        return;
+      }
+      const delta = payload.delta;
+      if (typeof delta === "string" && delta.length > 0) {
+        onDelta(delta);
+      }
+    });
     pending = consumed.remainder;
   }
 
   if (pending.trim()) {
-    consumeSseBuffer(`${pending}\n\n`, onDelta);
+    consumeSseBuffer(`${pending}\n\n`, (eventName, payload) => {
+      if (eventName !== "message_delta") {
+        return;
+      }
+      const delta = payload.delta;
+      if (typeof delta === "string" && delta.length > 0) {
+        onDelta(delta);
+      }
+    });
   }
   return getConversation(personId);
 }
@@ -395,14 +429,7 @@ export async function updateOpportunity(
 export async function analyzeOpportunity(
   personId: string,
   opportunityId: string
-): Promise<{
-  opportunity: Opportunity;
-  analysis_text: string;
-  cultural_confidence: string;
-  cultural_warnings: string[];
-  cultural_signals: CulturalSignal[];
-  semantic_evidence: SemanticEvidence;
-}> {
+): Promise<AnalyzeOpportunityPayload> {
   const response = await fetch(
     `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/analyze`,
     {
@@ -410,25 +437,13 @@ export async function analyzeOpportunity(
       credentials: "include"
     }
   );
-  return parseResponse<{
-    opportunity: Opportunity;
-    analysis_text: string;
-    cultural_confidence: string;
-    cultural_warnings: string[];
-    cultural_signals: CulturalSignal[];
-    semantic_evidence: SemanticEvidence;
-  }>(response);
+  return parseResponse<AnalyzeOpportunityPayload>(response);
 }
 
 export async function prepareOpportunity(
   personId: string,
   opportunityId: string
-): Promise<{
-  opportunity: Opportunity;
-  guidance_text: string;
-  artifacts: ApplicationArtifact[];
-  semantic_evidence: SemanticEvidence;
-}> {
+): Promise<PrepareOpportunityPayload> {
   const response = await fetch(
     `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/prepare`,
     {
@@ -436,12 +451,163 @@ export async function prepareOpportunity(
       credentials: "include"
     }
   );
-  return parseResponse<{
-    opportunity: Opportunity;
-    guidance_text: string;
-    artifacts: ApplicationArtifact[];
-    semantic_evidence: SemanticEvidence;
-  }>(response);
+  return parseResponse<PrepareOpportunityPayload>(response);
+}
+
+export async function analyzeOpportunityStream(
+  personId: string,
+  opportunityId: string,
+  onDelta: (delta: string) => void
+): Promise<AnalyzeOpportunityPayload> {
+  const response = await fetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/analyze/stream`,
+    {
+      method: "POST",
+      credentials: "include"
+    }
+  );
+  if (!response.ok) {
+    let messageText = `Request failed: ${response.status}`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) {
+        messageText = payload.detail;
+      }
+    } catch {
+      // Ignore parsing errors for stream setup failures.
+    }
+    throw new Error(messageText);
+  }
+  if (!response.body) {
+    throw new Error("Streaming response body is empty");
+  }
+
+  const decoder = new TextDecoder();
+  const reader = response.body.getReader();
+  let pending = "";
+  let completedPayload: AnalyzeOpportunityPayload | null = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+    pending += decoder.decode(value, { stream: true });
+    const consumed = consumeSseBuffer(pending, (eventName, payload) => {
+      if (eventName === "message_delta") {
+        const delta = payload.delta;
+        const channel = payload.channel;
+        if (channel === "analysis_text" && typeof delta === "string" && delta.length > 0) {
+          onDelta(delta);
+        }
+      } else if (eventName === "message_complete") {
+        completedPayload = payload as unknown as AnalyzeOpportunityPayload;
+      }
+    });
+    pending = consumed.remainder;
+  }
+  if (pending.trim()) {
+    consumeSseBuffer(`${pending}\n\n`, (eventName, payload) => {
+      if (eventName === "message_delta") {
+        const delta = payload.delta;
+        const channel = payload.channel;
+        if (channel === "analysis_text" && typeof delta === "string" && delta.length > 0) {
+          onDelta(delta);
+        }
+      } else if (eventName === "message_complete") {
+        completedPayload = payload as unknown as AnalyzeOpportunityPayload;
+      }
+    });
+  }
+
+  if (!completedPayload) {
+    throw new Error("Analyze stream ended without completion payload");
+  }
+  return completedPayload;
+}
+
+export async function prepareOpportunityStream(
+  personId: string,
+  opportunityId: string,
+  onDelta: (channel: "guidance_text" | "cover_letter" | "experience_summary", delta: string) => void
+): Promise<PrepareOpportunityPayload> {
+  const response = await fetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/prepare/stream`,
+    {
+      method: "POST",
+      credentials: "include"
+    }
+  );
+  if (!response.ok) {
+    let messageText = `Request failed: ${response.status}`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) {
+        messageText = payload.detail;
+      }
+    } catch {
+      // Ignore parsing errors for stream setup failures.
+    }
+    throw new Error(messageText);
+  }
+  if (!response.body) {
+    throw new Error("Streaming response body is empty");
+  }
+
+  const decoder = new TextDecoder();
+  const reader = response.body.getReader();
+  let pending = "";
+  let completedPayload: PrepareOpportunityPayload | null = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+    pending += decoder.decode(value, { stream: true });
+    const consumed = consumeSseBuffer(pending, (eventName, payload) => {
+      if (eventName === "message_delta") {
+        const delta = payload.delta;
+        const channel = payload.channel;
+        if (
+          (channel === "guidance_text" ||
+            channel === "cover_letter" ||
+            channel === "experience_summary") &&
+          typeof delta === "string" &&
+          delta.length > 0
+        ) {
+          onDelta(channel, delta);
+        }
+      } else if (eventName === "message_complete") {
+        completedPayload = payload as unknown as PrepareOpportunityPayload;
+      }
+    });
+    pending = consumed.remainder;
+  }
+  if (pending.trim()) {
+    consumeSseBuffer(`${pending}\n\n`, (eventName, payload) => {
+      if (eventName === "message_delta") {
+        const delta = payload.delta;
+        const channel = payload.channel;
+        if (
+          (channel === "guidance_text" ||
+            channel === "cover_letter" ||
+            channel === "experience_summary") &&
+          typeof delta === "string" &&
+          delta.length > 0
+        ) {
+          onDelta(channel, delta);
+        }
+      } else if (eventName === "message_complete") {
+        completedPayload = payload as unknown as PrepareOpportunityPayload;
+      }
+    });
+  }
+
+  if (!completedPayload) {
+    throw new Error("Prepare stream ended without completion payload");
+  }
+  return completedPayload;
 }
 
 export async function listOpportunityArtifacts(
