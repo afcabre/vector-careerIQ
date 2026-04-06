@@ -182,6 +182,22 @@ export async function listPersons(): Promise<Person[]> {
   return payload.items;
 }
 
+export async function createPerson(payload: {
+  full_name: string;
+  target_roles: string[];
+  location: string;
+  years_experience: number;
+  skills: string[];
+}): Promise<Person> {
+  const response = await fetch(`${API_BASE}/persons`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  return parseResponse<Person>(response);
+}
+
 export async function updatePerson(
   personId: string,
   payload: {

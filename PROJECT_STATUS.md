@@ -2,8 +2,8 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `SSE extendido a chat, analyze y prepare con fallback no-stream`
-- repo_status: `implementacion activa con login, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
+- checkpoint_actual: `detalle no persistente de resultados de busqueda + guardado explicito validado por contrato`
+- repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
 - ultima_actualizacion: `2026-04-06`
 
 ## Progreso Por Fase
@@ -43,6 +43,8 @@
 - configuracion OpenAI alineada para V1: `gpt-4o-mini` (inferencia) y `text-embedding-3-small` (embeddings)
 - decision de proveedor: `Adzuna` se integrara via `RapidAPI` (`RAPIDAPI_KEY` + `RAPIDAPI_ADZUNA_HOST`)
 - busqueda multi-provider implementada en backend (`Adzuna via RapidAPI`, `Remotive`, `Tavily`)
+- UI permite abrir detalle efimero de resultados de busqueda sin persistir; el guardado sigue como accion separada `Guardar como oportunidad`
+- UX de `Abrir detalle` ajustada para mostrar/ocultar detalle inline en la misma tarjeta de resultado (feedback inmediato visible)
 - degradacion parcial por proveedor implementada con warnings por fuente
 - deduplicacion de resultados implementada con clave principal por `source_url`
 - `Remotive API` operando en modo publico V1; `REMOTIVE_API_KEY` queda opcional
@@ -59,6 +61,7 @@
 - UI permite editar y guardar notas operativas por oportunidad desde el detalle activo
 - UI permite editar y guardar estado de oportunidad con estados V1 (`detected`, `analyzed`, `prioritized`, `application_prepared`, `applied`, `discarded`)
 - UI permite editar perfil base por persona (`full_name`, `target_roles`, `location`, `years_experience`, `skills`) desde `Contexto activo`
+- UI permite crear nuevas personas consultadas con baseline V1 (`full_name`, `target_roles`, `location`, `years_experience`, `skills`) consumiendo `POST /api/persons`
 - perfil de persona permite configurar preferencias culturales/condiciones de trabajo por campo (`enabled`, `selected_values`, `criticality`) y notas abiertas
 - el analisis cultural trata falta de evidencia en campos criticos como `indeterminado` con red flag (no exclusion automatica)
 - backend incorpora logs basicos de fallos por proveedor y fallback semantico (`search`, `cv_vector`, `opportunity_ai`)
@@ -88,7 +91,14 @@
 - suite backend actualizada y verificada localmente: `28 tests` en `OK` (`skipped=1`)
 - hardening de degradacion parcial en busqueda agregado en `apps/backend/tests/test_api_error_and_fallbacks.py` (fallo de un proveedor con resultados parciales de otros y warnings por proveedores no configurados)
 - contrato API agregado para `search` con `person_id` inexistente (`404`) en `apps/backend/tests/test_api_error_and_fallbacks.py`
+- contrato API agregado para validar que `search` no persiste oportunidades y solo `from-search` las crea en `apps/backend/tests/test_api_error_and_fallbacks.py`
 - suite backend actualizada y verificada localmente: `31 tests` en `OK` (`skipped=1`)
+- verificacion incremental backend ejecutada localmente: `tests/test_api_error_and_fallbacks.py` en `OK` (`12 tests`)
+- build frontend verificado localmente tras ajuste UI: `npm run build` en `OK`
+- decision operativa registrada en memoria: mantener `skip` temporal del test HTTP ASGI y criterio de salida definido para reactivarlo
+- diagnostico tecnico registrado: bloqueo reproducido en inicializacion de portal AnyIO de `TestClient` (antes del procesamiento de request)
+- bloqueo ASGI validado tambien en app FastAPI minima (`/ping`), confirmando limitacion del harness local y no regresion del codigo de negocio
+- intento de mitigacion local ejecutado: downgrade de `anyio` de `4.13.0` a `4.4.0` en `.venv`; el bloqueo de `TestClient` persiste
 
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada de CV a Markdown (PyMuPDF/LlamaIndex) para mejorar jerarquia semantica
@@ -97,7 +107,8 @@
 ## Bloqueadores
 - no hay bloqueadores funcionales de alcance V1
 - limitacion tecnica local: clientes ASGI de prueba (`TestClient`/`ASGITransport`) se bloquean en requests; se mantiene cobertura equivalente por handler/store y un test HTTP en `skip` hasta resolver harness
+- riesgo operativo local: entorno de desarrollo modificado para diagnostico (`anyio` downgraded en `.venv`) sin solucion aun para el bloqueo ASGI
 
 ## Siguiente Actividad
-- investigar causa raiz del bloqueo ASGI en tests locales y habilitar prueba HTTP no-skip para artifacts
-- documentar decision tecnica del `skip` ASGI en memoria operativa y definir criterio de salida para habilitar test HTTP real
+- implementar rate limiting basico de login en backend para cerrar baseline de seguridad V1 (`RF-04`, `RNF-08`)
+- agregar tests de contrato para intentos fallidos repetidos y ventana de bloqueo temporal

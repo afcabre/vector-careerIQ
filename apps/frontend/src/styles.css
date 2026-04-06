@@ -279,6 +279,32 @@ textarea {
   gap: 8px;
 }
 
+.searchResultCard {
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.searchResultCardActive {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.inlineDetailCard {
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.payloadPre {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: "Courier New", Courier, monospace;
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
 .chatForm input {
   border: 1px solid var(--line);
   border-radius: 12px;

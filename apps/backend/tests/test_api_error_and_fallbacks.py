@@ -212,6 +212,53 @@ class ApiContractsAndIsolationTests(unittest.TestCase):
         self.assertEqual(missing_person.exception.status_code, 404)
         self.assertEqual(missing_person.exception.detail, "Person not found")
 
+    def test_search_results_are_not_persisted_until_explicit_save(self) -> None:
+        mocked_search_item = {
+            "search_result_id": "sr-v1-001",
+            "source_provider": "remotive",
+            "source_url": "https://remotive.com/remote-jobs/software-dev/backend-engineer-1",
+            "title": "Backend Engineer",
+            "company": "RemoteCo",
+            "location": "Remote",
+            "snippet": "Role focused on Python and FastAPI",
+            "captured_at": "2026-04-06T00:00:00+00:00",
+            "normalized_payload": {"source": "search", "provider": "remotive"},
+        }
+
+        self.assertEqual(len(opportunity_store.list_opportunities("p-001")), 0)
+
+        with patch.object(
+            search_api,
+            "search_opportunities",
+            return_value={"items": [mocked_search_item], "warnings": []},
+        ):
+            response = search_api.search(
+                person_id="p-001",
+                payload=search_api.SearchRequest(query="python backend", max_results=6),
+                _=self.session,
+                settings=get_settings(),
+            )
+
+        self.assertEqual(len(response.items), 1)
+        self.assertEqual(response.items[0].search_result_id, mocked_search_item["search_result_id"])
+        self.assertEqual(len(opportunity_store.list_opportunities("p-001")), 0)
+
+        saved = opportunities_api.create_from_search(
+            person_id="p-001",
+            payload=opportunities_api.FromSearchRequest(
+                source_provider=response.items[0].source_provider,
+                source_url=response.items[0].source_url,
+                title=response.items[0].title,
+                company=response.items[0].company,
+                location=response.items[0].location,
+                snippet=response.items[0].snippet,
+                normalized_payload=response.items[0].normalized_payload,
+            ),
+            _=self.session,
+        )
+        self.assertTrue(saved.created)
+        self.assertEqual(len(opportunity_store.list_opportunities("p-001")), 1)
+
 
 class FallbackBehaviorTests(unittest.TestCase):
     def setUp(self) -> None:

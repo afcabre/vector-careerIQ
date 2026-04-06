@@ -12,6 +12,7 @@ import {
   SemanticEvidence,
   analyzeOpportunity,
   analyzeOpportunityStream,
+  createPerson,
   getConversation,
   getActiveCV,
   getSession,
@@ -159,6 +160,12 @@ export default function App() {
   const [operatorName, setOperatorName] = useState("");
   const [people, setPeople] = useState<Person[]>([]);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
+  const [newPersonFullName, setNewPersonFullName] = useState("");
+  const [newPersonTargetRolesInput, setNewPersonTargetRolesInput] = useState("");
+  const [newPersonLocation, setNewPersonLocation] = useState("");
+  const [newPersonYearsExperienceInput, setNewPersonYearsExperienceInput] = useState("");
+  const [newPersonSkillsInput, setNewPersonSkillsInput] = useState("");
+  const [isCreatingPerson, setIsCreatingPerson] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [conversation, setConversation] = useState<Conversation | null>(null);
@@ -168,6 +175,7 @@ export default function App() {
   const [streamingAssistantText, setStreamingAssistantText] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [selectedSearchResultId, setSelectedSearchResultId] = useState<string | null>(null);
   const [searchWarnings, setSearchWarnings] = useState<string[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [manualUrl, setManualUrl] = useState("");
@@ -317,6 +325,23 @@ export default function App() {
     savedOpportunities.find((item) => item.opportunity_id === selectedOpportunityId) ?? null;
 
   useEffect(() => {
+    setSearchQuery("");
+    setSearchResults([]);
+    setSelectedSearchResultId(null);
+    setSearchWarnings([]);
+  }, [selectedPersonId]);
+
+  useEffect(() => {
+    if (!selectedSearchResultId) {
+      return;
+    }
+    if (searchResults.some((item) => item.search_result_id === selectedSearchResultId)) {
+      return;
+    }
+    setSelectedSearchResultId(null);
+  }, [searchResults, selectedSearchResultId]);
+
+  useEffect(() => {
     setOpportunityNotes(selectedOpportunity?.notes ?? "");
   }, [selectedOpportunity?.opportunity_id, selectedOpportunity?.notes]);
 
@@ -414,6 +439,12 @@ export default function App() {
     setOperatorName("");
     setPassword("");
     setSelectedPersonId(null);
+    setPeople([]);
+    setNewPersonFullName("");
+    setNewPersonTargetRolesInput("");
+    setNewPersonLocation("");
+    setNewPersonYearsExperienceInput("");
+    setNewPersonSkillsInput("");
     setConversation(null);
     setStreamingAssistantText("");
     setChatInput("");
@@ -424,6 +455,62 @@ export default function App() {
     setSemanticEvidence(null);
     setActiveCv(null);
     setSelectedCvFile(null);
+  }
+
+  async function handleCreatePerson(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isCreatingPerson) {
+      return;
+    }
+
+    const fullName = newPersonFullName.trim();
+    const location = newPersonLocation.trim();
+    const yearsExperience = Number.parseInt(newPersonYearsExperienceInput.trim(), 10);
+    const targetRoles = newPersonTargetRolesInput
+      .split(/[\n,]/g)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const skills = newPersonSkillsInput
+      .split(/[\n,]/g)
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    if (!fullName || !location || targetRoles.length === 0 || skills.length === 0) {
+      setErrorMessage(
+        "Nueva persona incompleta: nombre, ubicacion, roles y skills son obligatorios."
+      );
+      return;
+    }
+    if (!Number.isFinite(yearsExperience) || yearsExperience < 0 || yearsExperience > 80) {
+      setErrorMessage("Anos de experiencia debe estar entre 0 y 80.");
+      return;
+    }
+
+    setIsCreatingPerson(true);
+    setErrorMessage(null);
+    try {
+      const created = await createPerson({
+        full_name: fullName,
+        target_roles: targetRoles,
+        location,
+        years_experience: yearsExperience,
+        skills
+      });
+      const items = await listPersons();
+      setPeople(items);
+      setSelectedPersonId(created.person_id);
+      setNewPersonFullName("");
+      setNewPersonTargetRolesInput("");
+      setNewPersonLocation("");
+      setNewPersonYearsExperienceInput("");
+      setNewPersonSkillsInput("");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo crear la nueva persona";
+      setErrorMessage(message);
+    } finally {
+      setIsCreatingPerson(false);
+    }
   }
 
   async function handleSendMessage(event: FormEvent<HTMLFormElement>) {
@@ -478,6 +565,7 @@ export default function App() {
       const payload = await searchOpportunities(selectedPersonId, searchQuery.trim(), 6);
       setSearchResults(payload.items);
       setSearchWarnings(payload.warnings);
+      setSelectedSearchResultId(null);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "No se pudo ejecutar la busqueda";
@@ -1019,6 +1107,61 @@ export default function App() {
             </article>
           ))}
         </div>
+        <h3 className="subheading">Agregar persona consultada</h3>
+        <form className="manualCard" onSubmit={handleCreatePerson}>
+          <label className="field">
+            Nombre completo
+            <input
+              disabled={isCreatingPerson}
+              onChange={(event) => setNewPersonFullName(event.target.value)}
+              value={newPersonFullName}
+            />
+          </label>
+          <div className="manualRow">
+            <label className="field">
+              Ubicacion
+              <input
+                disabled={isCreatingPerson}
+                onChange={(event) => setNewPersonLocation(event.target.value)}
+                value={newPersonLocation}
+              />
+            </label>
+            <label className="field">
+              Anos de experiencia
+              <input
+                disabled={isCreatingPerson}
+                max={80}
+                min={0}
+                onChange={(event) => setNewPersonYearsExperienceInput(event.target.value)}
+                type="number"
+                value={newPersonYearsExperienceInput}
+              />
+            </label>
+          </div>
+          <label className="field">
+            Roles objetivo (coma o salto de linea)
+            <textarea
+              disabled={isCreatingPerson}
+              onChange={(event) => setNewPersonTargetRolesInput(event.target.value)}
+              rows={2}
+              value={newPersonTargetRolesInput}
+            />
+          </label>
+          <label className="field">
+            Skills (coma o salto de linea)
+            <textarea
+              disabled={isCreatingPerson}
+              onChange={(event) => setNewPersonSkillsInput(event.target.value)}
+              rows={2}
+              value={newPersonSkillsInput}
+            />
+          </label>
+          <div className="cardActions">
+            <button className="primaryButton" disabled={isCreatingPerson} type="submit">
+              {isCreatingPerson ? "Creando..." : "Crear persona"}
+            </button>
+          </div>
+        </form>
       </section>
 
       <section className="panel selectedPanel">
@@ -1399,7 +1542,14 @@ export default function App() {
             <p className="metaText">No hay resultados de busqueda recientes.</p>
           ) : (
             searchResults.map((result) => (
-              <article className="chatBubble chatBubbleAssistant" key={result.search_result_id}>
+              <article
+                className={
+                  selectedSearchResultId === result.search_result_id
+                    ? "chatBubble chatBubbleAssistant searchResultCard searchResultCardActive"
+                    : "chatBubble chatBubbleAssistant searchResultCard"
+                }
+                key={result.search_result_id}
+              >
                 <p className="chatRole">{result.source_provider}</p>
                 <p className="chatContent">{result.title}</p>
                 <p className="metaText">
@@ -1408,6 +1558,21 @@ export default function App() {
                 </p>
                 <p className="metaText">{result.snippet}</p>
                 <div className="cardActions">
+                  <button
+                    className={
+                      selectedSearchResultId === result.search_result_id ? "activeButton" : ""
+                    }
+                    onClick={() =>
+                      setSelectedSearchResultId((current) =>
+                        current === result.search_result_id ? null : result.search_result_id
+                      )
+                    }
+                    type="button"
+                  >
+                    {selectedSearchResultId === result.search_result_id
+                      ? "Cerrar detalle"
+                      : "Abrir detalle"}
+                  </button>
                   <button
                     disabled={savingResultId === result.search_result_id}
                     onClick={() => void handleSaveSearchResult(result)}
@@ -1418,6 +1583,30 @@ export default function App() {
                       : "Guardar como oportunidad"}
                   </button>
                 </div>
+                {selectedSearchResultId === result.search_result_id ? (
+                  <article className="inlineDetailCard">
+                    <p className="chatRole">Detalle (no persistido)</p>
+                    <p className="metaText">
+                      Proveedor: {result.source_provider} · Empresa:{" "}
+                      {result.company || "No identificada"} · Ubicacion:{" "}
+                      {result.location || "No especificada"}
+                    </p>
+                    <p className="metaText">URL: {result.source_url || "No disponible"}</p>
+                    <article className="chatBubble chatBubbleAssistant">
+                      <p className="chatRole">Snippet</p>
+                      <p className="chatContent">{result.snippet || "Sin snippet"}</p>
+                    </article>
+                    <article className="chatBubble chatBubbleUser">
+                      <p className="chatRole">Payload normalizado</p>
+                      <pre className="payloadPre">
+                        {JSON.stringify(result.normalized_payload, null, 2)}
+                      </pre>
+                    </article>
+                    <p className="metaText">
+                      Capturado: {new Date(result.captured_at).toLocaleString()}
+                    </p>
+                  </article>
+                ) : null}
               </article>
             ))
           )}
