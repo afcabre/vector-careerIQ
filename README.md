@@ -22,6 +22,7 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
 - `/search` multi-provider y guardado explicito de oportunidades implementados por `person_id`
 - `analyze` separado por accion (`perfil-vacante` y `fit cultural`) con cache por defecto, `forzar recalculo` y historico backend por accion
 - `prepare` con seleccion de materiales (`guidance`, `cover_letter`, `experience_summary`), cache por defecto y historico backend por accion
+- frontend permite consulta explicita de historico IA persistido por oportunidad (filtro opcional por `action_key`)
 - importacion manual de vacantes por URL y texto pegado desde frontend
 - carga de CV por persona (`/cv`) con un CV activo por perfil y extraccion base de texto
 - indexacion vectorial del CV activo habilitada (embeddings OpenAI + upsert/query en Pinecone cuando hay configuracion)
@@ -38,9 +39,9 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
 - observabilidad basica agregada en backend para errores/fallbacks de proveedores y retrieval semantico
 
 ## Siguiente paso
-- hardening de guardrails (listas de bloqueo y reglas de evidencia) con pruebas dedicadas
-- agregar endpoint de consulta de historico por accion IA (backend listo, UI diferida)
-- reforzar rate limiting de login con pruebas de ventana temporal
+- ampliar pruebas de seguridad para casos edge de prompt injection en flujos streaming
+- reforzar cobertura de contratos HTTP sobre degradacion parcial de proveedores
+- revisar y cerrar el `skip` del test HTTP ASGI cuando se resuelva limitacion del harness local
 
 ## Testing Backend
 - ejecutar aislamiento por `person_id` (API+store):
