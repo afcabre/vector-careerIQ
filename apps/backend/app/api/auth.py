@@ -11,6 +11,11 @@ from app.core.security import (
     verify_password,
 )
 from app.core.settings import Settings, get_settings
+from app.services.login_rate_limit_store import (
+    clear_failed_attempts,
+    get_blocked_until,
+    register_failed_attempt,
+)
 from app.services.operator_store import get_password_hash_for_operator
 
 
@@ -31,18 +36,39 @@ class SessionResponse(BaseModel):
 @router.post("/login")
 def login(
     payload: LoginRequest,
+    request: Request,
     response: Response,
     settings: Settings = Depends(get_settings),
 ) -> SessionResponse:
+    client_host = ""
+    if request.client and request.client.host:
+        client_host = request.client.host.strip()
+    rate_limit_key = f"{payload.username}|{client_host or 'unknown'}"
+
+    blocked_until = get_blocked_until(rate_limit_key, settings)
+    if blocked_until:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Too many login attempts. Try again after {blocked_until.astimezone(UTC).isoformat()}",
+        )
+
     operator_password_hash = get_password_hash_for_operator(payload.username)
     if not operator_password_hash or not verify_password(
         payload.password,
         operator_password_hash,
     ):
+        new_block = register_failed_attempt(rate_limit_key, settings)
+        if new_block:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Too many login attempts. Try again after {new_block.astimezone(UTC).isoformat()}",
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
         )
+
+    clear_failed_attempts(rate_limit_key, settings)
 
     session_id, session = create_session(payload.username, settings)
     response.set_cookie(

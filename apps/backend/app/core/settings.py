@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     session_cookie_name: str = "session_id"
     session_ttl_minutes: int = 480
     session_cookie_secure: bool = False
+    login_rate_limit_window_seconds: int = 300
+    login_rate_limit_max_attempts: int = 5
+    login_rate_limit_block_seconds: int = 900
     tutor_username: str = "tutor"
     tutor_password_hash: str = DEFAULT_TUTOR_PASSWORD_HASH
     session_secret: str = "change-this-session-secret"

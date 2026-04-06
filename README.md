@@ -83,6 +83,11 @@ Variables Pinecone para indexacion CV:
 - `PINECONE_INDEX_NAME`
 - `PINECONE_INDEX_HOST`
 
+Variables de rate limiting en login (V1):
+- `LOGIN_RATE_LIMIT_WINDOW_SECONDS` (default `300`)
+- `LOGIN_RATE_LIMIT_MAX_ATTEMPTS` (default `5`)
+- `LOGIN_RATE_LIMIT_BLOCK_SECONDS` (default `900`)
+
 ## Administracion de Prompts (Placeholders)
 Sintaxis valida de placeholders en plantillas:
 - usar siempre llaves: `{placeholder}`
@@ -140,6 +145,7 @@ Mapa rapido endpoint -> flow:
 - `POST /api/persons/{person_id}/opportunities/{opportunity_id}/analyze/profile-match`: `guardrails_core + system_identity + task_analyze_profile_match`
 - `POST /api/persons/{person_id}/opportunities/{opportunity_id}/analyze/cultural-fit`: `guardrails_core + system_identity + task_analyze_cultural_fit`
 - `POST /api/persons/{person_id}/opportunities/{opportunity_id}/prepare`: `guardrails_core + system_identity + task_prepare_*` segun `targets`
+- `GET /api/persons/{person_id}/opportunities/{opportunity_id}/ai-runs`: historico backend por accion IA (`action_key` opcional)
 - `POST /api/persons/{person_id}/search`: `search_jobs_tavily`
 - senales culturales en `analyze_cultural_fit`: `search_culture_tavily`
 

@@ -59,12 +59,17 @@
 - arquitectura normativa actualizada con matriz operativa de prompts/parametros V1 (destino, objetivo, placeholders, alcance, riesgo y control de consumo)
 - arquitectura normativa extendida con trazabilidad endpoint->composicion->variables y reglas de fallback por flow
 - backend incorpora store `ai_action_runs` para persistir resultado vigente + historico por accion IA
+- backend expone consulta de historico por accion IA: `GET /api/persons/{person_id}/opportunities/{opportunity_id}/ai-runs` con filtro opcional `action_key`
 - API agrega acciones separadas de analisis: `POST .../analyze/profile-match` y `POST .../analyze/cultural-fit`
 - API `prepare` permite `targets` seleccionables (`guidance_text`, `cover_letter`, `experience_summary`) y `force_recompute`
 - comportamiento por defecto de acciones IA: leer ultimo resultado persistido; regenerar solo con `force_recompute=true`
+- rate limiting de login implementado con ventana temporal, max intentos y bloqueo temporal configurable por variables seguras
 - frontend agrega switch global `Forzar recalculo IA` y botones separados para `Analyze perfil` y `Analyze cultura`
 - frontend agrega seleccion de materiales para `prepare seleccionado` y consume respuesta vigente por cache cuando aplica
 - capa de prompt en chat/analyze/prepare alineada a composicion: `guardrails_core + system_identity + task_prompt`
+- hardening de guardrails implementado: piso no editable, deteccion basica de prompt injection y saneo de salida ante intento de divulgacion de prompt interno
+- pruebas de hardening de guardrails agregadas (`apps/backend/tests/test_guardrails.py`)
+- pruebas de rate limiting de login agregadas (`apps/backend/tests/test_auth_rate_limit.py`)
 - README actualizado con seccion de placeholders validos (`{placeholder}`) y variables disponibles por flujo de prompt
 - degradacion parcial por proveedor implementada con warnings por fuente
 - deduplicacion de resultados implementada con clave principal por `source_url`
@@ -131,6 +136,5 @@
 - riesgo operativo local: entorno de desarrollo modificado para diagnostico (`anyio` downgraded en `.venv`) sin solucion aun para el bloqueo ASGI
 
 ## Siguiente Actividad
-- hardening de guardrails con pruebas especificas (inyeccion prompt, no divulgacion de prompt, no invencion sin evidencia)
-- definir endpoint de consulta de historico por accion IA (UI diferida en V1)
-- cerrar rate limiting de login con pruebas de ventana temporal
+- exponer historico por accion IA en UI (diferido) si se prioriza visibilidad operativa
+- ampliar pruebas de seguridad para casos edge de prompt injection en flujos streaming
