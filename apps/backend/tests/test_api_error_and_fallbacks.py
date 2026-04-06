@@ -8,6 +8,7 @@ from unittest.mock import patch
 from fastapi import HTTPException
 
 import app.api.opportunities as opportunities_api
+import app.api.search as search_api
 import app.services.opportunity_ai_service as opportunity_ai_service
 import app.services.search_service as search_service
 from app.core.security import SessionData
@@ -200,6 +201,17 @@ class ApiContractsAndIsolationTests(unittest.TestCase):
         self.assertEqual(missing_prepare_stream.exception.status_code, 404)
         self.assertEqual(missing_prepare_stream.exception.detail, "Opportunity not found")
 
+    def test_search_api_rejects_missing_person(self) -> None:
+        with self.assertRaises(HTTPException) as missing_person:
+            search_api.search(
+                person_id="p-unknown",
+                payload=search_api.SearchRequest(query="python backend", max_results=6),
+                _=self.session,
+                settings=get_settings(),
+            )
+        self.assertEqual(missing_person.exception.status_code, 404)
+        self.assertEqual(missing_person.exception.detail, "Person not found")
+
 
 class FallbackBehaviorTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -233,6 +245,97 @@ class FallbackBehaviorTests(unittest.TestCase):
         self.assertEqual(len(payload["items"]), 1)
         self.assertEqual(payload["items"][0]["source_provider"], "fallback")
         self.assertTrue(
+            any("All providers returned empty or failed" in warning for warning in payload["warnings"])
+        )
+
+    def test_search_degrades_partially_when_adzuna_fails(self) -> None:
+        person = get_person("p-001")
+        assert person is not None
+        settings = get_settings()
+        settings.rapidapi_key = "test-key"
+        settings.rapidapi_adzuna_host = "test-host"
+        settings.tavily_api_key = "test-key"
+
+        remotive_item = {
+            "search_result_id": "sr-rem-1",
+            "source_provider": "remotive",
+            "source_url": "https://remotive.com/job/1",
+            "title": "Backend Engineer",
+            "company": "RemotiveCo",
+            "location": "Remote",
+            "snippet": "Remotive snippet",
+            "captured_at": "2026-04-06T00:00:00+00:00",
+            "normalized_payload": {"provider": "remotive"},
+        }
+        tavily_item = {
+            "search_result_id": "sr-tav-1",
+            "source_provider": "tavily",
+            "source_url": "https://example.com/jobs/1",
+            "title": "Platform Engineer",
+            "company": "ExampleCo",
+            "location": "",
+            "snippet": "Tavily snippet",
+            "captured_at": "2026-04-06T00:00:00+00:00",
+            "normalized_payload": {"provider": "tavily"},
+        }
+
+        with patch.object(search_service, "_adzuna_search_via_rapidapi", side_effect=URLError("x")):
+            with patch.object(search_service, "_remotive_search", return_value=[remotive_item]):
+                with patch.object(search_service, "_tavily_search", return_value=[tavily_item]):
+                    payload = search_service.search_opportunities(
+                        person=person,
+                        query="python",
+                        max_results=6,
+                        settings=settings,
+                    )
+
+        self.assertEqual(len(payload["items"]), 2)
+        providers = {item["source_provider"] for item in payload["items"]}
+        self.assertEqual(providers, {"remotive", "tavily"})
+        self.assertTrue(
+            any("Adzuna provider failed" in warning for warning in payload["warnings"])
+        )
+        self.assertFalse(
+            any("All providers returned empty or failed" in warning for warning in payload["warnings"])
+        )
+        tavily_result = next(item for item in payload["items"] if item["source_provider"] == "tavily")
+        self.assertEqual(tavily_result["location"], person["location"])
+
+    def test_search_warns_for_missing_optional_config_but_keeps_results(self) -> None:
+        person = get_person("p-001")
+        assert person is not None
+        settings = get_settings()
+        settings.rapidapi_key = ""
+        settings.rapidapi_adzuna_host = ""
+        settings.tavily_api_key = ""
+
+        remotive_item = {
+            "search_result_id": "sr-rem-only",
+            "source_provider": "remotive",
+            "source_url": "https://remotive.com/job/99",
+            "title": "Data Engineer",
+            "company": "Remote Data",
+            "location": "Remote",
+            "snippet": "Remotive result",
+            "captured_at": "2026-04-06T00:00:00+00:00",
+            "normalized_payload": {"provider": "remotive"},
+        }
+
+        with patch.object(search_service, "_remotive_search", return_value=[remotive_item]):
+            payload = search_service.search_opportunities(
+                person=person,
+                query="data engineer",
+                max_results=6,
+                settings=settings,
+            )
+
+        self.assertEqual(len(payload["items"]), 1)
+        self.assertEqual(payload["items"][0]["source_provider"], "remotive")
+        self.assertTrue(
+            any("Adzuna via RapidAPI is not configured" in warning for warning in payload["warnings"])
+        )
+        self.assertTrue(any("Tavily API key is missing" in warning for warning in payload["warnings"]))
+        self.assertFalse(
             any("All providers returned empty or failed" in warning for warning in payload["warnings"])
         )
 

@@ -86,6 +86,9 @@
 - suite backend actualizada y verificada localmente: `23 tests` en `OK` (`skipped=1`)
 - pruebas de contratos de validacion para payloads incompletos/invalidos en modelos API agregadas en `apps/backend/tests/test_request_validation_contracts.py`
 - suite backend actualizada y verificada localmente: `28 tests` en `OK` (`skipped=1`)
+- hardening de degradacion parcial en busqueda agregado en `apps/backend/tests/test_api_error_and_fallbacks.py` (fallo de un proveedor con resultados parciales de otros y warnings por proveedores no configurados)
+- contrato API agregado para `search` con `person_id` inexistente (`404`) en `apps/backend/tests/test_api_error_and_fallbacks.py`
+- suite backend actualizada y verificada localmente: `31 tests` en `OK` (`skipped=1`)
 
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada de CV a Markdown (PyMuPDF/LlamaIndex) para mejorar jerarquia semantica
@@ -97,4 +100,4 @@
 
 ## Siguiente Actividad
 - investigar causa raiz del bloqueo ASGI en tests locales y habilitar prueba HTTP no-skip para artifacts
-- endurecer casos de error de integraciones externas en capa API (mensajes de warning y degradacion parcial por proveedor)
+- documentar decision tecnica del `skip` ASGI en memoria operativa y definir criterio de salida para habilitar test HTTP real
