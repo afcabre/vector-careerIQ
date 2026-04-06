@@ -91,9 +91,20 @@ class UpdateOpportunityRequest(BaseModel):
     notes: str | None = Field(default=None)
 
 
+class CulturalSignalResponse(BaseModel):
+    source_provider: str
+    source_url: str
+    title: str
+    snippet: str
+    captured_at: str
+
+
 class AnalyzeResponse(BaseModel):
     opportunity: OpportunityResponse
     analysis_text: str
+    cultural_confidence: str
+    cultural_warnings: list[str]
+    cultural_signals: list[CulturalSignalResponse]
 
 
 class ArtifactResponse(BaseModel):
@@ -299,6 +310,9 @@ def analyze(
     return AnalyzeResponse(
         opportunity=_to_response(final_item),
         analysis_text=result["analysis_text"],
+        cultural_confidence=result["cultural_confidence"],
+        cultural_warnings=result["cultural_warnings"],
+        cultural_signals=result["cultural_signals"],
     )
 
 

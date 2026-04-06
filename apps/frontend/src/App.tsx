@@ -4,6 +4,7 @@ import {
   ActiveCV,
   ApplicationArtifact,
   Conversation,
+  CulturalSignal,
   Opportunity,
   Person,
   SearchResult,
@@ -64,6 +65,9 @@ export default function App() {
   const [savingResultId, setSavingResultId] = useState<string | null>(null);
   const [selectedOpportunityId, setSelectedOpportunityId] = useState<string | null>(null);
   const [analysisText, setAnalysisText] = useState("");
+  const [culturalConfidence, setCulturalConfidence] = useState("");
+  const [culturalWarnings, setCulturalWarnings] = useState<string[]>([]);
+  const [culturalSignals, setCulturalSignals] = useState<CulturalSignal[]>([]);
   const [guidanceText, setGuidanceText] = useState("");
   const [artifacts, setArtifacts] = useState<ApplicationArtifact[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -119,6 +123,9 @@ export default function App() {
         setSavedOpportunities([]);
         setSelectedOpportunityId(null);
         setAnalysisText("");
+        setCulturalConfidence("");
+        setCulturalWarnings([]);
+        setCulturalSignals([]);
         setGuidanceText("");
         setArtifacts([]);
         return;
@@ -203,6 +210,10 @@ export default function App() {
     setSelectedPersonId(null);
     setConversation(null);
     setChatInput("");
+    setAnalysisText("");
+    setCulturalConfidence("");
+    setCulturalWarnings([]);
+    setCulturalSignals([]);
     setActiveCv(null);
     setSelectedCvFile(null);
   }
@@ -374,6 +385,9 @@ export default function App() {
     try {
       const payload = await analyzeOpportunity(selectedPersonId, opportunityId);
       setAnalysisText(payload.analysis_text);
+      setCulturalConfidence(payload.cultural_confidence);
+      setCulturalWarnings(payload.cultural_warnings);
+      setCulturalSignals(payload.cultural_signals);
       const items = await listOpportunities(selectedPersonId);
       setSavedOpportunities(items);
       setSelectedOpportunityId(opportunityId);
@@ -830,6 +844,29 @@ export default function App() {
             <p className="chatRole">Analisis</p>
             <p className="chatContent">{analysisText}</p>
           </article>
+        ) : null}
+        {culturalConfidence ? (
+          <p className="metaText">
+            Confianza fit cultural: <strong>{culturalConfidence}</strong>
+          </p>
+        ) : null}
+        {culturalWarnings.length > 0 ? (
+          <article className="chatBubble chatBubbleAssistant">
+            <p className="chatRole">Advertencias culturales</p>
+            <p className="chatContent">{culturalWarnings.join("\n")}</p>
+          </article>
+        ) : null}
+        {culturalSignals.length > 0 ? (
+          <div className="chatList">
+            {culturalSignals.map((signal) => (
+              <article className="chatBubble chatBubbleAssistant" key={`${signal.source_url}|${signal.title}`}>
+                <p className="chatRole">{signal.source_provider}</p>
+                <p className="chatContent">{signal.title}</p>
+                <p className="metaText">{signal.source_url}</p>
+                <p className="metaText">{signal.snippet}</p>
+              </article>
+            ))}
+          </div>
         ) : null}
         {guidanceText ? (
           <article className="chatBubble chatBubbleAssistant">

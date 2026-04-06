@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `chunking token-aware + retrieval exhaustivo CV`
+- checkpoint_actual: `fit cultural con evidencia trazable por fuente`
 - repo_status: `implementacion activa con login, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
 - ultima_actualizacion: `2026-04-06`
 
@@ -51,6 +51,9 @@
 - chat enriquecido con retrieval semantico de Pinecone con fallback a preview de CV
 - chunking CV mejorado a estrategia token-aware con solapamiento (~700 tokens, overlap ~12%)
 - recuperacion semantica ajustada a `top_k` alto para analisis mas exhaustivo en namespace por persona
+- `analyze` ampliado con fit cultural y evidencia publica por fuente (`Tavily`)
+- respuesta de analisis expone `cultural_confidence`, `cultural_warnings` y `cultural_signals`
+- UI muestra trazabilidad de señales culturales y advertencias de evidencia debil
 
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada de CV a Markdown (PyMuPDF/LlamaIndex) para mejorar jerarquia semantica
@@ -61,6 +64,6 @@
 - no hay bloqueadores tecnicos activos reportados en este checkpoint
 
 ## Siguiente Actividad
-- ampliar analisis de fit cultural con trazabilidad de evidencia por fuente
 - reutilizar retrieval semantico en `analyze` y `prepare`
 - completar hardening de errores y observabilidad del pipeline semantico
+- mejorar perfil estructurado para incluir preferencias culturales explicitas en el modelo de persona

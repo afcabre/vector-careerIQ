@@ -70,6 +70,14 @@ export type ApplicationArtifact = {
   updated_at: string;
 };
 
+export type CulturalSignal = {
+  source_provider: string;
+  source_url: string;
+  title: string;
+  snippet: string;
+  captured_at: string;
+};
+
 export type ActiveCV = {
   cv_id: string;
   person_id: string;
@@ -236,7 +244,13 @@ export async function listOpportunities(personId: string): Promise<Opportunity[]
 export async function analyzeOpportunity(
   personId: string,
   opportunityId: string
-): Promise<{ opportunity: Opportunity; analysis_text: string }> {
+): Promise<{
+  opportunity: Opportunity;
+  analysis_text: string;
+  cultural_confidence: string;
+  cultural_warnings: string[];
+  cultural_signals: CulturalSignal[];
+}> {
   const response = await fetch(
     `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/analyze`,
     {
@@ -244,7 +258,13 @@ export async function analyzeOpportunity(
       credentials: "include"
     }
   );
-  return parseResponse<{ opportunity: Opportunity; analysis_text: string }>(response);
+  return parseResponse<{
+    opportunity: Opportunity;
+    analysis_text: string;
+    cultural_confidence: string;
+    cultural_warnings: string[];
+    cultural_signals: CulturalSignal[];
+  }>(response);
 }
 
 export async function prepareOpportunity(
