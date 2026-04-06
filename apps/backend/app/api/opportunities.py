@@ -99,12 +99,20 @@ class CulturalSignalResponse(BaseModel):
     captured_at: str
 
 
+class SemanticEvidenceResponse(BaseModel):
+    source: str
+    query: str
+    top_k: int
+    snippets: list[str]
+
+
 class AnalyzeResponse(BaseModel):
     opportunity: OpportunityResponse
     analysis_text: str
     cultural_confidence: str
     cultural_warnings: list[str]
     cultural_signals: list[CulturalSignalResponse]
+    semantic_evidence: SemanticEvidenceResponse
 
 
 class ArtifactResponse(BaseModel):
@@ -126,6 +134,7 @@ class PrepareResponse(BaseModel):
     opportunity: OpportunityResponse
     guidance_text: str
     artifacts: list[ArtifactResponse]
+    semantic_evidence: SemanticEvidenceResponse
 
 
 def _require_person(person_id: str) -> None:
@@ -313,6 +322,7 @@ def analyze(
         cultural_confidence=result["cultural_confidence"],
         cultural_warnings=result["cultural_warnings"],
         cultural_signals=result["cultural_signals"],
+        semantic_evidence=result["semantic_evidence"],
     )
 
 
@@ -361,6 +371,7 @@ def prepare(
         opportunity=_to_response(final_item),
         guidance_text=payload["guidance_text"],
         artifacts=[ArtifactResponse(**cover), ArtifactResponse(**summary)],
+        semantic_evidence=payload["semantic_evidence"],
     )
 
 

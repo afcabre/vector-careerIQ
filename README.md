@@ -26,11 +26,12 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
 - indexacion vectorial del CV activo habilitada (embeddings OpenAI + upsert/query en Pinecone cuando hay configuracion)
 - chunking token-aware con solapamiento aplicado al pipeline de CV para embeddings
 - fit cultural en `analyze` con señales publicas trazables por fuente y advertencias de evidencia
+- `analyze` y `prepare` incorporan retrieval semantico de CV y exponen evidencia usada
 
 ## Siguiente paso
-- conectar analisis de fit y preparacion para reutilizar retrieval semantico de Pinecone
 - endurecer observabilidad/metricas de proveedores externos y pipeline CV
 - ampliar perfil estructurado para preferencias culturales explicitas
+- incorporar notas operativas editables por oportunidad desde UI
 
 ## Arranque Local Minimo
 ### Backend

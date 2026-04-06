@@ -6,6 +6,8 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from app.core.settings import Settings
+from app.services.cv_store import get_active_cv
+from app.services.cv_vector_service import query_cv_context
 from app.services.llm_service import FALLBACK_MESSAGE, complete_prompt
 from app.services.opportunity_store import OpportunityRecord
 from app.services.person_store import PersonRecord
@@ -19,17 +21,26 @@ class CulturalSignal(TypedDict):
     captured_at: str
 
 
+class SemanticEvidence(TypedDict):
+    source: str
+    query: str
+    top_k: int
+    snippets: list[str]
+
+
 class AnalyzeResult(TypedDict):
     analysis_text: str
     cultural_confidence: str
     cultural_warnings: list[str]
     cultural_signals: list[CulturalSignal]
+    semantic_evidence: SemanticEvidence
 
 
 class PreparationResult(TypedDict):
     guidance_text: str
     cover_letter: str
     experience_summary: str
+    semantic_evidence: SemanticEvidence
 
 
 def _now_iso() -> str:
@@ -41,6 +52,24 @@ def _short_text(raw: str, max_chars: int = 420) -> str:
     if len(text) <= max_chars:
         return text
     return f"{text[:max_chars].rstrip()}..."
+
+
+def _join_snippets(snippets: list[str], max_chars: int = 3800) -> str:
+    parts: list[str] = []
+    total = 0
+    for raw in snippets:
+        text = _short_text(raw, max_chars=900)
+        if not text:
+            continue
+        chunk = text if not parts else f"\n\n{text}"
+        if total + len(chunk) > max_chars:
+            remaining = max_chars - total
+            if remaining > 120:
+                parts.append(chunk[:remaining].rstrip())
+            break
+        parts.append(chunk)
+        total += len(chunk)
+    return "".join(parts)
 
 
 def _company_name(opportunity: OpportunityRecord) -> str:
@@ -81,6 +110,83 @@ def _opportunity_context(opportunity: OpportunityRecord) -> str:
         f"URL: {opportunity['source_url']}\n"
         f"Descripcion: {opportunity['snapshot_raw_text']}"
     )
+
+
+def _semantic_query(person: PersonRecord, opportunity: OpportunityRecord) -> str:
+    role_hint = ", ".join(person["target_roles"][:2]).strip()
+    title = opportunity["title"].strip()
+    company = opportunity["company"].strip()
+    description = _short_text(opportunity["snapshot_raw_text"], max_chars=700)
+    query = (
+        f"{title} {company} {role_hint} requisitos principales experiencia y habilidades "
+        f"relevantes {description}"
+    ).strip()
+    return query
+
+
+def _fallback_cv_snippets(active_cv: dict, max_items: int = 5) -> list[str]:
+    raw = str(active_cv.get("extracted_text", "")).strip()
+    if not raw:
+        return []
+    parts = [item.strip() for item in raw.split("\n") if item.strip()]
+    if not parts:
+        return [_short_text(raw, max_chars=900)]
+    snippets: list[str] = []
+    for item in parts[: max_items * 2]:
+        snippet = _short_text(item, max_chars=900)
+        if snippet:
+            snippets.append(snippet)
+        if len(snippets) >= max_items:
+            break
+    return snippets
+
+
+def _build_semantic_evidence(
+    person: PersonRecord,
+    opportunity: OpportunityRecord,
+    settings: Settings,
+    top_k: int = 24,
+) -> SemanticEvidence:
+    query = _semantic_query(person, opportunity)
+    active_cv = get_active_cv(person["person_id"])
+    if not active_cv:
+        return {
+            "source": "no_active_cv",
+            "query": query,
+            "top_k": top_k,
+            "snippets": [],
+        }
+
+    snippets = query_cv_context(
+        person_id=person["person_id"],
+        cv_id=active_cv["cv_id"],
+        query_text=query,
+        settings=settings,
+        top_k=top_k,
+    )
+    if snippets:
+        return {
+            "source": "semantic_retrieval",
+            "query": query,
+            "top_k": top_k,
+            "snippets": snippets[:10],
+        }
+
+    return {
+        "source": "fallback_preview",
+        "query": query,
+        "top_k": top_k,
+        "snippets": _fallback_cv_snippets(active_cv, max_items=5),
+    }
+
+
+def _semantic_evidence_context(evidence: SemanticEvidence) -> str:
+    if not evidence["snippets"]:
+        return "Sin evidencia semantica CV disponible."
+    lines: list[str] = []
+    for index, snippet in enumerate(evidence["snippets"], start=1):
+        lines.append(f"[CV-{index}] {snippet}")
+    return _join_snippets(lines, max_chars=4200)
 
 
 def _tavily_culture_signals(
@@ -181,6 +287,7 @@ def analyze_opportunity(
 ) -> AnalyzeResult:
     signals, warnings = _tavily_culture_signals(person, opportunity, settings)
     confidence = _cultural_confidence(len(signals))
+    semantic_evidence = _build_semantic_evidence(person, opportunity, settings, top_k=24)
     system_prompt = (
         "Eres un asistente de empleabilidad. Entrega analisis cualitativo y accionable.\n"
         "Para fit cultural: evita conclusiones absolutas, declara vacios de evidencia "
@@ -196,6 +303,8 @@ def analyze_opportunity(
         "5) Recomendacion accionable\n\n"
         f"{_person_context(person)}\n\n"
         f"{_opportunity_context(opportunity)}\n\n"
+        "Evidencia semantica CV recuperada:\n"
+        f"{_semantic_evidence_context(semantic_evidence)}\n\n"
         "Evidencia cultural externa recopilada:\n"
         f"{_cultural_evidence_context(signals)}\n\n"
         "Si la evidencia externa es debil o contradictoria, dilo explicitamente."
@@ -212,6 +321,7 @@ def analyze_opportunity(
         "cultural_confidence": confidence,
         "cultural_warnings": warnings,
         "cultural_signals": signals,
+        "semantic_evidence": semantic_evidence,
     }
 
 
@@ -223,7 +333,13 @@ def prepare_application_materials(
     system_prompt = (
         "Eres un asistente de postulaciones. Escribe contenido profesional, concreto y util."
     )
-    base_context = f"{_person_context(person)}\n\n{_opportunity_context(opportunity)}"
+    semantic_evidence = _build_semantic_evidence(person, opportunity, settings, top_k=24)
+    base_context = (
+        f"{_person_context(person)}\n\n"
+        f"{_opportunity_context(opportunity)}\n\n"
+        "Evidencia semantica CV recuperada:\n"
+        f"{_semantic_evidence_context(semantic_evidence)}"
+    )
 
     guidance = complete_prompt(
         system_prompt,
@@ -279,4 +395,5 @@ def prepare_application_materials(
         "guidance_text": guidance,
         "cover_letter": cover_letter,
         "experience_summary": experience_summary,
+        "semantic_evidence": semantic_evidence,
     }

@@ -78,6 +78,13 @@ export type CulturalSignal = {
   captured_at: string;
 };
 
+export type SemanticEvidence = {
+  source: string;
+  query: string;
+  top_k: number;
+  snippets: string[];
+};
+
 export type ActiveCV = {
   cv_id: string;
   person_id: string;
@@ -250,6 +257,7 @@ export async function analyzeOpportunity(
   cultural_confidence: string;
   cultural_warnings: string[];
   cultural_signals: CulturalSignal[];
+  semantic_evidence: SemanticEvidence;
 }> {
   const response = await fetch(
     `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/analyze`,
@@ -264,6 +272,7 @@ export async function analyzeOpportunity(
     cultural_confidence: string;
     cultural_warnings: string[];
     cultural_signals: CulturalSignal[];
+    semantic_evidence: SemanticEvidence;
   }>(response);
 }
 
@@ -274,6 +283,7 @@ export async function prepareOpportunity(
   opportunity: Opportunity;
   guidance_text: string;
   artifacts: ApplicationArtifact[];
+  semantic_evidence: SemanticEvidence;
 }> {
   const response = await fetch(
     `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/prepare`,
@@ -286,6 +296,7 @@ export async function prepareOpportunity(
     opportunity: Opportunity;
     guidance_text: string;
     artifacts: ApplicationArtifact[];
+    semantic_evidence: SemanticEvidence;
   }>(response);
 }
 

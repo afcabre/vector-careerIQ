@@ -8,6 +8,7 @@ import {
   Opportunity,
   Person,
   SearchResult,
+  SemanticEvidence,
   analyzeOpportunity,
   getConversation,
   getActiveCV,
@@ -68,6 +69,7 @@ export default function App() {
   const [culturalConfidence, setCulturalConfidence] = useState("");
   const [culturalWarnings, setCulturalWarnings] = useState<string[]>([]);
   const [culturalSignals, setCulturalSignals] = useState<CulturalSignal[]>([]);
+  const [semanticEvidence, setSemanticEvidence] = useState<SemanticEvidence | null>(null);
   const [guidanceText, setGuidanceText] = useState("");
   const [artifacts, setArtifacts] = useState<ApplicationArtifact[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -126,6 +128,7 @@ export default function App() {
         setCulturalConfidence("");
         setCulturalWarnings([]);
         setCulturalSignals([]);
+        setSemanticEvidence(null);
         setGuidanceText("");
         setArtifacts([]);
         return;
@@ -214,6 +217,7 @@ export default function App() {
     setCulturalConfidence("");
     setCulturalWarnings([]);
     setCulturalSignals([]);
+    setSemanticEvidence(null);
     setActiveCv(null);
     setSelectedCvFile(null);
   }
@@ -388,6 +392,7 @@ export default function App() {
       setCulturalConfidence(payload.cultural_confidence);
       setCulturalWarnings(payload.cultural_warnings);
       setCulturalSignals(payload.cultural_signals);
+      setSemanticEvidence(payload.semantic_evidence);
       const items = await listOpportunities(selectedPersonId);
       setSavedOpportunities(items);
       setSelectedOpportunityId(opportunityId);
@@ -410,6 +415,7 @@ export default function App() {
       const payload = await prepareOpportunity(selectedPersonId, opportunityId);
       setGuidanceText(payload.guidance_text);
       setArtifacts(payload.artifacts);
+      setSemanticEvidence(payload.semantic_evidence);
       const items = await listOpportunities(selectedPersonId);
       setSavedOpportunities(items);
       setSelectedOpportunityId(opportunityId);
@@ -867,6 +873,25 @@ export default function App() {
               </article>
             ))}
           </div>
+        ) : null}
+        {semanticEvidence ? (
+          <article className="chatBubble chatBubbleAssistant">
+            <p className="chatRole">Evidencia semantica CV ({semanticEvidence.source})</p>
+            <p className="metaText">top_k: {semanticEvidence.top_k}</p>
+            <p className="metaText">{semanticEvidence.query}</p>
+            {semanticEvidence.snippets.length > 0 ? (
+              <div className="chatList">
+                {semanticEvidence.snippets.slice(0, 6).map((snippet, index) => (
+                  <article className="chatBubble chatBubbleUser" key={`cv-snippet-${index}`}>
+                    <p className="chatRole">CV-{index + 1}</p>
+                    <p className="chatContent">{snippet}</p>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="chatContent">No hay snippets disponibles para esta oportunidad.</p>
+            )}
+          </article>
         ) : null}
         {guidanceText ? (
           <article className="chatBubble chatBubbleAssistant">
