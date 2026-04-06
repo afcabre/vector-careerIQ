@@ -2,7 +2,7 @@ import asyncio
 import json
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
 
@@ -14,7 +14,9 @@ from app.services.ai_run_store import (
     ACTION_PREPARE_COVER_LETTER,
     ACTION_PREPARE_EXPERIENCE_SUMMARY,
     ACTION_PREPARE_GUIDANCE,
+    AI_ACTION_KEYS,
     get_current_ai_run,
+    list_ai_runs,
     upsert_current_ai_run,
 )
 from app.services.artifact_store import ARTIFACT_TYPES, list_current_artifacts, upsert_current_artifact
@@ -185,6 +187,21 @@ class PrepareResponse(BaseModel):
     artifacts: list[ArtifactResponse]
     semantic_evidence: SemanticEvidenceResponse
     served_from_cache: bool
+
+
+class AIRunResponse(BaseModel):
+    run_id: str
+    person_id: str
+    opportunity_id: str
+    action_key: str
+    result_payload: dict[str, Any]
+    is_current: bool
+    created_at: str
+    updated_at: str
+
+
+class AIRunsResponse(BaseModel):
+    items: list[AIRunResponse]
 
 
 def _serialize_sse(event: str, payload: dict[str, Any]) -> str:
@@ -363,6 +380,37 @@ def get_opportunity(
             detail="Opportunity not found",
         )
     return _to_response(item)
+
+
+@router.get("/{opportunity_id}/ai-runs")
+def list_action_runs(
+    person_id: str,
+    opportunity_id: str,
+    action_key: str | None = Query(default=None),
+    _: SessionData = Depends(require_operator_session),
+) -> AIRunsResponse:
+    _require_person(person_id)
+    item = find_opportunity(person_id, opportunity_id)
+    if not item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    normalized_action_key = action_key.strip() if isinstance(action_key, str) else None
+    if normalized_action_key and normalized_action_key not in AI_ACTION_KEYS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid action_key",
+        )
+
+    runs = list_ai_runs(
+        person_id=person_id,
+        opportunity_id=opportunity_id,
+        action_key=normalized_action_key,
+        current_only=False,
+    )
+    return AIRunsResponse(items=[AIRunResponse(**record) for record in runs])
 
 
 @router.post("/{opportunity_id}/analyze/profile-match")

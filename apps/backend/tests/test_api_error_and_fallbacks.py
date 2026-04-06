@@ -339,6 +339,86 @@ class ApiContractsAndIsolationTests(unittest.TestCase):
         self.assertEqual(response.artifacts[0].artifact_type, "cover_letter")
         self.assertFalse(response.served_from_cache)
 
+    def test_ai_runs_endpoint_returns_history_and_enforces_scope(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Platform Engineer",
+            company="Acme",
+            location="Remote",
+            raw_text="Platform role.",
+        )
+        opportunity_id = created["opportunity_id"]
+        semantic = {
+            "source": "semantic_retrieval",
+            "query": "q",
+            "top_k": 24,
+            "snippets": ["s1"],
+        }
+        with patch.object(
+            opportunities_api,
+            "analyze_profile_match",
+            side_effect=[
+                {"analysis_text": "Version 1", "semantic_evidence": semantic},
+                {"analysis_text": "Version 2", "semantic_evidence": semantic},
+            ],
+        ):
+            opportunities_api.analyze_profile_match_action(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                payload=opportunities_api.ActionRequest(force_recompute=True),
+                _=self.session,
+                settings=get_settings(),
+            )
+            opportunities_api.analyze_profile_match_action(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                payload=opportunities_api.ActionRequest(force_recompute=True),
+                _=self.session,
+                settings=get_settings(),
+            )
+
+        listed = opportunities_api.list_action_runs(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            _=self.session,
+        )
+        self.assertEqual(len(listed.items), 2)
+        self.assertEqual(listed.items[0].action_key, "analyze_profile_match")
+        self.assertTrue(any(item.is_current for item in listed.items))
+
+        filtered = opportunities_api.list_action_runs(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            action_key="analyze_profile_match",
+            _=self.session,
+        )
+        self.assertEqual(len(filtered.items), 2)
+
+        with self.assertRaises(HTTPException) as cross_access:
+            opportunities_api.list_action_runs(
+                person_id="p-002",
+                opportunity_id=opportunity_id,
+                _=self.session,
+            )
+        self.assertEqual(cross_access.exception.status_code, 404)
+
+    def test_ai_runs_endpoint_rejects_invalid_action_key(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Security Analyst",
+            company="Acme",
+            location="Remote",
+            raw_text="Role details.",
+        )
+        with self.assertRaises(HTTPException) as invalid:
+            opportunities_api.list_action_runs(
+                person_id="p-001",
+                opportunity_id=created["opportunity_id"],
+                action_key="unknown_action",
+                _=self.session,
+            )
+        self.assertEqual(invalid.exception.status_code, 422)
+
 
 class FallbackBehaviorTests(unittest.TestCase):
     def setUp(self) -> None:
