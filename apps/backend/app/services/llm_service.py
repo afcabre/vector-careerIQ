@@ -157,6 +157,48 @@ def complete_prompt(
     return content.strip() or FALLBACK_MESSAGE
 
 
+def stream_prompt(
+    system_prompt: str,
+    user_prompt: str,
+    settings: Settings,
+    *,
+    temperature: float = 0.2,
+) -> Iterator[str]:
+    client = _client(settings)
+    if client is None:
+        for token in FALLBACK_MESSAGE.split(" "):
+            yield f"{token} "
+        return
+
+    try:
+        stream = client.chat.completions.create(
+            model=settings.openai_chat_model,
+            temperature=temperature,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            stream=True,
+        )
+    except Exception:
+        for token in FALLBACK_MESSAGE.split(" "):
+            yield f"{token} "
+        return
+
+    emitted = False
+    for chunk in stream:
+        if not chunk.choices:
+            continue
+        delta = chunk.choices[0].delta.content or ""
+        if not delta:
+            continue
+        emitted = True
+        yield delta
+
+    if not emitted:
+        yield FALLBACK_MESSAGE
+
+
 def stream_reply(
     person: PersonRecord,
     history: list[MessageRecord],

@@ -1,12 +1,20 @@
+import asyncio
+import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from starlette.responses import StreamingResponse
 
 from app.core.security import SessionData, require_operator_session
 from app.core.settings import Settings, get_settings
 from app.services.artifact_store import ARTIFACT_TYPES, list_current_artifacts, upsert_current_artifact
-from app.services.opportunity_ai_service import analyze_opportunity, prepare_application_materials
+from app.services.opportunity_ai_service import (
+    analyze_opportunity,
+    prepare_application_materials,
+    stream_analyze_text,
+    stream_prepare_sections,
+)
 from app.services.opportunity_store import (
     OPPORTUNITY_STATUSES,
     create_opportunity,
@@ -135,6 +143,10 @@ class PrepareResponse(BaseModel):
     guidance_text: str
     artifacts: list[ArtifactResponse]
     semantic_evidence: SemanticEvidenceResponse
+
+
+def _serialize_sse(event: str, payload: dict[str, Any]) -> str:
+    return f"event: {event}\ndata: {json.dumps(payload)}\n\n"
 
 
 def _require_person(person_id: str) -> None:
@@ -326,6 +338,89 @@ def analyze(
     )
 
 
+@router.post("/{opportunity_id}/analyze/stream")
+async def analyze_stream(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+    settings: Settings = Depends(get_settings),
+) -> StreamingResponse:
+    person = get_person(person_id)
+    if not person:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Person not found",
+        )
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    async def event_generator():
+        try:
+            yield _serialize_sse(
+                "message_start",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "channel": "analysis_text",
+                },
+            )
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "analyze_running",
+                },
+            )
+
+            bundle, stream = stream_analyze_text(person, opportunity, settings)
+            analysis_text = ""
+            for delta in stream:
+                analysis_text += delta
+                yield _serialize_sse(
+                    "message_delta",
+                    {
+                        "person_id": person_id,
+                        "opportunity_id": opportunity_id,
+                        "channel": "analysis_text",
+                        "delta": delta,
+                    },
+                )
+                await asyncio.sleep(0)
+
+            updated = update_saved_opportunity(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                status="analyzed",
+                notes=opportunity.get("notes", ""),
+            )
+            final_item = updated or opportunity
+            payload = {
+                "opportunity": final_item,
+                "analysis_text": analysis_text.strip(),
+                "cultural_confidence": bundle["cultural_confidence"],
+                "cultural_warnings": bundle["cultural_warnings"],
+                "cultural_signals": bundle["cultural_signals"],
+                "semantic_evidence": bundle["semantic_evidence"],
+            }
+            yield _serialize_sse("message_complete", payload)
+        except Exception as exc:  # pragma: no cover - network stream path
+            yield _serialize_sse(
+                "error",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "detail": str(exc),
+                },
+            )
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
 @router.post("/{opportunity_id}/prepare")
 def prepare(
     person_id: str,
@@ -373,6 +468,115 @@ def prepare(
         artifacts=[ArtifactResponse(**cover), ArtifactResponse(**summary)],
         semantic_evidence=payload["semantic_evidence"],
     )
+
+
+@router.post("/{opportunity_id}/prepare/stream")
+async def prepare_stream(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+    settings: Settings = Depends(get_settings),
+) -> StreamingResponse:
+    person = get_person(person_id)
+    if not person:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Person not found",
+        )
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    async def event_generator():
+        try:
+            yield _serialize_sse(
+                "message_start",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "channel": "guidance_text",
+                },
+            )
+            bundle, guidance_stream, cover_stream, summary_stream = stream_prepare_sections(
+                person, opportunity, settings
+            )
+
+            guidance_text = ""
+            cover_letter = ""
+            experience_summary = ""
+            stages = [
+                ("guidance_text", guidance_stream),
+                ("cover_letter", cover_stream),
+                ("experience_summary", summary_stream),
+            ]
+
+            for channel, stream in stages:
+                yield _serialize_sse(
+                    "tool_status",
+                    {
+                        "person_id": person_id,
+                        "opportunity_id": opportunity_id,
+                        "stage": f"prepare_{channel}",
+                    },
+                )
+                for delta in stream:
+                    if channel == "guidance_text":
+                        guidance_text += delta
+                    elif channel == "cover_letter":
+                        cover_letter += delta
+                    else:
+                        experience_summary += delta
+                    yield _serialize_sse(
+                        "message_delta",
+                        {
+                            "person_id": person_id,
+                            "opportunity_id": opportunity_id,
+                            "channel": channel,
+                            "delta": delta,
+                        },
+                    )
+                    await asyncio.sleep(0)
+
+            cover = upsert_current_artifact(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                artifact_type="cover_letter",
+                content=cover_letter.strip(),
+            )
+            summary = upsert_current_artifact(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                artifact_type="experience_summary",
+                content=experience_summary.strip(),
+            )
+            updated = update_saved_opportunity(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                status="application_prepared",
+                notes=opportunity.get("notes", ""),
+            )
+            final_item = updated or opportunity
+            payload = {
+                "opportunity": final_item,
+                "guidance_text": guidance_text.strip(),
+                "artifacts": [cover, summary],
+                "semantic_evidence": bundle["semantic_evidence"],
+            }
+            yield _serialize_sse("message_complete", payload)
+        except Exception as exc:  # pragma: no cover - network stream path
+            yield _serialize_sse(
+                "error",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "detail": str(exc),
+                },
+            )
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.get("/{opportunity_id}/artifacts")

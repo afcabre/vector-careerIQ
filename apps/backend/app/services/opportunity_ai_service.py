@@ -9,7 +9,7 @@ from urllib.request import Request, urlopen
 from app.core.settings import Settings
 from app.services.cv_store import get_active_cv
 from app.services.cv_vector_service import query_cv_context
-from app.services.llm_service import FALLBACK_MESSAGE, complete_prompt
+from app.services.llm_service import FALLBACK_MESSAGE, complete_prompt, stream_prompt
 from app.services.opportunity_store import OpportunityRecord
 from app.services.person_store import PersonRecord
 
@@ -60,6 +60,23 @@ class PreparationResult(TypedDict):
     guidance_text: str
     cover_letter: str
     experience_summary: str
+    semantic_evidence: SemanticEvidence
+
+
+class AnalyzePromptBundle(TypedDict):
+    system_prompt: str
+    user_prompt: str
+    cultural_confidence: str
+    cultural_warnings: list[str]
+    cultural_signals: list[CulturalSignal]
+    semantic_evidence: SemanticEvidence
+
+
+class PreparePromptBundle(TypedDict):
+    system_prompt: str
+    guidance_prompt: str
+    cover_letter_prompt: str
+    experience_summary_prompt: str
     semantic_evidence: SemanticEvidence
 
 
@@ -358,16 +375,11 @@ def _cultural_evidence_context(signals: list[CulturalSignal]) -> str:
     return "\n".join(lines)
 
 
-def analyze_opportunity(
+def build_analyze_prompt_bundle(
     person: PersonRecord,
     opportunity: OpportunityRecord,
     settings: Settings,
-) -> AnalyzeResult:
-    logger.info(
-        "opportunity analyze started person_id=%s opportunity_id=%s",
-        person["person_id"],
-        opportunity["opportunity_id"],
-    )
+) -> AnalyzePromptBundle:
     signals, warnings = _tavily_culture_signals(person, opportunity, settings)
     confidence = _cultural_confidence(len(signals))
     semantic_evidence = _build_semantic_evidence(person, opportunity, settings, top_k=24)
@@ -396,7 +408,112 @@ def analyze_opportunity(
         f"{_cultural_evidence_context(signals)}\n\n"
         "Si la evidencia externa es debil o contradictoria, dilo explicitamente."
     )
-    response = complete_prompt(system_prompt, user_prompt, settings, temperature=0.2)
+    return {
+        "system_prompt": system_prompt,
+        "user_prompt": user_prompt,
+        "cultural_confidence": confidence,
+        "cultural_warnings": warnings,
+        "cultural_signals": signals,
+        "semantic_evidence": semantic_evidence,
+    }
+
+
+def build_prepare_prompt_bundle(
+    person: PersonRecord,
+    opportunity: OpportunityRecord,
+    settings: Settings,
+) -> PreparePromptBundle:
+    semantic_evidence = _build_semantic_evidence(person, opportunity, settings, top_k=24)
+    base_context = (
+        f"{_person_context(person)}\n\n"
+        f"{_opportunity_context(opportunity)}\n\n"
+        "Evidencia semantica CV recuperada:\n"
+        f"{_semantic_evidence_context(semantic_evidence)}"
+    )
+    return {
+        "system_prompt": (
+            "Eres un asistente de postulaciones. Escribe contenido profesional, concreto y util."
+        ),
+        "guidance_prompt": (
+            "Genera ayuda textual breve para postular:\n"
+            "- enfoque recomendado\n"
+            "- puntos a destacar\n"
+            "- precauciones\n\n"
+            f"{base_context}"
+        ),
+        "cover_letter_prompt": (
+            "Escribe una carta de presentacion breve (max 220 palabras), "
+            "personalizada para la vacante.\n\n"
+            f"{base_context}"
+        ),
+        "experience_summary_prompt": (
+            "Escribe un resumen adaptado de experiencia (max 180 palabras), "
+            "enfocado en ajuste con la vacante.\n\n"
+            f"{base_context}"
+        ),
+        "semantic_evidence": semantic_evidence,
+    }
+
+
+def stream_analyze_text(
+    person: PersonRecord,
+    opportunity: OpportunityRecord,
+    settings: Settings,
+):
+    bundle = build_analyze_prompt_bundle(person, opportunity, settings)
+    stream = stream_prompt(
+        bundle["system_prompt"],
+        bundle["user_prompt"],
+        settings,
+        temperature=0.2,
+    )
+    return bundle, stream
+
+
+def stream_prepare_sections(
+    person: PersonRecord,
+    opportunity: OpportunityRecord,
+    settings: Settings,
+):
+    bundle = build_prepare_prompt_bundle(person, opportunity, settings)
+    guidance_stream = stream_prompt(
+        bundle["system_prompt"],
+        bundle["guidance_prompt"],
+        settings,
+        temperature=0.2,
+    )
+    cover_stream = stream_prompt(
+        bundle["system_prompt"],
+        bundle["cover_letter_prompt"],
+        settings,
+        temperature=0.4,
+    )
+    summary_stream = stream_prompt(
+        bundle["system_prompt"],
+        bundle["experience_summary_prompt"],
+        settings,
+        temperature=0.3,
+    )
+    return bundle, guidance_stream, cover_stream, summary_stream
+
+
+def analyze_opportunity(
+    person: PersonRecord,
+    opportunity: OpportunityRecord,
+    settings: Settings,
+) -> AnalyzeResult:
+    logger.info(
+        "opportunity analyze started person_id=%s opportunity_id=%s",
+        person["person_id"],
+        opportunity["opportunity_id"],
+    )
+    bundle = build_analyze_prompt_bundle(person, opportunity, settings)
+    response = complete_prompt(
+        bundle["system_prompt"],
+        bundle["user_prompt"],
+        settings,
+        temperature=0.2,
+    )
     if response == FALLBACK_MESSAGE:
         logger.warning(
             "opportunity analyze used llm fallback person_id=%s opportunity_id=%s",
@@ -410,10 +527,10 @@ def analyze_opportunity(
         )
     return {
         "analysis_text": response,
-        "cultural_confidence": confidence,
-        "cultural_warnings": warnings,
-        "cultural_signals": signals,
-        "semantic_evidence": semantic_evidence,
+        "cultural_confidence": bundle["cultural_confidence"],
+        "cultural_warnings": bundle["cultural_warnings"],
+        "cultural_signals": bundle["cultural_signals"],
+        "semantic_evidence": bundle["semantic_evidence"],
     }
 
 
@@ -427,26 +544,10 @@ def prepare_application_materials(
         person["person_id"],
         opportunity["opportunity_id"],
     )
-    system_prompt = (
-        "Eres un asistente de postulaciones. Escribe contenido profesional, concreto y util."
-    )
-    semantic_evidence = _build_semantic_evidence(person, opportunity, settings, top_k=24)
-    base_context = (
-        f"{_person_context(person)}\n\n"
-        f"{_opportunity_context(opportunity)}\n\n"
-        "Evidencia semantica CV recuperada:\n"
-        f"{_semantic_evidence_context(semantic_evidence)}"
-    )
-
+    bundle = build_prepare_prompt_bundle(person, opportunity, settings)
     guidance = complete_prompt(
-        system_prompt,
-        (
-            "Genera ayuda textual breve para postular:\n"
-            "- enfoque recomendado\n"
-            "- puntos a destacar\n"
-            "- precauciones\n\n"
-            f"{base_context}"
-        ),
+        bundle["system_prompt"],
+        bundle["guidance_prompt"],
         settings,
         temperature=0.2,
     )
@@ -462,12 +563,8 @@ def prepare_application_materials(
         )
 
     cover_letter = complete_prompt(
-        system_prompt,
-        (
-            "Escribe una carta de presentacion breve (max 220 palabras), "
-            "personalizada para la vacante.\n\n"
-            f"{base_context}"
-        ),
+        bundle["system_prompt"],
+        bundle["cover_letter_prompt"],
         settings,
         temperature=0.4,
     )
@@ -483,12 +580,8 @@ def prepare_application_materials(
         )
 
     experience_summary = complete_prompt(
-        system_prompt,
-        (
-            "Escribe un resumen adaptado de experiencia (max 180 palabras), "
-            "enfocado en ajuste con la vacante.\n\n"
-            f"{base_context}"
-        ),
+        bundle["system_prompt"],
+        bundle["experience_summary_prompt"],
         settings,
         temperature=0.3,
     )
@@ -507,5 +600,5 @@ def prepare_application_materials(
         "guidance_text": guidance,
         "cover_letter": cover_letter,
         "experience_summary": experience_summary,
-        "semantic_evidence": semantic_evidence,
+        "semantic_evidence": bundle["semantic_evidence"],
     }
