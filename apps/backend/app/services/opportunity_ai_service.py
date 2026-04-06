@@ -29,6 +29,7 @@ from app.services.prompt_config_store import (
     build_prompt_query,
     build_prompt_text,
 )
+from app.services.request_trace_store import add_request_trace
 
 logger = logging.getLogger(__name__)
 
@@ -395,6 +396,22 @@ def _tavily_culture_signals(
             "include_answer": False,
         }
     ).encode("utf-8")
+    add_request_trace(
+        person_id=person["person_id"],
+        opportunity_id=opportunity["opportunity_id"],
+        destination="tavily",
+        flow_key="search_culture_tavily",
+        request_payload={
+            "method": "POST",
+            "url": "https://api.tavily.com/search",
+            "body": {
+                "query": query,
+                "max_results": max_results,
+                "search_depth": "basic",
+                "include_answer": False,
+            },
+        },
+    )
     request = Request(
         url="https://api.tavily.com/search",
         method="POST",
@@ -580,6 +597,9 @@ def stream_analyze_text(
         bundle["user_prompt"],
         settings,
         temperature=0.2,
+        person_id=person["person_id"],
+        opportunity_id=opportunity["opportunity_id"],
+        flow_key="analyze_combined_stream",
     )
     return bundle, stream
 
@@ -595,18 +615,27 @@ def stream_prepare_sections(
         bundle["guidance_prompt"],
         settings,
         temperature=0.2,
+        person_id=person["person_id"],
+        opportunity_id=opportunity["opportunity_id"],
+        flow_key="prepare_guidance_text_stream",
     )
     cover_stream = stream_prompt(
         bundle["system_prompt"],
         bundle["cover_letter_prompt"],
         settings,
         temperature=0.4,
+        person_id=person["person_id"],
+        opportunity_id=opportunity["opportunity_id"],
+        flow_key="prepare_cover_letter_stream",
     )
     summary_stream = stream_prompt(
         bundle["system_prompt"],
         bundle["experience_summary_prompt"],
         settings,
         temperature=0.3,
+        person_id=person["person_id"],
+        opportunity_id=opportunity["opportunity_id"],
+        flow_key="prepare_experience_summary_stream",
     )
     return bundle, guidance_stream, cover_stream, summary_stream
 
@@ -644,6 +673,9 @@ def analyze_profile_match(
         user_prompt,
         settings,
         temperature=0.2,
+        person_id=person["person_id"],
+        opportunity_id=opportunity["opportunity_id"],
+        flow_key="analyze_profile_match",
     )
     response = enforce_output_guardrails(response)
     if response == FALLBACK_MESSAGE:
@@ -689,6 +721,9 @@ def analyze_cultural_fit(
         user_prompt,
         settings,
         temperature=0.2,
+        person_id=person["person_id"],
+        opportunity_id=opportunity["opportunity_id"],
+        flow_key="analyze_cultural_fit",
     )
     response = enforce_output_guardrails(response)
     if response == FALLBACK_MESSAGE:
@@ -723,6 +758,9 @@ def prepare_selected_materials(
             bundle["guidance_prompt"],
             settings,
             temperature=0.2,
+            person_id=person["person_id"],
+            opportunity_id=opportunity["opportunity_id"],
+            flow_key="prepare_guidance_text",
         )
         if guidance == FALLBACK_MESSAGE:
             guidance = (
@@ -738,6 +776,9 @@ def prepare_selected_materials(
             bundle["cover_letter_prompt"],
             settings,
             temperature=0.4,
+            person_id=person["person_id"],
+            opportunity_id=opportunity["opportunity_id"],
+            flow_key="prepare_cover_letter",
         )
         if cover_letter == FALLBACK_MESSAGE:
             cover_letter = (
@@ -753,6 +794,9 @@ def prepare_selected_materials(
             bundle["experience_summary_prompt"],
             settings,
             temperature=0.3,
+            person_id=person["person_id"],
+            opportunity_id=opportunity["opportunity_id"],
+            flow_key="prepare_experience_summary",
         )
         if experience_summary == FALLBACK_MESSAGE:
             experience_summary = (
@@ -784,6 +828,9 @@ def analyze_opportunity(
         bundle["user_prompt"],
         settings,
         temperature=0.2,
+        person_id=person["person_id"],
+        opportunity_id=opportunity["opportunity_id"],
+        flow_key="analyze_combined",
     )
     response = enforce_output_guardrails(response)
     if response == FALLBACK_MESSAGE:

@@ -10,6 +10,7 @@ from urllib.request import Request, urlopen
 from app.core.settings import Settings
 from app.services.person_store import PersonRecord
 from app.services.prompt_config_store import FLOW_SEARCH_JOBS_TAVILY, build_prompt_query
+from app.services.request_trace_store import add_request_trace
 
 logger = logging.getLogger(__name__)
 
@@ -285,6 +286,20 @@ def search_opportunities(
         logger.warning("adzuna provider disabled due to missing RapidAPI config")
     else:
         try:
+            add_request_trace(
+                person_id=person["person_id"],
+                destination="adzuna",
+                flow_key="search_jobs_adzuna",
+                request_payload={
+                    "method": "GET",
+                    "url": (
+                        f"https://{settings.rapidapi_adzuna_host}/v1/api/jobs/us/search/1"
+                        f"?what={quote_plus(query)}&results_per_page={provider_max_results}&content-type=application/json"
+                    ),
+                    "query": query,
+                    "max_results": provider_max_results,
+                },
+            )
             items.extend(_adzuna_search_via_rapidapi(query, provider_max_results, settings))
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
             warnings.append("Adzuna provider failed, continuing with partial results")
@@ -294,6 +309,17 @@ def search_opportunities(
             logger.exception("adzuna provider unexpected error")
 
     try:
+        add_request_trace(
+            person_id=person["person_id"],
+            destination="remotive",
+            flow_key="search_jobs_remotive",
+            request_payload={
+                "method": "GET",
+                "url": f"https://remotive.com/api/remote-jobs?search={quote_plus(query)}",
+                "query": query,
+                "max_results": provider_max_results,
+            },
+        )
         items.extend(_remotive_search(query, provider_max_results, settings))
     except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
         warnings.append("Remotive provider failed, continuing with partial results")
@@ -314,6 +340,21 @@ def search_opportunities(
                     "person_location": person["location"],
                 },
                 fallback=query,
+            )
+            add_request_trace(
+                person_id=person["person_id"],
+                destination="tavily",
+                flow_key="search_jobs_tavily",
+                request_payload={
+                    "method": "POST",
+                    "url": "https://api.tavily.com/search",
+                    "body": {
+                        "query": tavily_query,
+                        "max_results": provider_max_results,
+                        "search_depth": "basic",
+                        "include_answer": False,
+                    },
+                },
             )
             tavily_items = _tavily_search(tavily_query, provider_max_results, settings)
             for item in tavily_items:

@@ -865,6 +865,7 @@ def prepare(
 async def prepare_stream(
     person_id: str,
     opportunity_id: str,
+    payload: PrepareRequest | None = None,
     _: SessionData = Depends(require_operator_session),
     settings: Settings = Depends(get_settings),
 ) -> StreamingResponse:
@@ -883,66 +884,158 @@ async def prepare_stream(
 
     async def event_generator():
         try:
+            request_payload = payload or PrepareRequest()
+            targets = request_payload.targets or [*PREPARE_TARGETS]
+            targets = [item for item in targets if item in PREPARE_TARGETS]
+            if not targets:
+                yield _serialize_sse(
+                    "error",
+                    {
+                        "person_id": person_id,
+                        "opportunity_id": opportunity_id,
+                        "detail": "Invalid prepare targets",
+                    },
+                )
+                return
+
             yield _serialize_sse(
                 "message_start",
                 {
                     "person_id": person_id,
                     "opportunity_id": opportunity_id,
-                    "channel": "guidance_text",
+                    "channel": targets[0],
                 },
             )
-            bundle, guidance_stream, cover_stream, summary_stream = stream_prepare_sections(
-                person, opportunity, settings
-            )
 
-            guidance_text = ""
-            cover_letter = ""
-            experience_summary = ""
-            stages = [
-                ("guidance_text", guidance_stream),
-                ("cover_letter", cover_stream),
-                ("experience_summary", summary_stream),
-            ]
+            served_from_cache = True
+            outputs: dict[str, str] = {}
+            semantic_evidence: dict[str, Any] = {
+                "source": "unknown",
+                "query": "",
+                "top_k": 0,
+                "snippets": [],
+            }
 
-            for channel, stream in stages:
-                yield _serialize_sse(
-                    "tool_status",
-                    {
-                        "person_id": person_id,
-                        "opportunity_id": opportunity_id,
-                        "stage": f"prepare_{channel}",
-                    },
-                )
-                for delta in stream:
-                    if channel == "guidance_text":
-                        guidance_text += delta
-                    elif channel == "cover_letter":
-                        cover_letter += delta
-                    else:
-                        experience_summary += delta
+            if not request_payload.force_recompute:
+                for target in targets:
+                    action_key = _prepare_action_key(target)
+                    cached = get_current_ai_run(
+                        person_id=person_id,
+                        opportunity_id=opportunity_id,
+                        action_key=action_key,
+                    )
+                    if not cached or not isinstance(cached.get("result_payload"), dict):
+                        served_from_cache = False
+                        continue
+                    cached_payload = cached["result_payload"]
+                    content = str(cached_payload.get("content", ""))
+                    if not content.strip():
+                        served_from_cache = False
+                        continue
+                    outputs[target] = content
+                    semantic_evidence = _as_semantic_evidence(
+                        cached_payload.get("semantic_evidence")
+                    )
+            else:
+                served_from_cache = False
+
+            missing_targets = [target for target in targets if target not in outputs]
+            if missing_targets:
+                served_from_cache = False
+                (
+                    bundle,
+                    guidance_stream,
+                    cover_stream,
+                    summary_stream,
+                ) = stream_prepare_sections(person, opportunity, settings)
+                semantic_evidence = bundle["semantic_evidence"]
+                stream_by_target = {
+                    PREPARE_TARGET_GUIDANCE: guidance_stream,
+                    PREPARE_TARGET_COVER_LETTER: cover_stream,
+                    PREPARE_TARGET_EXPERIENCE_SUMMARY: summary_stream,
+                }
+                for target in missing_targets:
+                    stream = stream_by_target[target]
+                    outputs[target] = ""
+                    yield _serialize_sse(
+                        "tool_status",
+                        {
+                            "person_id": person_id,
+                            "opportunity_id": opportunity_id,
+                            "stage": f"prepare_{target}",
+                        },
+                    )
+                    for delta in stream:
+                        outputs[target] += delta
+                        yield _serialize_sse(
+                            "message_delta",
+                            {
+                                "person_id": person_id,
+                                "opportunity_id": opportunity_id,
+                                "channel": target,
+                                "delta": delta,
+                            },
+                        )
+                        await asyncio.sleep(0)
+                    upsert_current_ai_run(
+                        person_id=person_id,
+                        opportunity_id=opportunity_id,
+                        action_key=_prepare_action_key(target),
+                        result_payload={
+                            "content": outputs[target],
+                            "semantic_evidence": semantic_evidence,
+                        },
+                    )
+
+            if served_from_cache:
+                for target in targets:
+                    content = outputs.get(target, "")
+                    if not content:
+                        continue
+                    yield _serialize_sse(
+                        "tool_status",
+                        {
+                            "person_id": person_id,
+                            "opportunity_id": opportunity_id,
+                            "stage": f"prepare_{target}_cached",
+                        },
+                    )
                     yield _serialize_sse(
                         "message_delta",
                         {
                             "person_id": person_id,
                             "opportunity_id": opportunity_id,
-                            "channel": channel,
-                            "delta": delta,
+                            "channel": target,
+                            "delta": content,
                         },
                     )
                     await asyncio.sleep(0)
 
-            cover = upsert_current_artifact(
-                person_id=person_id,
-                opportunity_id=opportunity_id,
-                artifact_type="cover_letter",
-                content=cover_letter,
-            )
-            summary = upsert_current_artifact(
-                person_id=person_id,
-                opportunity_id=opportunity_id,
-                artifact_type="experience_summary",
-                content=experience_summary,
-            )
+            if PREPARE_TARGET_COVER_LETTER in outputs:
+                upsert_current_artifact(
+                    person_id=person_id,
+                    opportunity_id=opportunity_id,
+                    artifact_type="cover_letter",
+                    content=outputs[PREPARE_TARGET_COVER_LETTER],
+                )
+            if PREPARE_TARGET_EXPERIENCE_SUMMARY in outputs:
+                upsert_current_artifact(
+                    person_id=person_id,
+                    opportunity_id=opportunity_id,
+                    artifact_type="experience_summary",
+                    content=outputs[PREPARE_TARGET_EXPERIENCE_SUMMARY],
+                )
+
+            current_items = list_current_artifacts(person_id, opportunity_id)
+            selected_artifact_types: set[str] = set()
+            if PREPARE_TARGET_COVER_LETTER in targets:
+                selected_artifact_types.add("cover_letter")
+            if PREPARE_TARGET_EXPERIENCE_SUMMARY in targets:
+                selected_artifact_types.add("experience_summary")
+            filtered_artifacts = [
+                item for item in current_items if item["artifact_type"] in selected_artifact_types
+            ]
+
             updated = update_saved_opportunity(
                 person_id=person_id,
                 opportunity_id=opportunity_id,
@@ -950,13 +1043,14 @@ async def prepare_stream(
                 notes=opportunity.get("notes", ""),
             )
             final_item = updated or opportunity
-            payload = {
+            complete_payload = {
                 "opportunity": final_item,
-                "guidance_text": guidance_text,
-                "artifacts": [cover, summary],
-                "semantic_evidence": bundle["semantic_evidence"],
+                "guidance_text": outputs.get(PREPARE_TARGET_GUIDANCE, ""),
+                "artifacts": filtered_artifacts,
+                "semantic_evidence": semantic_evidence,
+                "served_from_cache": served_from_cache,
             }
-            yield _serialize_sse("message_complete", payload)
+            yield _serialize_sse("message_complete", complete_payload)
         except Exception as exc:  # pragma: no cover - network stream path
             yield _serialize_sse(
                 "error",

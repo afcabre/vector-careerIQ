@@ -16,6 +16,7 @@ from app.services.prompt_config_store import (
     FLOW_TASK_CHAT,
     build_prompt_text,
 )
+from app.services.request_trace_store import add_request_trace
 
 try:
     from openai import OpenAI
@@ -157,6 +158,30 @@ def _client(settings: Settings) -> OpenAI | None:
         return None
 
 
+def _trace_openai_request(
+    *,
+    person_id: str,
+    flow_key: str,
+    messages: list[dict[str, str]],
+    settings: Settings,
+    temperature: float,
+    stream: bool,
+    opportunity_id: str = "",
+) -> None:
+    add_request_trace(
+        person_id=person_id,
+        opportunity_id=opportunity_id,
+        destination="openai",
+        flow_key=flow_key,
+        request_payload={
+            "model": settings.openai_chat_model,
+            "temperature": temperature,
+            "stream": stream,
+            "messages": messages,
+        },
+    )
+
+
 def generate_reply(
     person: PersonRecord,
     history: list[MessageRecord],
@@ -166,11 +191,20 @@ def generate_reply(
     if client is None:
         return FALLBACK_MESSAGE
 
+    messages = _build_messages(person, history, settings)
+    _trace_openai_request(
+        person_id=person["person_id"],
+        flow_key="chat_reply",
+        messages=messages,
+        settings=settings,
+        temperature=0.2,
+        stream=False,
+    )
     try:
         response = client.chat.completions.create(
             model=settings.openai_chat_model,
             temperature=0.2,
-            messages=_build_messages(person, history, settings),
+            messages=messages,
         )
     except Exception:
         return FALLBACK_MESSAGE
@@ -188,18 +222,32 @@ def complete_prompt(
     settings: Settings,
     *,
     temperature: float = 0.2,
+    person_id: str = "",
+    opportunity_id: str = "",
+    flow_key: str = "generic_complete",
 ) -> str:
     client = _client(settings)
     if client is None:
         return FALLBACK_MESSAGE
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    if person_id:
+        _trace_openai_request(
+            person_id=person_id,
+            opportunity_id=opportunity_id,
+            flow_key=flow_key,
+            messages=messages,
+            settings=settings,
+            temperature=temperature,
+            stream=False,
+        )
     try:
         response = client.chat.completions.create(
             model=settings.openai_chat_model,
             temperature=temperature,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+            messages=messages,
         )
     except Exception:
         return FALLBACK_MESSAGE
@@ -217,6 +265,9 @@ def stream_prompt(
     settings: Settings,
     *,
     temperature: float = 0.2,
+    person_id: str = "",
+    opportunity_id: str = "",
+    flow_key: str = "generic_stream",
 ) -> Iterator[str]:
     client = _client(settings)
     if client is None:
@@ -224,14 +275,25 @@ def stream_prompt(
             yield f"{token} "
         return
 
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    if person_id:
+        _trace_openai_request(
+            person_id=person_id,
+            opportunity_id=opportunity_id,
+            flow_key=flow_key,
+            messages=messages,
+            settings=settings,
+            temperature=temperature,
+            stream=True,
+        )
     try:
         stream = client.chat.completions.create(
             model=settings.openai_chat_model,
             temperature=temperature,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+            messages=messages,
             stream=True,
         )
     except Exception:
@@ -264,11 +326,20 @@ def stream_reply(
             yield f"{token} "
         return
 
+    messages = _build_messages(person, history, settings)
+    _trace_openai_request(
+        person_id=person["person_id"],
+        flow_key="chat_stream",
+        messages=messages,
+        settings=settings,
+        temperature=0.2,
+        stream=True,
+    )
     try:
         stream = client.chat.completions.create(
             model=settings.openai_chat_model,
             temperature=0.2,
-            messages=_build_messages(person, history, settings),
+            messages=messages,
             stream=True,
         )
     except Exception:
