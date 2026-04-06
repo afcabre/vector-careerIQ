@@ -11,6 +11,7 @@ import app.api.opportunities as opportunities_api
 from app.core.security import SessionData
 from app.core.settings import get_settings
 from app.services import artifact_store, conversation_store, cv_store, opportunity_store, person_store, session_store
+from app.services.ai_run_store import reset_ai_runs
 from app.services.conversation_store import get_or_create_conversation
 from app.services.person_store import seed_persons
 
@@ -22,6 +23,7 @@ def _clear_in_memory_state() -> None:
     session_store._sessions.clear()  # type: ignore[attr-defined]
     conversation_store._conversations.clear()  # type: ignore[attr-defined]
     cv_store._cvs.clear()  # type: ignore[attr-defined]
+    reset_ai_runs()
 
 
 async def _collect_sse_text(streaming_response: Any) -> str:

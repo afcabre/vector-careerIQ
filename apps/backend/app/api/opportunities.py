@@ -8,10 +8,26 @@ from starlette.responses import StreamingResponse
 
 from app.core.security import SessionData, require_operator_session
 from app.core.settings import Settings, get_settings
+from app.services.ai_run_store import (
+    ACTION_ANALYZE_CULTURAL_FIT,
+    ACTION_ANALYZE_PROFILE_MATCH,
+    ACTION_PREPARE_COVER_LETTER,
+    ACTION_PREPARE_EXPERIENCE_SUMMARY,
+    ACTION_PREPARE_GUIDANCE,
+    get_current_ai_run,
+    upsert_current_ai_run,
+)
 from app.services.artifact_store import ARTIFACT_TYPES, list_current_artifacts, upsert_current_artifact
 from app.services.opportunity_ai_service import (
+    PREPARE_TARGET_COVER_LETTER,
+    PREPARE_TARGET_EXPERIENCE_SUMMARY,
+    PREPARE_TARGET_GUIDANCE,
+    PREPARE_TARGETS,
+    analyze_cultural_fit,
+    analyze_profile_match,
     analyze_opportunity,
     prepare_application_materials,
+    prepare_selected_materials,
     stream_analyze_text,
     stream_prepare_sections,
 )
@@ -99,6 +115,15 @@ class UpdateOpportunityRequest(BaseModel):
     notes: str | None = Field(default=None)
 
 
+class ActionRequest(BaseModel):
+    force_recompute: bool = False
+
+
+class PrepareRequest(BaseModel):
+    targets: list[str] | None = None
+    force_recompute: bool = False
+
+
 class CulturalSignalResponse(BaseModel):
     source_provider: str
     source_url: str
@@ -123,6 +148,22 @@ class AnalyzeResponse(BaseModel):
     semantic_evidence: SemanticEvidenceResponse
 
 
+class AnalyzeProfileMatchResponse(BaseModel):
+    opportunity: OpportunityResponse
+    analysis_text: str
+    semantic_evidence: SemanticEvidenceResponse
+    served_from_cache: bool
+
+
+class AnalyzeCulturalFitResponse(BaseModel):
+    opportunity: OpportunityResponse
+    analysis_text: str
+    cultural_confidence: str
+    cultural_warnings: list[str]
+    cultural_signals: list[CulturalSignalResponse]
+    served_from_cache: bool
+
+
 class ArtifactResponse(BaseModel):
     artifact_id: str
     person_id: str
@@ -143,6 +184,7 @@ class PrepareResponse(BaseModel):
     guidance_text: str
     artifacts: list[ArtifactResponse]
     semantic_evidence: SemanticEvidenceResponse
+    served_from_cache: bool
 
 
 def _serialize_sse(event: str, payload: dict[str, Any]) -> str:
@@ -159,6 +201,29 @@ def _require_person(person_id: str) -> None:
 
 def _to_response(item: dict[str, Any]) -> OpportunityResponse:
     return OpportunityResponse(**item)
+
+
+def _as_semantic_evidence(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {"source": "unknown", "query": "", "top_k": 0, "snippets": []}
+    return {
+        "source": str(payload.get("source", "")),
+        "query": str(payload.get("query", "")),
+        "top_k": int(payload.get("top_k", 0)),
+        "snippets": [str(item) for item in payload.get("snippets", []) if str(item).strip()],
+    }
+
+
+def _prepare_action_key(target: str) -> str:
+    mapping = {
+        PREPARE_TARGET_GUIDANCE: ACTION_PREPARE_GUIDANCE,
+        PREPARE_TARGET_COVER_LETTER: ACTION_PREPARE_COVER_LETTER,
+        PREPARE_TARGET_EXPERIENCE_SUMMARY: ACTION_PREPARE_EXPERIENCE_SUMMARY,
+    }
+    value = mapping.get(target)
+    if not value:
+        raise ValueError("Invalid prepare target")
+    return value
 
 
 @router.post("/from-search")
@@ -300,6 +365,159 @@ def get_opportunity(
     return _to_response(item)
 
 
+@router.post("/{opportunity_id}/analyze/profile-match")
+def analyze_profile_match_action(
+    person_id: str,
+    opportunity_id: str,
+    payload: ActionRequest,
+    _: SessionData = Depends(require_operator_session),
+    settings: Settings = Depends(get_settings),
+) -> AnalyzeProfileMatchResponse:
+    person = get_person(person_id)
+    if not person:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Person not found",
+        )
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    if not payload.force_recompute:
+        cached = get_current_ai_run(
+            person_id=person_id,
+            opportunity_id=opportunity_id,
+            action_key=ACTION_ANALYZE_PROFILE_MATCH,
+        )
+        if cached:
+            cached_payload = cached.get("result_payload", {})
+            if isinstance(cached_payload, dict):
+                text = str(cached_payload.get("analysis_text", "")).strip()
+                evidence = _as_semantic_evidence(cached_payload.get("semantic_evidence"))
+                if text:
+                    return AnalyzeProfileMatchResponse(
+                        opportunity=_to_response(opportunity),
+                        analysis_text=text,
+                        semantic_evidence=evidence,
+                        served_from_cache=True,
+                    )
+
+    result = analyze_profile_match(person, opportunity, settings)
+    upsert_current_ai_run(
+        person_id=person_id,
+        opportunity_id=opportunity_id,
+        action_key=ACTION_ANALYZE_PROFILE_MATCH,
+        result_payload={
+            "analysis_text": result["analysis_text"],
+            "semantic_evidence": result["semantic_evidence"],
+        },
+    )
+    updated = update_saved_opportunity(
+        person_id=person_id,
+        opportunity_id=opportunity_id,
+        status="analyzed",
+        notes=opportunity.get("notes", ""),
+    )
+    final_item = updated or opportunity
+    return AnalyzeProfileMatchResponse(
+        opportunity=_to_response(final_item),
+        analysis_text=result["analysis_text"],
+        semantic_evidence=result["semantic_evidence"],
+        served_from_cache=False,
+    )
+
+
+@router.post("/{opportunity_id}/analyze/cultural-fit")
+def analyze_cultural_fit_action(
+    person_id: str,
+    opportunity_id: str,
+    payload: ActionRequest,
+    _: SessionData = Depends(require_operator_session),
+    settings: Settings = Depends(get_settings),
+) -> AnalyzeCulturalFitResponse:
+    person = get_person(person_id)
+    if not person:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Person not found",
+        )
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    if not payload.force_recompute:
+        cached = get_current_ai_run(
+            person_id=person_id,
+            opportunity_id=opportunity_id,
+            action_key=ACTION_ANALYZE_CULTURAL_FIT,
+        )
+        if cached:
+            cached_payload = cached.get("result_payload", {})
+            if isinstance(cached_payload, dict):
+                text = str(cached_payload.get("analysis_text", "")).strip()
+                confidence = str(cached_payload.get("cultural_confidence", "")).strip()
+                warnings_raw = cached_payload.get("cultural_warnings", [])
+                signals_raw = cached_payload.get("cultural_signals", [])
+                warnings = [str(item) for item in warnings_raw if str(item).strip()]
+                signals: list[dict[str, Any]] = []
+                if isinstance(signals_raw, list):
+                    for item in signals_raw:
+                        if not isinstance(item, dict):
+                            continue
+                        signals.append(
+                            {
+                                "source_provider": str(item.get("source_provider", "")),
+                                "source_url": str(item.get("source_url", "")),
+                                "title": str(item.get("title", "")),
+                                "snippet": str(item.get("snippet", "")),
+                                "captured_at": str(item.get("captured_at", "")),
+                            }
+                        )
+                if text:
+                    return AnalyzeCulturalFitResponse(
+                        opportunity=_to_response(opportunity),
+                        analysis_text=text,
+                        cultural_confidence=confidence,
+                        cultural_warnings=warnings,
+                        cultural_signals=[CulturalSignalResponse(**item) for item in signals],
+                        served_from_cache=True,
+                    )
+
+    result = analyze_cultural_fit(person, opportunity, settings)
+    upsert_current_ai_run(
+        person_id=person_id,
+        opportunity_id=opportunity_id,
+        action_key=ACTION_ANALYZE_CULTURAL_FIT,
+        result_payload={
+            "analysis_text": result["analysis_text"],
+            "cultural_confidence": result["cultural_confidence"],
+            "cultural_warnings": result["cultural_warnings"],
+            "cultural_signals": result["cultural_signals"],
+        },
+    )
+    updated = update_saved_opportunity(
+        person_id=person_id,
+        opportunity_id=opportunity_id,
+        status="analyzed",
+        notes=opportunity.get("notes", ""),
+    )
+    final_item = updated or opportunity
+    return AnalyzeCulturalFitResponse(
+        opportunity=_to_response(final_item),
+        analysis_text=result["analysis_text"],
+        cultural_confidence=result["cultural_confidence"],
+        cultural_warnings=result["cultural_warnings"],
+        cultural_signals=result["cultural_signals"],
+        served_from_cache=False,
+    )
+
+
 @router.post("/{opportunity_id}/analyze")
 def analyze(
     person_id: str,
@@ -425,6 +643,7 @@ async def analyze_stream(
 def prepare(
     person_id: str,
     opportunity_id: str,
+    payload: PrepareRequest | None = None,
     _: SessionData = Depends(require_operator_session),
     settings: Settings = Depends(get_settings),
 ) -> PrepareResponse:
@@ -441,19 +660,142 @@ def prepare(
             detail="Opportunity not found",
         )
 
-    payload = prepare_application_materials(person, opportunity, settings)
-    cover = upsert_current_artifact(
-        person_id=person_id,
-        opportunity_id=opportunity_id,
-        artifact_type="cover_letter",
-        content=payload["cover_letter"],
-    )
-    summary = upsert_current_artifact(
-        person_id=person_id,
-        opportunity_id=opportunity_id,
-        artifact_type="experience_summary",
-        content=payload["experience_summary"],
-    )
+    if payload is None:
+        legacy_payload = prepare_application_materials(person, opportunity, settings)
+        cover = upsert_current_artifact(
+            person_id=person_id,
+            opportunity_id=opportunity_id,
+            artifact_type="cover_letter",
+            content=legacy_payload["cover_letter"],
+        )
+        summary = upsert_current_artifact(
+            person_id=person_id,
+            opportunity_id=opportunity_id,
+            artifact_type="experience_summary",
+            content=legacy_payload["experience_summary"],
+        )
+        upsert_current_ai_run(
+            person_id=person_id,
+            opportunity_id=opportunity_id,
+            action_key=ACTION_PREPARE_GUIDANCE,
+            result_payload={
+                "content": legacy_payload["guidance_text"],
+                "semantic_evidence": legacy_payload["semantic_evidence"],
+            },
+        )
+        upsert_current_ai_run(
+            person_id=person_id,
+            opportunity_id=opportunity_id,
+            action_key=ACTION_PREPARE_COVER_LETTER,
+            result_payload={
+                "content": legacy_payload["cover_letter"],
+                "semantic_evidence": legacy_payload["semantic_evidence"],
+            },
+        )
+        upsert_current_ai_run(
+            person_id=person_id,
+            opportunity_id=opportunity_id,
+            action_key=ACTION_PREPARE_EXPERIENCE_SUMMARY,
+            result_payload={
+                "content": legacy_payload["experience_summary"],
+                "semantic_evidence": legacy_payload["semantic_evidence"],
+            },
+        )
+        updated = update_saved_opportunity(
+            person_id=person_id,
+            opportunity_id=opportunity_id,
+            status="application_prepared",
+            notes=opportunity.get("notes", ""),
+        )
+        final_item = updated or opportunity
+        return PrepareResponse(
+            opportunity=_to_response(final_item),
+            guidance_text=legacy_payload["guidance_text"],
+            artifacts=[ArtifactResponse(**cover), ArtifactResponse(**summary)],
+            semantic_evidence=legacy_payload["semantic_evidence"],
+            served_from_cache=False,
+        )
+
+    request_payload = payload
+    targets = request_payload.targets or [*PREPARE_TARGETS]
+    targets = [item for item in targets if item in PREPARE_TARGETS]
+    if not targets:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid prepare targets",
+        )
+
+    served_from_cache = True
+    outputs: dict[str, str] = {}
+    semantic_evidence: dict[str, Any] = {"source": "unknown", "query": "", "top_k": 0, "snippets": []}
+
+    for target in targets:
+        action_key = _prepare_action_key(target)
+        cached = None
+        if not request_payload.force_recompute:
+            cached = get_current_ai_run(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                action_key=action_key,
+            )
+        if cached and isinstance(cached.get("result_payload"), dict):
+            cached_payload = cached["result_payload"]
+            content = str(cached_payload.get("content", "")).strip()
+            if content:
+                outputs[target] = content
+                semantic_evidence = _as_semantic_evidence(cached_payload.get("semantic_evidence"))
+                continue
+        served_from_cache = False
+
+    missing_targets = [target for target in targets if target not in outputs]
+    if missing_targets:
+        generated = prepare_selected_materials(
+            person=person,
+            opportunity=opportunity,
+            settings=settings,
+            targets=missing_targets,
+        )
+        semantic_evidence = generated["semantic_evidence"]
+        for target, content in generated["outputs"].items():
+            cleaned = content.strip()
+            outputs[target] = cleaned
+            upsert_current_ai_run(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                action_key=_prepare_action_key(target),
+                result_payload={
+                    "content": cleaned,
+                    "semantic_evidence": semantic_evidence,
+                },
+            )
+
+    if PREPARE_TARGET_COVER_LETTER in outputs:
+        upsert_current_artifact(
+            person_id=person_id,
+            opportunity_id=opportunity_id,
+            artifact_type="cover_letter",
+            content=outputs[PREPARE_TARGET_COVER_LETTER],
+        )
+    if PREPARE_TARGET_EXPERIENCE_SUMMARY in outputs:
+        upsert_current_artifact(
+            person_id=person_id,
+            opportunity_id=opportunity_id,
+            artifact_type="experience_summary",
+            content=outputs[PREPARE_TARGET_EXPERIENCE_SUMMARY],
+        )
+
+    current_items = list_current_artifacts(person_id, opportunity_id)
+    allowed_types = set(ARTIFACT_TYPES)
+    selected_artifact_types: set[str] = set()
+    if PREPARE_TARGET_COVER_LETTER in targets:
+        selected_artifact_types.add("cover_letter")
+    if PREPARE_TARGET_EXPERIENCE_SUMMARY in targets:
+        selected_artifact_types.add("experience_summary")
+    filtered_items = [
+        item
+        for item in current_items
+        if item["artifact_type"] in allowed_types and item["artifact_type"] in selected_artifact_types
+    ]
 
     updated = update_saved_opportunity(
         person_id=person_id,
@@ -464,9 +806,10 @@ def prepare(
     final_item = updated or opportunity
     return PrepareResponse(
         opportunity=_to_response(final_item),
-        guidance_text=payload["guidance_text"],
-        artifacts=[ArtifactResponse(**cover), ArtifactResponse(**summary)],
-        semantic_evidence=payload["semantic_evidence"],
+        guidance_text=outputs.get(PREPARE_TARGET_GUIDANCE, ""),
+        artifacts=[ArtifactResponse(**item) for item in filtered_items],
+        semantic_evidence=semantic_evidence,
+        served_from_cache=served_from_cache,
     )
 
 

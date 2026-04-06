@@ -12,6 +12,7 @@ import app.services.search_service as search_service
 from app.core.security import SessionData
 from app.core.settings import get_settings
 from app.services import artifact_store, conversation_store, cv_store, opportunity_store, person_store, session_store
+from app.services.ai_run_store import reset_ai_runs
 from app.services.person_store import get_person, seed_persons
 from app.services.prompt_config_store import (
     FLOW_SEARCH_CULTURE_TAVILY,
@@ -29,6 +30,7 @@ def _clear_in_memory_state() -> None:
     conversation_store._conversations.clear()  # type: ignore[attr-defined]
     cv_store._cvs.clear()  # type: ignore[attr-defined]
     reset_prompt_configs()
+    reset_ai_runs()
 
 
 class _DummyUrlopenResponse:

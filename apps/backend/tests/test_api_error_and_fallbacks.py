@@ -14,6 +14,7 @@ import app.services.search_service as search_service
 from app.core.security import SessionData
 from app.core.settings import get_settings
 from app.services import artifact_store, conversation_store, cv_store, opportunity_store, person_store, session_store
+from app.services.ai_run_store import reset_ai_runs
 from app.services.person_store import get_person, seed_persons
 from app.services.prompt_config_store import reset_prompt_configs
 
@@ -26,6 +27,7 @@ def _clear_in_memory_state() -> None:
     conversation_store._conversations.clear()  # type: ignore[attr-defined]
     cv_store._cvs.clear()  # type: ignore[attr-defined]
     reset_prompt_configs()
+    reset_ai_runs()
 
 
 class ApiContractsAndIsolationTests(unittest.TestCase):
@@ -260,6 +262,82 @@ class ApiContractsAndIsolationTests(unittest.TestCase):
         )
         self.assertTrue(saved.created)
         self.assertEqual(len(opportunity_store.list_opportunities("p-001")), 1)
+
+    def test_analyze_profile_match_uses_cached_result_when_not_forced(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Backend Engineer",
+            company="Acme",
+            location="Remote",
+            raw_text="FastAPI role.",
+        )
+        opportunity_id = created["opportunity_id"]
+        semantic = {
+            "source": "semantic_retrieval",
+            "query": "q",
+            "top_k": 24,
+            "snippets": ["s1"],
+        }
+        with patch.object(
+            opportunities_api,
+            "analyze_profile_match",
+            return_value={"analysis_text": "Analisis nuevo", "semantic_evidence": semantic},
+        ) as mocked:
+            first = opportunities_api.analyze_profile_match_action(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                payload=opportunities_api.ActionRequest(force_recompute=True),
+                _=self.session,
+                settings=get_settings(),
+            )
+            second = opportunities_api.analyze_profile_match_action(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                payload=opportunities_api.ActionRequest(force_recompute=False),
+                _=self.session,
+                settings=get_settings(),
+            )
+
+        self.assertFalse(first.served_from_cache)
+        self.assertTrue(second.served_from_cache)
+        self.assertEqual(first.analysis_text, second.analysis_text)
+        self.assertEqual(mocked.call_count, 1)
+
+    def test_prepare_generates_only_selected_targets(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Data Engineer",
+            company="DataCo",
+            location="Remote",
+            raw_text="Python and SQL role.",
+        )
+        opportunity_id = created["opportunity_id"]
+
+        payload = {
+            "outputs": {"cover_letter": "Carta personalizada"},
+            "semantic_evidence": {
+                "source": "semantic_retrieval",
+                "query": "prepare query",
+                "top_k": 24,
+                "snippets": ["cv snippet"],
+            },
+        }
+        with patch.object(opportunities_api, "prepare_selected_materials", return_value=payload):
+            response = opportunities_api.prepare(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                payload=opportunities_api.PrepareRequest(
+                    targets=["cover_letter"],
+                    force_recompute=True,
+                ),
+                _=self.session,
+                settings=get_settings(),
+            )
+
+        self.assertEqual(response.guidance_text, "")
+        self.assertEqual(len(response.artifacts), 1)
+        self.assertEqual(response.artifacts[0].artifact_type, "cover_letter")
+        self.assertFalse(response.served_from_cache)
 
 
 class FallbackBehaviorTests(unittest.TestCase):
