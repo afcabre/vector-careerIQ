@@ -13,6 +13,12 @@ from app.services.person_store import (
 router = APIRouter()
 
 
+class CulturalFieldPreference(BaseModel):
+    enabled: bool = False
+    selected_values: list[str] = Field(default_factory=list)
+    criticality: str = Field(default="normal")
+
+
 class PersonSummary(BaseModel):
     person_id: str
     full_name: str
@@ -20,6 +26,9 @@ class PersonSummary(BaseModel):
     location: str
     years_experience: int
     skills: list[str]
+    culture_preferences: list[str]
+    cultural_fit_preferences: dict[str, CulturalFieldPreference]
+    culture_preferences_notes: str
     created_at: str
     updated_at: str
 
@@ -34,6 +43,11 @@ class CreatePersonRequest(BaseModel):
     location: str = Field(min_length=1)
     years_experience: int = Field(ge=0, le=80)
     skills: list[str] = Field(min_length=1)
+    culture_preferences: list[str] = Field(default_factory=list)
+    cultural_fit_preferences: dict[str, CulturalFieldPreference] = Field(
+        default_factory=dict
+    )
+    culture_preferences_notes: str = Field(default="")
 
 
 class UpdatePersonRequest(BaseModel):
@@ -42,6 +56,9 @@ class UpdatePersonRequest(BaseModel):
     location: str | None = Field(default=None, min_length=1)
     years_experience: int | None = Field(default=None, ge=0, le=80)
     skills: list[str] | None = None
+    culture_preferences: list[str] | None = None
+    cultural_fit_preferences: dict[str, CulturalFieldPreference] | None = None
+    culture_preferences_notes: str | None = None
 
 
 @router.get("")
@@ -62,6 +79,12 @@ def create_person(
         location=payload.location,
         years_experience=payload.years_experience,
         skills=payload.skills,
+        culture_preferences=payload.culture_preferences,
+        cultural_fit_preferences={
+            field_id: value.model_dump()
+            for field_id, value in payload.cultural_fit_preferences.items()
+        },
+        culture_preferences_notes=payload.culture_preferences_notes,
     )
     return PersonSummary(**record)
 
@@ -93,6 +116,16 @@ def update_person(
         location=payload.location,
         years_experience=payload.years_experience,
         skills=payload.skills,
+        culture_preferences=payload.culture_preferences,
+        cultural_fit_preferences=(
+            {
+                field_id: value.model_dump()
+                for field_id, value in payload.cultural_fit_preferences.items()
+            }
+            if payload.cultural_fit_preferences is not None
+            else None
+        ),
+        culture_preferences_notes=payload.culture_preferences_notes,
     )
     if not person:
         raise HTTPException(

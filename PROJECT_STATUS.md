@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `loop operativo UI completado con edicion de estado y notas de oportunidad`
+- checkpoint_actual: `perfil estructurado extendido con preferencias culturales editables por persona`
 - repo_status: `implementacion activa con login, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
 - ultima_actualizacion: `2026-04-06`
 
@@ -58,6 +58,8 @@
 - API/UI exponen evidencia semantica utilizada (`semantic_evidence`) para trazabilidad del resultado
 - UI permite editar y guardar notas operativas por oportunidad desde el detalle activo
 - UI permite editar y guardar estado de oportunidad con estados V1 (`detected`, `analyzed`, `prioritized`, `application_prepared`, `applied`, `discarded`)
+- perfil de persona permite configurar preferencias culturales/condiciones de trabajo por campo (`enabled`, `selected_values`, `criticality`) y notas abiertas
+- el analisis cultural trata falta de evidencia en campos criticos como `indeterminado` con red flag (no exclusion automatica)
 - backend incorpora logs basicos de fallos por proveedor y fallback semantico (`search`, `cv_vector`, `opportunity_ai`)
 
 ## Mejoras Identificadas (Diferidas)
@@ -69,6 +71,6 @@
 - no hay bloqueadores tecnicos activos reportados en este checkpoint
 
 ## Siguiente Actividad
-- mejorar perfil estructurado para incluir preferencias culturales explicitas en el modelo de persona
 - preparar pruebas de integracion para aislamiento por `person_id` en oportunidades y pipeline de analisis
 - evaluar habilitacion de streaming SSE real en frontend sobre `/chat/stream`
+- agregar pruebas unitarias para transiciones de estado y validacion de `cultural_fit_preferences`

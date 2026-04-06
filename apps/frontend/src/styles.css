@@ -294,6 +294,12 @@ textarea {
   margin: 10px 0 14px;
 }
 
+.cultureGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
 .manualCard {
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -320,6 +326,19 @@ textarea {
   display: grid;
   gap: 8px;
   grid-template-columns: 1fr 1fr;
+}
+
+.checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
+.optionList {
+  display: grid;
+  gap: 6px;
 }
 
 .subheading {

@@ -29,12 +29,14 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
 - `analyze` y `prepare` incorporan retrieval semantico de CV y exponen evidencia usada
 - notas operativas editables por oportunidad habilitadas en frontend (persistencia via `PATCH`)
 - edicion de estado de oportunidad habilitada en frontend con estados V1 y persistencia via `PATCH`
+- perfil de persona con preferencias culturales/condiciones de trabajo estructuradas por campo (`enabled`, `selected_values`, `criticality`) y notas abiertas
+- en fit cultural, ausencia de evidencia para campos criticos se reporta como `indeterminado` + red flag (sin descarte automatico)
 - observabilidad basica agregada en backend para errores/fallbacks de proveedores y retrieval semantico
 
 ## Siguiente paso
-- ampliar perfil estructurado para preferencias culturales explicitas
 - agregar pruebas de integracion para aislamiento por `person_id` en analisis/oportunidades
 - evaluar soporte de streaming SSE real en frontend usando `/chat/stream`
+- agregar pruebas unitarias para transiciones de estado y manejo de `cultural_fit_preferences`
 
 ## Arranque Local Minimo
 ### Backend

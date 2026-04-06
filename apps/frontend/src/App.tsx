@@ -4,6 +4,7 @@ import {
   ActiveCV,
   ApplicationArtifact,
   Conversation,
+  CulturalFieldPreference,
   CulturalSignal,
   Opportunity,
   Person,
@@ -24,6 +25,7 @@ import {
   saveOpportunityFromSearch,
   searchOpportunities,
   sendMessage,
+  updatePerson as updatePersonProfile,
   updateOpportunity,
   uploadCV
 } from "./api";
@@ -37,6 +39,115 @@ const OPPORTUNITY_STATUSES = [
   "applied",
   "discarded"
 ] as const;
+
+const CRITICALITY_OPTIONS: Array<{
+  value: CulturalFieldPreference["criticality"];
+  label: string;
+}> = [
+  { value: "normal", label: "Normal" },
+  { value: "high_penalty", label: "Penalizacion alta" },
+  { value: "non_negotiable", label: "No negociable" }
+];
+
+const CULTURAL_FIELDS: Array<{
+  id: string;
+  label: string;
+  options: Array<{ value: string; label: string }>;
+}> = [
+  {
+    id: "work_modality",
+    label: "Modalidad de trabajo",
+    options: [
+      { value: "onsite", label: "Presencial" },
+      { value: "hybrid", label: "Hibrido" },
+      { value: "remote", label: "Remoto" }
+    ]
+  },
+  {
+    id: "schedule_flexibility",
+    label: "Flexibilidad de horario",
+    options: [
+      { value: "fixed_schedule", label: "Horario fijo" },
+      { value: "partial_flexibility", label: "Flexibilidad parcial" },
+      { value: "high_flexibility", label: "Alta flexibilidad" }
+    ]
+  },
+  {
+    id: "work_intensity",
+    label: "Intensidad laboral",
+    options: [
+      { value: "low", label: "Baja" },
+      { value: "medium", label: "Media" },
+      { value: "high", label: "Alta" }
+    ]
+  },
+  {
+    id: "environment_predictability",
+    label: "Previsibilidad del entorno",
+    options: [
+      { value: "very_stable", label: "Muy estable" },
+      { value: "moderately_stable", label: "Moderadamente estable" },
+      { value: "balanced", label: "Balanceado" },
+      { value: "moderately_dynamic", label: "Moderadamente dinamico" },
+      { value: "very_dynamic", label: "Muy dinamico" }
+    ]
+  },
+  {
+    id: "company_scale",
+    label: "Escala de empresa",
+    options: [
+      { value: "local", label: "Local" },
+      { value: "regional", label: "Regional" },
+      { value: "multilatina", label: "Multilatina" },
+      { value: "multinational", label: "Multinacional" },
+      { value: "family_owned", label: "Familiar" }
+    ]
+  },
+  {
+    id: "organization_structure_level",
+    label: "Nivel de estructuracion",
+    options: [
+      { value: "low", label: "Baja" },
+      { value: "medium_low", label: "Media-baja" },
+      { value: "medium", label: "Media" },
+      { value: "medium_high", label: "Media-alta" },
+      { value: "high", label: "Alta" }
+    ]
+  },
+  {
+    id: "organizational_moment",
+    label: "Momento organizacional",
+    options: [
+      { value: "consolidated", label: "Consolidada" },
+      { value: "transformation", label: "En transformacion" },
+      { value: "high_growth", label: "En crecimiento acelerado" },
+      { value: "reorganization", label: "En reorganizacion" }
+    ]
+  },
+  {
+    id: "cultural_formality",
+    label: "Formalidad cultural",
+    options: [
+      { value: "very_informal", label: "Muy informal" },
+      { value: "more_informal", label: "Mas informal" },
+      { value: "intermediate", label: "Intermedia" },
+      { value: "more_formal", label: "Mas formal" },
+      { value: "very_formal", label: "Muy formal" }
+    ]
+  }
+];
+
+function buildDefaultCulturalPreferences(): Record<string, CulturalFieldPreference> {
+  const defaults: Record<string, CulturalFieldPreference> = {};
+  for (const field of CULTURAL_FIELDS) {
+    defaults[field.id] = {
+      enabled: false,
+      selected_values: [],
+      criticality: "normal"
+    };
+  }
+  return defaults;
+}
 
 export default function App() {
   const [view, setView] = useState<ViewState>("checking");
@@ -88,6 +199,11 @@ export default function App() {
   const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [opportunityStatus, setOpportunityStatus] = useState<string>("detected");
   const [isSavingStatus, setIsSavingStatus] = useState(false);
+  const [culturePreferencesState, setCulturePreferencesState] = useState<
+    Record<string, CulturalFieldPreference>
+  >(buildDefaultCulturalPreferences());
+  const [culturePreferencesNotes, setCulturePreferencesNotes] = useState("");
+  const [isSavingCulturePreferences, setIsSavingCulturePreferences] = useState(false);
 
   useEffect(() => {
     const boot = async () => {
@@ -196,6 +312,43 @@ export default function App() {
   useEffect(() => {
     setOpportunityStatus(selectedOpportunity?.status ?? "detected");
   }, [selectedOpportunity?.opportunity_id, selectedOpportunity?.status]);
+
+  useEffect(() => {
+    if (!selectedPerson) {
+      setCulturePreferencesState(buildDefaultCulturalPreferences());
+      setCulturePreferencesNotes("");
+      return;
+    }
+    const defaults = buildDefaultCulturalPreferences();
+    const incoming = selectedPerson.cultural_fit_preferences ?? {};
+    const nextState: Record<string, CulturalFieldPreference> = { ...defaults };
+
+    for (const field of CULTURAL_FIELDS) {
+      const raw = incoming[field.id];
+      if (!raw) {
+        continue;
+      }
+      const allowedOptions = new Set(field.options.map((item) => item.value));
+      const selectedValues = (raw.selected_values ?? []).filter((item) =>
+        allowedOptions.has(item)
+      );
+      nextState[field.id] = {
+        enabled: Boolean(raw.enabled),
+        selected_values: selectedValues,
+        criticality:
+          raw.criticality === "high_penalty" || raw.criticality === "non_negotiable"
+            ? raw.criticality
+            : "normal"
+      };
+    }
+
+    setCulturePreferencesState(nextState);
+    setCulturePreferencesNotes(selectedPerson.culture_preferences_notes ?? "");
+  }, [
+    selectedPerson?.person_id,
+    selectedPerson?.cultural_fit_preferences,
+    selectedPerson?.culture_preferences_notes
+  ]);
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -499,6 +652,80 @@ export default function App() {
     }
   }
 
+  async function handleSaveCulturePreferences() {
+    if (!selectedPersonId || isSavingCulturePreferences) {
+      return;
+    }
+    setIsSavingCulturePreferences(true);
+    setErrorMessage(null);
+    try {
+      const updated = await updatePersonProfile(selectedPersonId, {
+        cultural_fit_preferences: culturePreferencesState,
+        culture_preferences_notes: culturePreferencesNotes
+      });
+      setPeople((current) =>
+        current.map((item) => (item.person_id === updated.person_id ? updated : item))
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudieron guardar las preferencias";
+      setErrorMessage(message);
+    } finally {
+      setIsSavingCulturePreferences(false);
+    }
+  }
+
+  function handleToggleCulturalField(fieldId: string, enabled: boolean) {
+    setCulturePreferencesState((current) => ({
+      ...current,
+      [fieldId]: {
+        ...(current[fieldId] ?? {
+          enabled: false,
+          selected_values: [],
+          criticality: "normal"
+        }),
+        enabled
+      }
+    }));
+  }
+
+  function handleToggleCulturalOption(fieldId: string, optionValue: string, checked: boolean) {
+    setCulturePreferencesState((current) => {
+      const existing = current[fieldId] ?? {
+        enabled: false,
+        selected_values: [],
+        criticality: "normal"
+      };
+      const selected = checked
+        ? Array.from(new Set([...existing.selected_values, optionValue]))
+        : existing.selected_values.filter((value) => value !== optionValue);
+      return {
+        ...current,
+        [fieldId]: {
+          ...existing,
+          selected_values: selected
+        }
+      };
+    });
+  }
+
+  function handleChangeCulturalCriticality(
+    fieldId: string,
+    criticality: CulturalFieldPreference["criticality"]
+  ) {
+    setCulturePreferencesState((current) => ({
+      ...current,
+      [fieldId]: {
+        ...(current[fieldId] ?? {
+          enabled: false,
+          selected_values: [],
+          criticality: "normal"
+        }),
+        criticality
+      }
+    }));
+  }
+
   if (view === "checking") {
     return (
       <main className="shell">
@@ -605,7 +832,7 @@ export default function App() {
       <section className="panel selectedPanel">
         <h2>Contexto activo</h2>
         {selectedPerson ? (
-          <div>
+          <div className="cvCard">
             <p className="lede">
               Perfil activo: <strong>{selectedPerson.full_name}</strong> (
               {selectedPerson.person_id}).
@@ -613,6 +840,94 @@ export default function App() {
             <p className="metaText">
               Skills base: {selectedPerson.skills.join(", ")}
             </p>
+            <div className="cultureGrid">
+              {CULTURAL_FIELDS.map((field) => {
+                const value = culturePreferencesState[field.id] ?? {
+                  enabled: false,
+                  selected_values: [],
+                  criticality: "normal"
+                };
+                return (
+                  <article className="manualCard" key={field.id}>
+                    <label className="checkboxRow">
+                      <input
+                        checked={value.enabled}
+                        disabled={isSavingCulturePreferences}
+                        onChange={(event) =>
+                          handleToggleCulturalField(field.id, event.target.checked)
+                        }
+                        type="checkbox"
+                      />
+                      <span>{field.label}</span>
+                    </label>
+                    {value.enabled ? (
+                      <>
+                        <div className="optionList">
+                          {field.options.map((option) => (
+                            <label className="checkboxRow" key={`${field.id}-${option.value}`}>
+                              <input
+                                checked={value.selected_values.includes(option.value)}
+                                disabled={isSavingCulturePreferences}
+                                onChange={(event) =>
+                                  handleToggleCulturalOption(
+                                    field.id,
+                                    option.value,
+                                    event.target.checked
+                                  )
+                                }
+                                type="checkbox"
+                              />
+                              <span>{option.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                        <label className="field">
+                          Criticidad
+                          <select
+                            disabled={isSavingCulturePreferences}
+                            onChange={(event) =>
+                              handleChangeCulturalCriticality(
+                                field.id,
+                                event.target.value as CulturalFieldPreference["criticality"]
+                              )
+                            }
+                            value={value.criticality}
+                          >
+                            {CRITICALITY_OPTIONS.map((option) => (
+                              <option key={`${field.id}-${option.value}`} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </>
+                    ) : (
+                      <p className="metaText">Factor no relevante para esta persona.</p>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+            <label className="field">
+              Notas abiertas sobre cultura y condiciones laborales
+              <textarea
+                disabled={isSavingCulturePreferences}
+                onChange={(event) => setCulturePreferencesNotes(event.target.value)}
+                rows={3}
+                value={culturePreferencesNotes}
+              />
+            </label>
+            <div className="cardActions">
+              <button
+                disabled={isSavingCulturePreferences}
+                onClick={() => void handleSaveCulturePreferences()}
+                type="button"
+              >
+                {isSavingCulturePreferences
+                  ? "Guardando preferencias..."
+                  : "Guardar preferencias"}
+              </button>
+            </div>
           </div>
         ) : (
           <p className="metaText">

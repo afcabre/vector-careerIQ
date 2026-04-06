@@ -15,6 +15,23 @@ from app.services.person_store import PersonRecord
 
 logger = logging.getLogger(__name__)
 
+CULTURAL_FIELD_LABELS = {
+    "work_modality": "Modalidad de trabajo",
+    "schedule_flexibility": "Flexibilidad de horario",
+    "work_intensity": "Intensidad laboral",
+    "environment_predictability": "Previsibilidad del entorno",
+    "company_scale": "Escala de empresa",
+    "organization_structure_level": "Nivel de estructuracion",
+    "organizational_moment": "Momento organizacional",
+    "cultural_formality": "Formalidad cultural",
+}
+
+CRITICALITY_LABELS = {
+    "normal": "normal",
+    "high_penalty": "penalizacion alta",
+    "non_negotiable": "no negociable",
+}
+
 
 class CulturalSignal(TypedDict):
     source_provider: str
@@ -87,13 +104,44 @@ def _company_name(opportunity: OpportunityRecord) -> str:
 
 
 def _person_context(person: PersonRecord) -> str:
-    preferences = person.get("culture_preferences", [])
-    if isinstance(preferences, list):
-        culture_preferences = ", ".join([str(item) for item in preferences if str(item).strip()])
-    else:
-        culture_preferences = str(preferences or "").strip()
-    if not culture_preferences:
+    cultural_fit = person.get("cultural_fit_preferences", {})
+    structured_lines: list[str] = []
+    if isinstance(cultural_fit, dict):
+        for field_id, label in CULTURAL_FIELD_LABELS.items():
+            raw = cultural_fit.get(field_id, {})
+            if not isinstance(raw, dict):
+                continue
+            if not bool(raw.get("enabled", False)):
+                continue
+            selected_values = raw.get("selected_values", [])
+            if not isinstance(selected_values, list) or not selected_values:
+                continue
+            options = ", ".join(
+                [str(item).strip() for item in selected_values if str(item).strip()]
+            )
+            criticality_raw = str(raw.get("criticality", "normal")).strip()
+            criticality = CRITICALITY_LABELS.get(criticality_raw, "normal")
+            structured_lines.append(f"- {label}: {options} ({criticality})")
+
+    legacy_preferences = person.get("culture_preferences", [])
+    legacy_line = ""
+    if isinstance(legacy_preferences, list):
+        legacy_values = [str(item).strip() for item in legacy_preferences if str(item).strip()]
+        if legacy_values:
+            legacy_line = ", ".join(legacy_values)
+
+    notes = str(person.get("culture_preferences_notes", "")).strip()
+    if not structured_lines and not legacy_line and not notes:
         culture_preferences = "no declaradas en perfil V1"
+    else:
+        parts: list[str] = []
+        if structured_lines:
+            parts.append("Preferencias estructuradas:\n" + "\n".join(structured_lines))
+        if legacy_line:
+            parts.append(f"Preferencias libres historicas: {legacy_line}")
+        if notes:
+            parts.append(f"Notas abiertas de preferencias: {notes}")
+        culture_preferences = "\n\n".join(parts)
 
     return (
         f"Persona consultada: {person['full_name']}\n"
@@ -326,7 +374,10 @@ def analyze_opportunity(
     system_prompt = (
         "Eres un asistente de empleabilidad. Entrega analisis cualitativo y accionable.\n"
         "Para fit cultural: evita conclusiones absolutas, declara vacios de evidencia "
-        "y nivel de confianza."
+        "y nivel de confianza.\n"
+        "Si una preferencia marcada como no negociable o penalizacion alta no tiene "
+        "evidencia suficiente en la vacante/fuentes, clasificala como indeterminada "
+        "y reporta red flags; no descartes automaticamente."
     )
     user_prompt = (
         "Analiza ajuste perfil-vacante y fit cultural.\n"
@@ -335,7 +386,8 @@ def analyze_opportunity(
         "2) Fortalezas\n"
         "3) Brechas\n"
         "4) Fit cultural (incluye nivel de confianza y vacios)\n"
-        "5) Recomendacion accionable\n\n"
+        "5) Red flags por falta de evidencia en preferencias criticas\n"
+        "6) Recomendacion accionable\n\n"
         f"{_person_context(person)}\n\n"
         f"{_opportunity_context(opportunity)}\n\n"
         "Evidencia semantica CV recuperada:\n"

@@ -11,8 +11,17 @@ export type Person = {
   location: string;
   years_experience: number;
   skills: string[];
+  culture_preferences: string[];
+  cultural_fit_preferences: Record<string, CulturalFieldPreference>;
+  culture_preferences_notes: string;
   created_at: string;
   updated_at: string;
+};
+
+export type CulturalFieldPreference = {
+  enabled: boolean;
+  selected_values: string[];
+  criticality: "normal" | "high_penalty" | "non_negotiable";
 };
 
 export type ConversationMessage = {
@@ -155,6 +164,23 @@ export async function listPersons(): Promise<Person[]> {
   });
   const payload = await parseResponse<{ items: Person[] }>(response);
   return payload.items;
+}
+
+export async function updatePerson(
+  personId: string,
+  payload: {
+    culture_preferences?: string[];
+    cultural_fit_preferences?: Record<string, CulturalFieldPreference>;
+    culture_preferences_notes?: string;
+  }
+): Promise<Person> {
+  const response = await fetch(`${API_BASE}/persons/${personId}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  return parseResponse<Person>(response);
 }
 
 export async function getActiveCV(personId: string): Promise<ActiveCV | null> {
