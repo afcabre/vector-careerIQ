@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router as api_router
 from app.services.operator_store import seed_operator
 from app.services.person_store import seed_persons
+from app.services.prompt_config_store import seed_prompt_configs
 
 
 app = FastAPI(
@@ -27,6 +28,7 @@ app.include_router(api_router, prefix="/api")
 def startup() -> None:
     seed_operator()
     seed_persons()
+    seed_prompt_configs()
 
 
 @app.get("/health")

@@ -9,6 +9,7 @@ from urllib.request import Request, urlopen
 
 from app.core.settings import Settings
 from app.services.person_store import PersonRecord
+from app.services.prompt_config_store import FLOW_SEARCH_JOBS_TAVILY, build_prompt_query
 
 logger = logging.getLogger(__name__)
 
@@ -303,9 +304,21 @@ def search_opportunities(
 
     if settings.tavily_api_key:
         try:
-            tavily_items = _tavily_search(query, provider_max_results, settings)
+            tavily_query = build_prompt_query(
+                flow_key=FLOW_SEARCH_JOBS_TAVILY,
+                context={
+                    "query": query,
+                    "person_full_name": person["full_name"],
+                    "target_roles": ", ".join(person["target_roles"][:3]),
+                    "skills": ", ".join(person["skills"][:10]),
+                    "person_location": person["location"],
+                },
+                fallback=query,
+            )
+            tavily_items = _tavily_search(tavily_query, provider_max_results, settings)
             for item in tavily_items:
                 item["location"] = item["location"] or person["location"]
+                item["normalized_payload"]["query_used"] = tavily_query
             items.extend(tavily_items)
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
             warnings.append("Tavily provider failed, continuing with partial results")

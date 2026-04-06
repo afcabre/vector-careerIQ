@@ -15,6 +15,7 @@ from app.core.security import SessionData
 from app.core.settings import get_settings
 from app.services import artifact_store, conversation_store, cv_store, opportunity_store, person_store, session_store
 from app.services.person_store import get_person, seed_persons
+from app.services.prompt_config_store import reset_prompt_configs
 
 
 def _clear_in_memory_state() -> None:
@@ -24,6 +25,7 @@ def _clear_in_memory_state() -> None:
     session_store._sessions.clear()  # type: ignore[attr-defined]
     conversation_store._conversations.clear()  # type: ignore[attr-defined]
     cv_store._cvs.clear()  # type: ignore[attr-defined]
+    reset_prompt_configs()
 
 
 class ApiContractsAndIsolationTests(unittest.TestCase):

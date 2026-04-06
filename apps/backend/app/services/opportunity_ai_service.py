@@ -12,6 +12,7 @@ from app.services.cv_vector_service import query_cv_context
 from app.services.llm_service import FALLBACK_MESSAGE, complete_prompt, stream_prompt
 from app.services.opportunity_store import OpportunityRecord
 from app.services.person_store import PersonRecord
+from app.services.prompt_config_store import FLOW_SEARCH_CULTURE_TAVILY, build_prompt_query
 
 logger = logging.getLogger(__name__)
 
@@ -286,10 +287,20 @@ def _tavily_culture_signals(
 
     company = _company_name(opportunity)
     roles = ", ".join(person["target_roles"][:2]).strip()
-    query = (
+    fallback_query = (
         f"{company} company culture values leadership work environment employee experience "
         f"{roles}"
     ).strip()
+    query = build_prompt_query(
+        flow_key=FLOW_SEARCH_CULTURE_TAVILY,
+        context={
+            "company": company,
+            "roles": roles,
+            "person_location": person["location"],
+            "target_roles": ", ".join(person["target_roles"][:3]),
+        },
+        fallback=fallback_query,
+    )
 
     payload = json.dumps(
         {
