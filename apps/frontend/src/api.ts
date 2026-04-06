@@ -169,6 +169,11 @@ export async function listPersons(): Promise<Person[]> {
 export async function updatePerson(
   personId: string,
   payload: {
+    full_name?: string;
+    target_roles?: string[];
+    location?: string;
+    years_experience?: number;
+    skills?: string[];
     culture_preferences?: string[];
     cultural_fit_preferences?: Record<string, CulturalFieldPreference>;
     culture_preferences_notes?: string;

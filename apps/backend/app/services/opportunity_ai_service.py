@@ -175,7 +175,7 @@ def _semantic_query(person: PersonRecord, opportunity: OpportunityRecord) -> str
     return query
 
 
-def _fallback_cv_snippets(active_cv: dict, max_items: int = 5) -> list[str]:
+def _fallback_cv_snippets(active_cv: dict, max_items: int = 24) -> list[str]:
     raw = str(active_cv.get("extracted_text", "")).strip()
     if not raw:
         return []
@@ -231,7 +231,7 @@ def _build_semantic_evidence(
             "source": "semantic_retrieval",
             "query": query,
             "top_k": top_k,
-            "snippets": snippets[:10],
+            "snippets": snippets,
         }
 
     logger.warning(
@@ -243,7 +243,7 @@ def _build_semantic_evidence(
         "source": "fallback_preview",
         "query": query,
         "top_k": top_k,
-        "snippets": _fallback_cv_snippets(active_cv, max_items=5),
+        "snippets": _fallback_cv_snippets(active_cv, max_items=top_k),
     }
 
 

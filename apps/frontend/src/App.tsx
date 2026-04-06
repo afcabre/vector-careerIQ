@@ -204,6 +204,12 @@ export default function App() {
   >(buildDefaultCulturalPreferences());
   const [culturePreferencesNotes, setCulturePreferencesNotes] = useState("");
   const [isSavingCulturePreferences, setIsSavingCulturePreferences] = useState(false);
+  const [profileFullName, setProfileFullName] = useState("");
+  const [profileTargetRolesInput, setProfileTargetRolesInput] = useState("");
+  const [profileLocation, setProfileLocation] = useState("");
+  const [profileYearsExperienceInput, setProfileYearsExperienceInput] = useState("");
+  const [profileSkillsInput, setProfileSkillsInput] = useState("");
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   useEffect(() => {
     const boot = async () => {
@@ -315,10 +321,21 @@ export default function App() {
 
   useEffect(() => {
     if (!selectedPerson) {
+      setProfileFullName("");
+      setProfileTargetRolesInput("");
+      setProfileLocation("");
+      setProfileYearsExperienceInput("");
+      setProfileSkillsInput("");
       setCulturePreferencesState(buildDefaultCulturalPreferences());
       setCulturePreferencesNotes("");
       return;
     }
+    setProfileFullName(selectedPerson.full_name ?? "");
+    setProfileTargetRolesInput((selectedPerson.target_roles ?? []).join(", "));
+    setProfileLocation(selectedPerson.location ?? "");
+    setProfileYearsExperienceInput(String(selectedPerson.years_experience ?? 0));
+    setProfileSkillsInput((selectedPerson.skills ?? []).join(", "));
+
     const defaults = buildDefaultCulturalPreferences();
     const incoming = selectedPerson.cultural_fit_preferences ?? {};
     const nextState: Record<string, CulturalFieldPreference> = { ...defaults };
@@ -346,6 +363,11 @@ export default function App() {
     setCulturePreferencesNotes(selectedPerson.culture_preferences_notes ?? "");
   }, [
     selectedPerson?.person_id,
+    selectedPerson?.full_name,
+    selectedPerson?.target_roles,
+    selectedPerson?.location,
+    selectedPerson?.years_experience,
+    selectedPerson?.skills,
     selectedPerson?.cultural_fit_preferences,
     selectedPerson?.culture_preferences_notes
   ]);
@@ -675,6 +697,52 @@ export default function App() {
     }
   }
 
+  async function handleSaveProfile() {
+    if (!selectedPersonId || isSavingProfile) {
+      return;
+    }
+    const fullName = profileFullName.trim();
+    const location = profileLocation.trim();
+    const yearsExperience = Number.parseInt(profileYearsExperienceInput.trim(), 10);
+    const targetRoles = profileTargetRolesInput
+      .split(/[\n,]/g)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const skills = profileSkillsInput
+      .split(/[\n,]/g)
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    if (!fullName || !location || targetRoles.length === 0 || skills.length === 0) {
+      setErrorMessage("Perfil incompleto: nombre, ubicacion, roles y skills son obligatorios.");
+      return;
+    }
+    if (!Number.isFinite(yearsExperience) || yearsExperience < 0 || yearsExperience > 80) {
+      setErrorMessage("Anos de experiencia debe estar entre 0 y 80.");
+      return;
+    }
+
+    setIsSavingProfile(true);
+    setErrorMessage(null);
+    try {
+      const updated = await updatePersonProfile(selectedPersonId, {
+        full_name: fullName,
+        target_roles: targetRoles,
+        location,
+        years_experience: yearsExperience,
+        skills
+      });
+      setPeople((current) =>
+        current.map((item) => (item.person_id === updated.person_id ? updated : item))
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "No se pudo guardar el perfil";
+      setErrorMessage(message);
+    } finally {
+      setIsSavingProfile(false);
+    }
+  }
+
   function handleToggleCulturalField(fieldId: string, enabled: boolean) {
     setCulturePreferencesState((current) => ({
       ...current,
@@ -840,6 +908,66 @@ export default function App() {
             <p className="metaText">
               Skills base: {selectedPerson.skills.join(", ")}
             </p>
+            <h3 className="subheading">Perfil base editable</h3>
+            <article className="manualCard">
+              <label className="field">
+                Nombre completo
+                <input
+                  disabled={isSavingProfile}
+                  onChange={(event) => setProfileFullName(event.target.value)}
+                  value={profileFullName}
+                />
+              </label>
+              <div className="manualRow">
+                <label className="field">
+                  Ubicacion
+                  <input
+                    disabled={isSavingProfile}
+                    onChange={(event) => setProfileLocation(event.target.value)}
+                    value={profileLocation}
+                  />
+                </label>
+                <label className="field">
+                  Anos de experiencia
+                  <input
+                    disabled={isSavingProfile}
+                    max={80}
+                    min={0}
+                    onChange={(event) => setProfileYearsExperienceInput(event.target.value)}
+                    type="number"
+                    value={profileYearsExperienceInput}
+                  />
+                </label>
+              </div>
+              <label className="field">
+                Roles objetivo (coma o salto de linea)
+                <textarea
+                  disabled={isSavingProfile}
+                  onChange={(event) => setProfileTargetRolesInput(event.target.value)}
+                  rows={2}
+                  value={profileTargetRolesInput}
+                />
+              </label>
+              <label className="field">
+                Skills (coma o salto de linea)
+                <textarea
+                  disabled={isSavingProfile}
+                  onChange={(event) => setProfileSkillsInput(event.target.value)}
+                  rows={2}
+                  value={profileSkillsInput}
+                />
+              </label>
+              <div className="cardActions">
+                <button
+                  disabled={isSavingProfile}
+                  onClick={() => void handleSaveProfile()}
+                  type="button"
+                >
+                  {isSavingProfile ? "Guardando perfil..." : "Guardar perfil"}
+                </button>
+              </div>
+            </article>
+            <h3 className="subheading">Preferencias culturales y condiciones de trabajo</h3>
             <div className="cultureGrid">
               {CULTURAL_FIELDS.map((field) => {
                 const value = culturePreferencesState[field.id] ?? {
@@ -1310,7 +1438,7 @@ export default function App() {
             <p className="metaText">{semanticEvidence.query}</p>
             {semanticEvidence.snippets.length > 0 ? (
               <div className="chatList">
-                {semanticEvidence.snippets.slice(0, 6).map((snippet, index) => (
+                {semanticEvidence.snippets.map((snippet, index) => (
                   <article className="chatBubble chatBubbleUser" key={`cv-snippet-${index}`}>
                     <p className="chatRole">CV-{index + 1}</p>
                     <p className="chatContent">{snippet}</p>

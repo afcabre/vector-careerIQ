@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `perfil estructurado extendido con preferencias culturales editables por persona`
+- checkpoint_actual: `pruebas de aislamiento por person_id incorporadas en backend`
 - repo_status: `implementacion activa con login, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
 - ultima_actualizacion: `2026-04-06`
 
@@ -58,9 +58,11 @@
 - API/UI exponen evidencia semantica utilizada (`semantic_evidence`) para trazabilidad del resultado
 - UI permite editar y guardar notas operativas por oportunidad desde el detalle activo
 - UI permite editar y guardar estado de oportunidad con estados V1 (`detected`, `analyzed`, `prioritized`, `application_prepared`, `applied`, `discarded`)
+- UI permite editar perfil base por persona (`full_name`, `target_roles`, `location`, `years_experience`, `skills`) desde `Contexto activo`
 - perfil de persona permite configurar preferencias culturales/condiciones de trabajo por campo (`enabled`, `selected_values`, `criticality`) y notas abiertas
 - el analisis cultural trata falta de evidencia en campos criticos como `indeterminado` con red flag (no exclusion automatica)
 - backend incorpora logs basicos de fallos por proveedor y fallback semantico (`search`, `cv_vector`, `opportunity_ai`)
+- pruebas de integracion API+store para aislamiento por `person_id` en oportunidades y `analyze` agregadas en `apps/backend/tests/test_person_isolation.py`
 
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada de CV a Markdown (PyMuPDF/LlamaIndex) para mejorar jerarquia semantica
@@ -71,6 +73,6 @@
 - no hay bloqueadores tecnicos activos reportados en este checkpoint
 
 ## Siguiente Actividad
-- preparar pruebas de integracion para aislamiento por `person_id` en oportunidades y pipeline de analisis
 - evaluar habilitacion de streaming SSE real en frontend sobre `/chat/stream`
 - agregar pruebas unitarias para transiciones de estado y validacion de `cultural_fit_preferences`
+- ampliar cobertura de pruebas para `prepare` y artefactos por oportunidad/persona
