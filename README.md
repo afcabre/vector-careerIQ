@@ -20,13 +20,14 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
 - conversacion persistente por `person_id` implementada en backend y frontend
 - `/chat` y `/chat/stream` conectados a OpenAI (`OPENAI_API_KEY`) con fallback seguro
 - `/search` multi-provider y guardado explicito de oportunidades implementados por `person_id`
-- `analyze` y `prepare` por oportunidad implementados con artefactos persistidos
+- `analyze` separado por accion (`perfil-vacante` y `fit cultural`) con cache por defecto, `forzar recalculo` y historico backend por accion
+- `prepare` con seleccion de materiales (`guidance`, `cover_letter`, `experience_summary`), cache por defecto y historico backend por accion
 - importacion manual de vacantes por URL y texto pegado desde frontend
 - carga de CV por persona (`/cv`) con un CV activo por perfil y extraccion base de texto
 - indexacion vectorial del CV activo habilitada (embeddings OpenAI + upsert/query en Pinecone cuando hay configuracion)
 - chunking token-aware con solapamiento aplicado al pipeline de CV para embeddings
 - fit cultural en `analyze` con señales publicas trazables por fuente y advertencias de evidencia
-- `analyze` y `prepare` incorporan retrieval semantico de CV y exponen evidencia usada
+- `analyze perfil-vacante` y `prepare` incorporan retrieval semantico de CV y exponen evidencia usada
 - notas operativas editables por oportunidad habilitadas en frontend (persistencia via `PATCH`)
 - edicion de estado de oportunidad habilitada en frontend con estados V1 y persistencia via `PATCH`
 - edicion de perfil base por persona en UI (`full_name`, `target_roles`, `location`, `years_experience`, `skills`) via `PATCH /persons/{person_id}`
@@ -37,10 +38,9 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
 - observabilidad basica agregada en backend para errores/fallbacks de proveedores y retrieval semantico
 
 ## Siguiente paso
-- extender SSE a endpoints IA de `analyze` y `prepare` (hoy implementado en `chat`)
-- agregar pruebas unitarias para transiciones de estado y manejo de `cultural_fit_preferences`
-- ampliar cobertura de pruebas para `prepare` y artefactos por oportunidad/persona
-- agregar pruebas de flujo SSE para `chat` y para `analyze/prepare` cuando queden habilitados
+- hardening de guardrails (listas de bloqueo y reglas de evidencia) con pruebas dedicadas
+- agregar endpoint de consulta de historico por accion IA (backend listo, UI diferida)
+- reforzar rate limiting de login con pruebas de ventana temporal
 
 ## Testing Backend
 - ejecutar aislamiento por `person_id` (API+store):
@@ -82,6 +82,69 @@ Variables Pinecone para indexacion CV:
 - `PINECONE_API_KEY`
 - `PINECONE_INDEX_NAME`
 - `PINECONE_INDEX_HOST`
+
+## Administracion de Prompts (Placeholders)
+Sintaxis valida de placeholders en plantillas:
+- usar siempre llaves: `{placeholder}`
+- no usar parentesis: `(placeholder)`
+
+Flujo `search_jobs_tavily`:
+- requerido:
+  - `{query}`
+- disponibles:
+  - `{person_full_name}`
+  - `{target_roles}`
+  - `{skills}`
+  - `{person_location}`
+  - `{target_sources}` (inyectado desde lista de fuentes objetivo configuradas)
+
+Flujo `search_culture_tavily`:
+- requerido:
+  - `{company}`
+- disponibles:
+  - `{roles}`
+  - `{target_roles}`
+  - `{person_location}`
+  - `{target_sources}` (inyectado desde lista de fuentes objetivo configuradas)
+
+Flujo `system_identity`:
+- requerido:
+  - `{person_name}`
+- disponibles:
+  - `{person_location}`
+  - `{target_roles}`
+
+Flujo `task_chat`:
+- requerido:
+  - `{person_context}`
+- disponibles:
+  - `{cv_context_source}`
+  - `{cv_context}`
+
+Flujos `task_analyze_profile_match`, `task_analyze_cultural_fit`, `task_prepare_guidance`, `task_prepare_cover_letter`, `task_prepare_experience_summary`:
+- requeridos:
+  - `{person_context}`
+  - `{opportunity_context}`
+- disponibles segun flujo:
+  - `{semantic_evidence_context}`
+  - `{cultural_evidence_context}`
+  - `{confidence_hint}`
+
+Referencia tecnica de esta definicion:
+- `apps/backend/app/services/prompt_config_store.py`
+- `apps/backend/app/services/search_service.py`
+- `apps/backend/app/services/opportunity_ai_service.py`
+
+Mapa rapido endpoint -> flow:
+- `POST /api/persons/{person_id}/chat` y `.../chat/stream`: `guardrails_core + system_identity + task_chat`
+- `POST /api/persons/{person_id}/opportunities/{opportunity_id}/analyze/profile-match`: `guardrails_core + system_identity + task_analyze_profile_match`
+- `POST /api/persons/{person_id}/opportunities/{opportunity_id}/analyze/cultural-fit`: `guardrails_core + system_identity + task_analyze_cultural_fit`
+- `POST /api/persons/{person_id}/opportunities/{opportunity_id}/prepare`: `guardrails_core + system_identity + task_prepare_*` segun `targets`
+- `POST /api/persons/{person_id}/search`: `search_jobs_tavily`
+- senales culturales en `analyze_cultural_fit`: `search_culture_tavily`
+
+Detalle normativo completo (endpoint -> composicion -> variables):
+- `.specify/03.Arquitectura-y-Plan.md`
 
 Mejoras diferidas (no implementadas en V1 actual):
 - extraccion estructurada CV a Markdown para enriquecer jerarquia semantica

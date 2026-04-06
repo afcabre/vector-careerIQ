@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `backend de administracion de prompts implementado y aplicado a queries Tavily`
+- checkpoint_actual: `prompt layering global + analyze por accion + prepare por seleccion con cache e historico backend`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
 - ultima_actualizacion: `2026-04-06`
 
@@ -52,6 +52,20 @@
 - busqueda Tavily de vacantes usa construccion de query configurable via `prompt_configs` (`search_jobs_tavily`)
 - fit cultural Tavily usa construccion de query configurable via `prompt_configs` (`search_culture_tavily`)
 - pruebas de contrato/admin de prompt configs agregadas en `apps/backend/tests/test_prompt_config_admin.py` (`5 tests` en `OK`)
+- frontend incorpora seccion `Administracion de prompts (global V1)` para listar/editar `template_text`, `target_sources` e `is_active`
+- frontend consume endpoints admin de prompt configs y aplica validaciones basicas antes de guardar
+- build frontend verificado localmente tras integracion UI admin: `npm run build` en `OK`
+- prompt configs ampliados para V1 con capas editables: `guardrails_core` (global), `system_identity` (global) y `task_*` por accion (`chat`, `analyze`, `prepare`)
+- arquitectura normativa actualizada con matriz operativa de prompts/parametros V1 (destino, objetivo, placeholders, alcance, riesgo y control de consumo)
+- arquitectura normativa extendida con trazabilidad endpoint->composicion->variables y reglas de fallback por flow
+- backend incorpora store `ai_action_runs` para persistir resultado vigente + historico por accion IA
+- API agrega acciones separadas de analisis: `POST .../analyze/profile-match` y `POST .../analyze/cultural-fit`
+- API `prepare` permite `targets` seleccionables (`guidance_text`, `cover_letter`, `experience_summary`) y `force_recompute`
+- comportamiento por defecto de acciones IA: leer ultimo resultado persistido; regenerar solo con `force_recompute=true`
+- frontend agrega switch global `Forzar recalculo IA` y botones separados para `Analyze perfil` y `Analyze cultura`
+- frontend agrega seleccion de materiales para `prepare seleccionado` y consume respuesta vigente por cache cuando aplica
+- capa de prompt en chat/analyze/prepare alineada a composicion: `guardrails_core + system_identity + task_prompt`
+- README actualizado con seccion de placeholders validos (`{placeholder}`) y variables disponibles por flujo de prompt
 - degradacion parcial por proveedor implementada con warnings por fuente
 - deduplicacion de resultados implementada con clave principal por `source_url`
 - `Remotive API` operando en modo publico V1; `REMOTIVE_API_KEY` queda opcional
@@ -117,5 +131,6 @@
 - riesgo operativo local: entorno de desarrollo modificado para diagnostico (`anyio` downgraded en `.venv`) sin solucion aun para el bloqueo ASGI
 
 ## Siguiente Actividad
-- implementar UI de administracion de prompts para editar `template_text`, `target_sources` e `is_active` por flujo
-- agregar validaciones y mensajes de error en frontend para evitar guardar plantillas invalidas
+- hardening de guardrails con pruebas especificas (inyeccion prompt, no divulgacion de prompt, no invencion sin evidencia)
+- definir endpoint de consulta de historico por accion IA (UI diferida en V1)
+- cerrar rate limiting de login con pruebas de ventana temporal
