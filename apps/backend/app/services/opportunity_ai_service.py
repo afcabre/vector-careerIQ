@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+import logging
 import json
 from typing import TypedDict
 from urllib.error import HTTPError, URLError
@@ -11,6 +12,8 @@ from app.services.cv_vector_service import query_cv_context
 from app.services.llm_service import FALLBACK_MESSAGE, complete_prompt
 from app.services.opportunity_store import OpportunityRecord
 from app.services.person_store import PersonRecord
+
+logger = logging.getLogger(__name__)
 
 
 class CulturalSignal(TypedDict):
@@ -150,6 +153,11 @@ def _build_semantic_evidence(
     query = _semantic_query(person, opportunity)
     active_cv = get_active_cv(person["person_id"])
     if not active_cv:
+        logger.warning(
+            "semantic evidence unavailable due to missing active CV person_id=%s opportunity_id=%s",
+            person["person_id"],
+            opportunity["opportunity_id"],
+        )
         return {
             "source": "no_active_cv",
             "query": query,
@@ -165,6 +173,12 @@ def _build_semantic_evidence(
         top_k=top_k,
     )
     if snippets:
+        logger.info(
+            "semantic evidence retrieved person_id=%s opportunity_id=%s snippets=%s",
+            person["person_id"],
+            opportunity["opportunity_id"],
+            len(snippets),
+        )
         return {
             "source": "semantic_retrieval",
             "query": query,
@@ -172,6 +186,11 @@ def _build_semantic_evidence(
             "snippets": snippets[:10],
         }
 
+    logger.warning(
+        "semantic retrieval empty, using CV preview fallback person_id=%s opportunity_id=%s",
+        person["person_id"],
+        opportunity["opportunity_id"],
+    )
     return {
         "source": "fallback_preview",
         "query": query,
@@ -227,11 +246,22 @@ def _tavily_culture_signals(
         with urlopen(request, timeout=20) as response:
             raw = response.read().decode("utf-8")
         body = json.loads(raw)
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
         warnings.append("No fue posible consultar Tavily para señales culturales")
+        logger.warning(
+            "tavily culture query failed person_id=%s opportunity_id=%s error=%s",
+            person["person_id"],
+            opportunity["opportunity_id"],
+            exc,
+        )
         return [], warnings
     except Exception:
         warnings.append("Error inesperado al consultar señales culturales externas")
+        logger.exception(
+            "tavily culture unexpected error person_id=%s opportunity_id=%s",
+            person["person_id"],
+            opportunity["opportunity_id"],
+        )
         return [], warnings
 
     signals: list[CulturalSignal] = []
@@ -285,6 +315,11 @@ def analyze_opportunity(
     opportunity: OpportunityRecord,
     settings: Settings,
 ) -> AnalyzeResult:
+    logger.info(
+        "opportunity analyze started person_id=%s opportunity_id=%s",
+        person["person_id"],
+        opportunity["opportunity_id"],
+    )
     signals, warnings = _tavily_culture_signals(person, opportunity, settings)
     confidence = _cultural_confidence(len(signals))
     semantic_evidence = _build_semantic_evidence(person, opportunity, settings, top_k=24)
@@ -311,6 +346,11 @@ def analyze_opportunity(
     )
     response = complete_prompt(system_prompt, user_prompt, settings, temperature=0.2)
     if response == FALLBACK_MESSAGE:
+        logger.warning(
+            "opportunity analyze used llm fallback person_id=%s opportunity_id=%s",
+            person["person_id"],
+            opportunity["opportunity_id"],
+        )
         response = (
             "No fue posible ejecutar analisis con LLM. "
             "Como fallback, revisa manualmente ajuste entre roles objetivo, "
@@ -330,6 +370,11 @@ def prepare_application_materials(
     opportunity: OpportunityRecord,
     settings: Settings,
 ) -> PreparationResult:
+    logger.info(
+        "opportunity prepare started person_id=%s opportunity_id=%s",
+        person["person_id"],
+        opportunity["opportunity_id"],
+    )
     system_prompt = (
         "Eres un asistente de postulaciones. Escribe contenido profesional, concreto y util."
     )
@@ -354,6 +399,11 @@ def prepare_application_materials(
         temperature=0.2,
     )
     if guidance == FALLBACK_MESSAGE:
+        logger.warning(
+            "prepare guidance used llm fallback person_id=%s opportunity_id=%s",
+            person["person_id"],
+            opportunity["opportunity_id"],
+        )
         guidance = (
             "Fallback: enfoca la postulacion en logros medibles, alinea lenguaje "
             "a la vacante y destaca skills mas cercanos al rol."
@@ -370,6 +420,11 @@ def prepare_application_materials(
         temperature=0.4,
     )
     if cover_letter == FALLBACK_MESSAGE:
+        logger.warning(
+            "prepare cover_letter used llm fallback person_id=%s opportunity_id=%s",
+            person["person_id"],
+            opportunity["opportunity_id"],
+        )
         cover_letter = (
             "Fallback carta: presentacion breve, interes por rol, 2-3 fortalezas "
             "relevantes y cierre con disponibilidad para entrevista."
@@ -386,6 +441,11 @@ def prepare_application_materials(
         temperature=0.3,
     )
     if experience_summary == FALLBACK_MESSAGE:
+        logger.warning(
+            "prepare experience_summary used llm fallback person_id=%s opportunity_id=%s",
+            person["person_id"],
+            opportunity["opportunity_id"],
+        )
         experience_summary = (
             "Fallback resumen: sintetiza experiencia por logros y habilidades "
             "alineadas al rol objetivo."

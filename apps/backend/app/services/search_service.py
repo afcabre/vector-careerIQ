@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from hashlib import sha1
+import logging
 import json
 from typing import Any, TypedDict
 from urllib.error import HTTPError, URLError
@@ -8,6 +9,8 @@ from urllib.request import Request, urlopen
 
 from app.core.settings import Settings
 from app.services.person_store import PersonRecord
+
+logger = logging.getLogger(__name__)
 
 
 class SearchResult(TypedDict):
@@ -270,6 +273,7 @@ def search_opportunities(
     warnings: list[str] = []
     query = query.strip()
     if not query:
+        logger.warning("search skipped due to empty query")
         return {"items": [], "warnings": ["Empty query"]}
 
     items: list[SearchResult] = []
@@ -277,20 +281,25 @@ def search_opportunities(
 
     if not settings.rapidapi_key or not settings.rapidapi_adzuna_host:
         warnings.append("Adzuna via RapidAPI is not configured")
+        logger.warning("adzuna provider disabled due to missing RapidAPI config")
     else:
         try:
             items.extend(_adzuna_search_via_rapidapi(query, provider_max_results, settings))
-        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
+        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
             warnings.append("Adzuna provider failed, continuing with partial results")
+            logger.warning("adzuna provider failed: %s", exc)
         except Exception:
             warnings.append("Adzuna provider unexpected error, continuing")
+            logger.exception("adzuna provider unexpected error")
 
     try:
         items.extend(_remotive_search(query, provider_max_results, settings))
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
         warnings.append("Remotive provider failed, continuing with partial results")
+        logger.warning("remotive provider failed: %s", exc)
     except Exception:
         warnings.append("Remotive provider unexpected error, continuing")
+        logger.exception("remotive provider unexpected error")
 
     if settings.tavily_api_key:
         try:
@@ -298,16 +307,24 @@ def search_opportunities(
             for item in tavily_items:
                 item["location"] = item["location"] or person["location"]
             items.extend(tavily_items)
-        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
+        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
             warnings.append("Tavily provider failed, continuing with partial results")
+            logger.warning("tavily provider failed: %s", exc)
         except Exception:
             warnings.append("Tavily provider unexpected error, continuing")
+            logger.exception("tavily provider unexpected error")
     else:
         warnings.append("Tavily API key is missing")
+        logger.warning("tavily provider disabled due to missing API key")
 
     deduped = _dedupe(items)
     if not deduped:
         warnings.append("All providers returned empty or failed, using fallback result")
+        logger.warning(
+            "search fallback activated for person_id=%s query=%s",
+            person["person_id"],
+            query,
+        )
         items = _fallback_results(person, query)
     else:
         items = deduped[:max_results]

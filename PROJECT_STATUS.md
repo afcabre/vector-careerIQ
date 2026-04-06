@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `retrieval semantico integrado en analyze y prepare`
+- checkpoint_actual: `loop operativo UI completado con edicion de estado y notas de oportunidad`
 - repo_status: `implementacion activa con login, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
 - ultima_actualizacion: `2026-04-06`
 
@@ -56,6 +56,9 @@
 - UI muestra trazabilidad de señales culturales y advertencias de evidencia debil
 - `analyze` y `prepare` reutilizan retrieval semantico CV desde Pinecone con fallback a preview
 - API/UI exponen evidencia semantica utilizada (`semantic_evidence`) para trazabilidad del resultado
+- UI permite editar y guardar notas operativas por oportunidad desde el detalle activo
+- UI permite editar y guardar estado de oportunidad con estados V1 (`detected`, `analyzed`, `prioritized`, `application_prepared`, `applied`, `discarded`)
+- backend incorpora logs basicos de fallos por proveedor y fallback semantico (`search`, `cv_vector`, `opportunity_ai`)
 
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada de CV a Markdown (PyMuPDF/LlamaIndex) para mejorar jerarquia semantica
@@ -66,6 +69,6 @@
 - no hay bloqueadores tecnicos activos reportados en este checkpoint
 
 ## Siguiente Actividad
-- completar hardening de errores y observabilidad del pipeline semantico
 - mejorar perfil estructurado para incluir preferencias culturales explicitas en el modelo de persona
-- incorporar notas operativas editables por oportunidad desde UI
+- preparar pruebas de integracion para aislamiento por `person_id` en oportunidades y pipeline de analisis
+- evaluar habilitacion de streaming SSE real en frontend sobre `/chat/stream`

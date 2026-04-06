@@ -1,10 +1,13 @@
 from hashlib import sha1
+import logging
 import json
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from app.core.settings import Settings
+
+logger = logging.getLogger(__name__)
 
 try:
     from openai import OpenAI
@@ -139,23 +142,44 @@ def upsert_cv_vectors(
     record: dict[str, Any],
     settings: Settings,
 ) -> tuple[str, int]:
+    person_id = str(record.get("person_id", "")).strip()
+    cv_id = str(record.get("cv_id", "")).strip()
+
     if not _is_ready(settings):
+        logger.warning(
+            "vector upsert skipped due to missing config person_id=%s cv_id=%s",
+            person_id,
+            cv_id,
+        )
         return "skipped_missing_vector_config", 0
 
     text = str(record.get("extracted_text", "")).strip()
     chunks = _chunk_text(text, settings)
     if not chunks:
+        logger.warning(
+            "vector upsert skipped due to empty text person_id=%s cv_id=%s",
+            person_id,
+            cv_id,
+        )
         return "skipped_empty_cv_text", 0
 
     try:
         embeddings = _embed_texts(chunks, settings)
     except Exception:
+        logger.exception(
+            "embedding generation failed person_id=%s cv_id=%s", person_id, cv_id
+        )
         return "failed_embedding", 0
     if not embeddings or len(embeddings) != len(chunks):
+        logger.warning(
+            "embedding shape mismatch person_id=%s cv_id=%s chunks=%s vectors=%s",
+            person_id,
+            cv_id,
+            len(chunks),
+            len(embeddings),
+        )
         return "failed_embedding_shape", 0
 
-    person_id = str(record.get("person_id", "")).strip()
-    cv_id = str(record.get("cv_id", "")).strip()
     vectors: list[dict[str, Any]] = []
     for index, (chunk, values) in enumerate(zip(chunks, embeddings, strict=False)):
         digest = sha1(f"{cv_id}:{index}".encode("utf-8")).hexdigest()[:12]
@@ -181,9 +205,16 @@ def upsert_cv_vectors(
                 "vectors": vectors,
             },
         )
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
+        logger.warning(
+            "pinecone upsert failed person_id=%s cv_id=%s error=%s",
+            person_id,
+            cv_id,
+            exc,
+        )
         return "failed_pinecone_upsert", 0
     except Exception:
+        logger.exception("pinecone upsert unexpected error person_id=%s cv_id=%s", person_id, cv_id)
         return "failed_pinecone_upsert", 0
 
     return "indexed", len(vectors)
@@ -197,16 +228,26 @@ def query_cv_context(
     top_k: int = 24,
 ) -> list[str]:
     if not _is_ready(settings):
+        logger.warning("semantic query skipped due to missing vector config person_id=%s", person_id)
         return []
     query_text = query_text.strip()
     if not query_text:
+        logger.warning("semantic query skipped due to empty query person_id=%s cv_id=%s", person_id, cv_id)
         return []
 
     try:
         embedded = _embed_texts([query_text], settings)
     except Exception:
+        logger.exception(
+            "semantic query embedding failed person_id=%s cv_id=%s", person_id, cv_id
+        )
         return []
     if not embedded:
+        logger.warning(
+            "semantic query embedding empty person_id=%s cv_id=%s",
+            person_id,
+            cv_id,
+        )
         return []
 
     try:
@@ -221,9 +262,16 @@ def query_cv_context(
                 "filter": {"cv_id": {"$eq": cv_id}},
             },
         )
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
+        logger.warning(
+            "pinecone query failed person_id=%s cv_id=%s error=%s",
+            person_id,
+            cv_id,
+            exc,
+        )
         return []
     except Exception:
+        logger.exception("pinecone query unexpected error person_id=%s cv_id=%s", person_id, cv_id)
         return []
 
     snippets: list[str] = []

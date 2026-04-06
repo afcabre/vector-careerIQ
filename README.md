@@ -27,11 +27,14 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
 - chunking token-aware con solapamiento aplicado al pipeline de CV para embeddings
 - fit cultural en `analyze` con señales publicas trazables por fuente y advertencias de evidencia
 - `analyze` y `prepare` incorporan retrieval semantico de CV y exponen evidencia usada
+- notas operativas editables por oportunidad habilitadas en frontend (persistencia via `PATCH`)
+- edicion de estado de oportunidad habilitada en frontend con estados V1 y persistencia via `PATCH`
+- observabilidad basica agregada en backend para errores/fallbacks de proveedores y retrieval semantico
 
 ## Siguiente paso
-- endurecer observabilidad/metricas de proveedores externos y pipeline CV
 - ampliar perfil estructurado para preferencias culturales explicitas
-- incorporar notas operativas editables por oportunidad desde UI
+- agregar pruebas de integracion para aislamiento por `person_id` en analisis/oportunidades
+- evaluar soporte de streaming SSE real en frontend usando `/chat/stream`
 
 ## Arranque Local Minimo
 ### Backend
