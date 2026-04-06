@@ -426,6 +426,10 @@ class FallbackBehaviorTests(unittest.TestCase):
         get_settings.cache_clear()
         _clear_in_memory_state()
         seed_persons()
+        self.session = SessionData(
+            username="tutor",
+            expires_at=datetime.now(tz=UTC) + timedelta(hours=1),
+        )
 
     def tearDown(self) -> None:
         get_settings.cache_clear()
@@ -453,6 +457,37 @@ class FallbackBehaviorTests(unittest.TestCase):
         self.assertEqual(payload["items"][0]["source_provider"], "fallback")
         self.assertTrue(
             any("All providers returned empty or failed" in warning for warning in payload["warnings"])
+        )
+
+    def test_search_api_contract_returns_fallback_item_and_warnings(self) -> None:
+        settings = get_settings()
+        settings.rapidapi_key = "test-key"
+        settings.rapidapi_adzuna_host = "test-host"
+        settings.tavily_api_key = "test-key"
+
+        with patch.object(search_service, "_adzuna_search_via_rapidapi", side_effect=URLError("x")):
+            with patch.object(search_service, "_remotive_search", side_effect=URLError("x")):
+                with patch.object(search_service, "_tavily_search", side_effect=URLError("x")):
+                    response = search_api.search(
+                        person_id="p-001",
+                        payload=search_api.SearchRequest(query="python backend", max_results=6),
+                        _=self.session,
+                        settings=settings,
+                    )
+
+        self.assertEqual(len(response.items), 1)
+        self.assertEqual(response.items[0].source_provider, "fallback")
+        self.assertTrue(
+            any("All providers returned empty or failed" in warning for warning in response.warnings)
+        )
+        self.assertTrue(
+            any("Adzuna provider failed" in warning for warning in response.warnings)
+        )
+        self.assertTrue(
+            any("Remotive provider failed" in warning for warning in response.warnings)
+        )
+        self.assertTrue(
+            any("Tavily provider failed" in warning for warning in response.warnings)
         )
 
     def test_search_degrades_partially_when_adzuna_fails(self) -> None:
@@ -507,6 +542,68 @@ class FallbackBehaviorTests(unittest.TestCase):
         )
         tavily_result = next(item for item in payload["items"] if item["source_provider"] == "tavily")
         self.assertEqual(tavily_result["location"], person["location"])
+
+    def test_search_api_contract_degrades_partially_with_dedupe_and_limit(self) -> None:
+        settings = get_settings()
+        settings.rapidapi_key = "test-key"
+        settings.rapidapi_adzuna_host = "test-host"
+        settings.tavily_api_key = "test-key"
+
+        remotive_primary = {
+            "search_result_id": "sr-rem-1",
+            "source_provider": "remotive",
+            "source_url": "https://example.com/jobs/backend-1",
+            "title": "Backend Engineer",
+            "company": "RemoteCo",
+            "location": "Remote",
+            "snippet": "Remotive primary",
+            "captured_at": "2026-04-06T00:00:00+00:00",
+            "normalized_payload": {"provider": "remotive"},
+        }
+        remotive_secondary = {
+            "search_result_id": "sr-rem-2",
+            "source_provider": "remotive",
+            "source_url": "https://remotive.com/job/2",
+            "title": "Platform Engineer",
+            "company": "PlatformCo",
+            "location": "Remote",
+            "snippet": "Remotive secondary",
+            "captured_at": "2026-04-06T00:00:00+00:00",
+            "normalized_payload": {"provider": "remotive"},
+        }
+        tavily_duplicate = {
+            "search_result_id": "sr-tav-1",
+            "source_provider": "tavily",
+            "source_url": "https://example.com/jobs/backend-1",
+            "title": "Backend Engineer Duplicate",
+            "company": "ExampleCo",
+            "location": "",
+            "snippet": "Tavily duplicate",
+            "captured_at": "2026-04-06T00:00:00+00:00",
+            "normalized_payload": {"provider": "tavily"},
+        }
+
+        with patch.object(search_service, "_adzuna_search_via_rapidapi", side_effect=URLError("x")):
+            with patch.object(
+                search_service,
+                "_remotive_search",
+                return_value=[remotive_primary, remotive_secondary],
+            ):
+                with patch.object(search_service, "_tavily_search", return_value=[tavily_duplicate]):
+                    response = search_api.search(
+                        person_id="p-001",
+                        payload=search_api.SearchRequest(query="python backend", max_results=1),
+                        _=self.session,
+                        settings=settings,
+                    )
+
+        self.assertEqual(len(response.items), 1)
+        self.assertEqual(response.items[0].source_provider, "remotive")
+        self.assertEqual(response.items[0].source_url, remotive_primary["source_url"])
+        self.assertTrue(any("Adzuna provider failed" in warning for warning in response.warnings))
+        self.assertFalse(
+            any("All providers returned empty or failed" in warning for warning in response.warnings)
+        )
 
     def test_search_warns_for_missing_optional_config_but_keeps_results(self) -> None:
         person = get_person("p-001")
@@ -596,6 +693,87 @@ class FallbackBehaviorTests(unittest.TestCase):
         self.assertIn("Fallback:", prepared["guidance_text"])
         self.assertIn("Fallback carta", prepared["cover_letter"])
         self.assertIn("Fallback resumen", prepared["experience_summary"])
+
+    def test_analyze_profile_match_endpoint_returns_controlled_fallback(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Backend Engineer",
+            company="Acme",
+            location="Remote",
+            raw_text="FastAPI role.",
+        )
+        evidence = {
+            "source": "fallback_preview",
+            "query": "q",
+            "top_k": 24,
+            "snippets": [],
+        }
+        with patch.object(opportunity_ai_service, "_build_semantic_evidence", return_value=evidence):
+            with patch.object(
+                opportunity_ai_service,
+                "complete_prompt",
+                return_value=opportunity_ai_service.FALLBACK_MESSAGE,
+            ):
+                response = opportunities_api.analyze_profile_match_action(
+                    person_id="p-001",
+                    opportunity_id=created["opportunity_id"],
+                    payload=opportunities_api.ActionRequest(force_recompute=True),
+                    _=self.session,
+                    settings=get_settings(),
+                )
+
+        self.assertFalse(response.served_from_cache)
+        self.assertIn("No fue posible ejecutar analisis perfil-vacante", response.analysis_text)
+        self.assertEqual(response.semantic_evidence.source, "fallback_preview")
+
+    def test_prepare_endpoint_returns_controlled_fallback_materials(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Data Engineer",
+            company="Acme",
+            location="Remote",
+            raw_text="Python role.",
+        )
+        moved = opportunity_store.update_opportunity(
+            "p-001", created["opportunity_id"], "analyzed", None
+        )
+        assert moved is not None
+        moved = opportunity_store.update_opportunity(
+            "p-001", created["opportunity_id"], "prioritized", None
+        )
+        assert moved is not None
+
+        with patch.object(
+            opportunity_ai_service,
+            "complete_prompt",
+            side_effect=[
+                opportunity_ai_service.FALLBACK_MESSAGE,
+                opportunity_ai_service.FALLBACK_MESSAGE,
+                opportunity_ai_service.FALLBACK_MESSAGE,
+            ],
+        ):
+            response = opportunities_api.prepare(
+                person_id="p-001",
+                opportunity_id=created["opportunity_id"],
+                payload=opportunities_api.PrepareRequest(
+                    targets=[
+                        "guidance_text",
+                        "cover_letter",
+                        "experience_summary",
+                    ],
+                    force_recompute=True,
+                ),
+                _=self.session,
+                settings=get_settings(),
+            )
+
+        self.assertFalse(response.served_from_cache)
+        self.assertIn("Fallback:", response.guidance_text)
+        artifact_types = {item.artifact_type: item.content for item in response.artifacts}
+        self.assertIn("cover_letter", artifact_types)
+        self.assertIn("experience_summary", artifact_types)
+        self.assertIn("Fallback carta", artifact_types["cover_letter"])
+        self.assertIn("Fallback resumen", artifact_types["experience_summary"])
 
 
 if __name__ == "__main__":

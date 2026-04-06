@@ -109,6 +109,8 @@
 - suite backend actualizada y verificada localmente: `12 tests` en `OK`
 - pruebas de contratos API para errores (`422` status invalido, `409` transicion invalida) y aislamiento por `person_id` en `artifacts`/`analyze_stream`/`prepare_stream` agregadas en `apps/backend/tests/test_api_error_and_fallbacks.py`
 - pruebas de fallback para proveedores de busqueda y fallback LLM (`analyze`/`prepare`) agregadas en `apps/backend/tests/test_api_error_and_fallbacks.py`
+- cobertura de contratos API reforzada para degradacion parcial y fallback controlado en `search`, incluyendo warnings esperados, dedupe y limite de resultados en `apps/backend/tests/test_api_error_and_fallbacks.py`
+- cobertura de contratos API reforzada para fallback controlado en endpoints `analyze_profile_match` y `prepare` cuando LLM cae en fallback en `apps/backend/tests/test_api_error_and_fallbacks.py`
 - prueba SSE adicional de evento `error` en `prepare/stream` agregada en `apps/backend/tests/test_sse_flows.py`
 - suite backend actualizada y verificada localmente: `19 tests` en `OK`
 - prueba de paridad minima `memory` vs `firestore` mocked para stores de oportunidades/artefactos agregada en `apps/backend/tests/test_firestore_mock_parity.py`
@@ -129,6 +131,7 @@
 - bloqueo ASGI validado tambien en app FastAPI minima (`/ping`), confirmando limitacion del harness local y no regresion del codigo de negocio
 - intento de mitigacion local ejecutado: downgrade de `anyio` de `4.13.0` a `4.4.0` en `.venv`; el bloqueo de `TestClient` persiste
 - suite backend revalidada tras hardening SSE: `51 tests` en `OK` (`skipped=1`)
+- suite backend revalidada tras refuerzo de contratos HTTP fallback/degradacion: `55 tests` en `OK` (`skipped=1`)
 
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada de CV a Markdown (PyMuPDF/LlamaIndex) para mejorar jerarquia semantica
@@ -140,5 +143,5 @@
 - riesgo operativo local: entorno de desarrollo modificado para diagnostico (`anyio` downgraded en `.venv`) sin solucion aun para el bloqueo ASGI
 
 ## Siguiente Actividad
-- reforzar cobertura de contratos HTTP sobre degradacion parcial de proveedores y fallback controlado
+- investigar y cerrar el bloqueo del harness ASGI para reactivar el test HTTP hoy marcado `skip`
 - evaluar mejora futura de saneo incremental por deltas SSE sin romper paridad ni latencia
