@@ -24,10 +24,19 @@ import {
   saveOpportunityFromSearch,
   searchOpportunities,
   sendMessage,
+  updateOpportunity,
   uploadCV
 } from "./api";
 
 type ViewState = "checking" | "login" | "workspace";
+const OPPORTUNITY_STATUSES = [
+  "detected",
+  "analyzed",
+  "prioritized",
+  "application_prepared",
+  "applied",
+  "discarded"
+] as const;
 
 export default function App() {
   const [view, setView] = useState<ViewState>("checking");
@@ -75,6 +84,10 @@ export default function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
   const [isLoadingArtifacts, setIsLoadingArtifacts] = useState(false);
+  const [opportunityNotes, setOpportunityNotes] = useState("");
+  const [isSavingNotes, setIsSavingNotes] = useState(false);
+  const [opportunityStatus, setOpportunityStatus] = useState<string>("detected");
+  const [isSavingStatus, setIsSavingStatus] = useState(false);
 
   useEffect(() => {
     const boot = async () => {
@@ -131,6 +144,8 @@ export default function App() {
         setSemanticEvidence(null);
         setGuidanceText("");
         setArtifacts([]);
+        setOpportunityNotes("");
+        setOpportunityStatus("detected");
         return;
       }
       setIsLoadingOpportunities(true);
@@ -173,6 +188,14 @@ export default function App() {
 
   const selectedOpportunity =
     savedOpportunities.find((item) => item.opportunity_id === selectedOpportunityId) ?? null;
+
+  useEffect(() => {
+    setOpportunityNotes(selectedOpportunity?.notes ?? "");
+  }, [selectedOpportunity?.opportunity_id, selectedOpportunity?.notes]);
+
+  useEffect(() => {
+    setOpportunityStatus(selectedOpportunity?.status ?? "detected");
+  }, [selectedOpportunity?.opportunity_id, selectedOpportunity?.status]);
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -425,6 +448,54 @@ export default function App() {
       setErrorMessage(message);
     } finally {
       setIsPreparing(false);
+    }
+  }
+
+  async function handleSaveNotes() {
+    if (!selectedPersonId || !selectedOpportunityId || isSavingNotes) {
+      return;
+    }
+    setIsSavingNotes(true);
+    setErrorMessage(null);
+    try {
+      const updated = await updateOpportunity(selectedPersonId, selectedOpportunityId, {
+        notes: opportunityNotes
+      });
+      setSavedOpportunities((current) =>
+        current.map((item) =>
+          item.opportunity_id === updated.opportunity_id ? updated : item
+        )
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudieron guardar las notas";
+      setErrorMessage(message);
+    } finally {
+      setIsSavingNotes(false);
+    }
+  }
+
+  async function handleSaveStatus() {
+    if (!selectedPersonId || !selectedOpportunityId || isSavingStatus) {
+      return;
+    }
+    setIsSavingStatus(true);
+    setErrorMessage(null);
+    try {
+      const updated = await updateOpportunity(selectedPersonId, selectedOpportunityId, {
+        status: opportunityStatus
+      });
+      setSavedOpportunities((current) =>
+        current.map((item) =>
+          item.opportunity_id === updated.opportunity_id ? updated : item
+        )
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo guardar el estado";
+      setErrorMessage(message);
+    } finally {
+      setIsSavingStatus(false);
     }
   }
 
@@ -837,9 +908,52 @@ export default function App() {
       <section className="panel selectedPanel">
         <h2>Analisis y artefactos</h2>
         {selectedOpportunity ? (
-          <p className="metaText">
-            Oportunidad activa: <strong>{selectedOpportunity.title}</strong>
-          </p>
+          <div className="cvCard">
+            <p className="metaText">
+              Oportunidad activa: <strong>{selectedOpportunity.title}</strong>
+            </p>
+            <label className="field">
+              Estado (V1)
+              <select
+                disabled={isSavingStatus}
+                onChange={(event) => setOpportunityStatus(event.target.value)}
+                value={opportunityStatus}
+              >
+                {OPPORTUNITY_STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {status}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="cardActions">
+              <button
+                disabled={isSavingStatus}
+                onClick={() => void handleSaveStatus()}
+                type="button"
+              >
+                {isSavingStatus ? "Guardando estado..." : "Guardar estado"}
+              </button>
+            </div>
+            <label className="field">
+              Notas operativas (V1)
+              <textarea
+                disabled={isSavingNotes}
+                onChange={(event) => setOpportunityNotes(event.target.value)}
+                rows={4}
+                value={opportunityNotes}
+              />
+            </label>
+            <div className="cardActions">
+              <button
+                disabled={isSavingNotes}
+                onClick={() => void handleSaveNotes()}
+                type="button"
+              >
+                {isSavingNotes ? "Guardando notas..." : "Guardar notas"}
+              </button>
+            </div>
+          </div>
         ) : (
           <p className="metaText">
             Selecciona una oportunidad guardada para analizar y preparar postulacion.

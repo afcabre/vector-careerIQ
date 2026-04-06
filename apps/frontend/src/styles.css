@@ -189,6 +189,23 @@ textarea {
   color: var(--ink);
 }
 
+.field textarea {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  color: var(--ink);
+  resize: vertical;
+}
+
+.field select {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  color: var(--ink);
+}
+
 .primaryButton {
   border-radius: 999px;
   border: 1px solid var(--accent);

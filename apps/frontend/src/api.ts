@@ -248,6 +248,23 @@ export async function listOpportunities(personId: string): Promise<Opportunity[]
   return payload.items;
 }
 
+export async function updateOpportunity(
+  personId: string,
+  opportunityId: string,
+  payload: { status?: string; notes?: string }
+): Promise<Opportunity> {
+  const response = await fetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}`,
+    {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }
+  );
+  return parseResponse<Opportunity>(response);
+}
+
 export async function analyzeOpportunity(
   personId: string,
   opportunityId: string
