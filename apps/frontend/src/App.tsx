@@ -273,6 +273,19 @@ function getPersonInitials(fullName: string): string {
     .join("") || "NA";
 }
 
+function getArtifactTypeLabel(artifactType: string): string {
+  if (artifactType === "cover_letter") {
+    return "Carta de presentacion";
+  }
+  if (artifactType === "experience_summary") {
+    return "Resumen de experiencia";
+  }
+  if (artifactType === "guidance_text") {
+    return "Guia de perfil";
+  }
+  return artifactType;
+}
+
 function buildPromptConfigDrafts(
   configs: PromptConfig[]
 ): Record<string, PromptConfigDraft> {
@@ -634,6 +647,7 @@ export default function App() {
   const [profileSkillsInput, setProfileSkillsInput] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isChatDrawerOpen, setIsChatDrawerOpen] = useState(false);
+  const [copiedArtifactKey, setCopiedArtifactKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -1451,6 +1465,25 @@ export default function App() {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "No se pudo copiar el diagnostico";
+      setErrorMessage(message);
+    }
+  }
+
+  async function handleCopyArtifactContent(copyKey: string, content: string) {
+    const payload = content.trim();
+    if (!payload) {
+      setErrorMessage("No hay contenido para copiar.");
+      return;
+    }
+    try {
+      await copyToClipboard(payload);
+      setCopiedArtifactKey(copyKey);
+      window.setTimeout(() => {
+        setCopiedArtifactKey((current) => (current === copyKey ? null : current));
+      }, 1600);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo copiar el artefacto";
       setErrorMessage(message);
     }
   }
@@ -3321,22 +3354,62 @@ export default function App() {
             )}
           </article>
         ) : null}
-        {guidanceText ? (
-          <article className="chatBubble chatBubbleAssistant">
-            <p className="chatRole">Guia de perfil</p>
-            <p className="chatContent">{guidanceText}</p>
-          </article>
-        ) : null}
-        {artifacts.length > 0 ? (
-          <div className="chatList">
-            {artifacts.map((artifact) => (
-              <article className="chatBubble chatBubbleUser" key={artifact.artifact_id}>
-                <p className="chatRole">{artifact.artifact_type}</p>
-                <p className="chatContent">{artifact.content}</p>
-              </article>
-            ))}
-          </div>
-        ) : null}
+        <article className="manualCard artifactPanel">
+          <p className="chatRole">Panel de artefactos (V1)</p>
+          {!guidanceText && artifacts.length === 0 ? (
+            <p className="metaText">
+              Aun no hay materiales generados para esta oportunidad.
+            </p>
+          ) : (
+            <div className="artifactList">
+              {guidanceText ? (
+                <article className="artifactItem">
+                  <div className="panelHeader">
+                    <div>
+                      <p className="chatRole">Guia de perfil</p>
+                      <p className="metaText">Ayuda textual contextual</p>
+                    </div>
+                    <div className="cardActions">
+                      <button
+                        onClick={() =>
+                          void handleCopyArtifactContent("guidance_text", guidanceText)
+                        }
+                        type="button"
+                      >
+                        {copiedArtifactKey === "guidance_text" ? "Copiado" : "Copiar"}
+                      </button>
+                    </div>
+                  </div>
+                  <p className="chatContent artifactContent">{guidanceText}</p>
+                </article>
+              ) : null}
+              {artifacts.map((artifact) => {
+                const copyKey = `${artifact.artifact_type}:${artifact.artifact_id}`;
+                return (
+                  <article className="artifactItem" key={artifact.artifact_id}>
+                    <div className="panelHeader">
+                      <div>
+                        <p className="chatRole">{getArtifactTypeLabel(artifact.artifact_type)}</p>
+                        <p className="metaText">artifact_id: {artifact.artifact_id}</p>
+                      </div>
+                      <div className="cardActions">
+                        <button
+                          onClick={() =>
+                            void handleCopyArtifactContent(copyKey, artifact.content)
+                          }
+                          type="button"
+                        >
+                          {copiedArtifactKey === copyKey ? "Copiado" : "Copiar"}
+                        </button>
+                      </div>
+                    </div>
+                    <p className="chatContent artifactContent">{artifact.content}</p>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </article>
         {selectedOpportunity ? (
           <article className="manualCard">
             <p className="chatRole">Historico IA (persistido)</p>

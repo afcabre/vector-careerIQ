@@ -97,6 +97,7 @@
 - microcopy frontend unificado en espanol para acciones principales de analisis/preparacion/artefactos y etiquetas de resultados
 - drawer de chat refinado para movil como panel inferior (`bottom sheet`) con quick starts scrollables y mejor usabilidad
 - build frontend revalidado tras cierre de microcopy/UX: `npm run build` en `OK`
+- `ARTEFACT_EDITOR_PANEL` simplificado implementado en `analysis`: lectura estructurada por tipo de material + accion de copiado por bloque
 - contratos API de `search` reforzados para validar `provider_status` (fallo total, degradacion parcial y config faltante)
 - contratos API/admin de `search-providers` reforzados para `GET`/`PATCH` y manejo `404` en proveedor desconocido
 - `prepare/stream` en frontend muestra deltas no solo de `guidance_text`, tambien de `cover_letter` y `experience_summary`
@@ -202,6 +203,7 @@
 - indicador radial de match porcentual en cards de oportunidad, condicionado a implementacion de scoring numerico formal
 - `Profile diff` por vacante para evidenciar brechas del perfil del candidato frente a requisitos de la oportunidad
 - datos de contacto en panel de perfil (diferido fuera de alcance V1)
+- `ARTEFACT_EDITOR_PANEL` avanzado (toolbar de formato, exportacion PDF y vista split con insights) diferido para versiones posteriores
 
 ## Bloqueadores
 - no hay bloqueadores funcionales de alcance V1
@@ -209,5 +211,4 @@
 - riesgo operativo local: entorno de desarrollo modificado para diagnostico (`anyio` downgraded en `.venv`) sin solucion aun para el bloqueo ASGI
 
 ## Siguiente Actividad
-- evaluar componente `ARTEFACT_EDITOR_PANEL` simplificado para V1 (solo lectura estructurada + export basico diferido)
 - revisar navegacion/jerarquia visual final de pagina `analysis` para reducir densidad de informacion en una sola vista

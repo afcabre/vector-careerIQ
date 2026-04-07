@@ -522,6 +522,30 @@ button:disabled {
   gap: 8px;
 }
 
+.artifactPanel {
+  gap: 10px;
+}
+
+.artifactList {
+  display: grid;
+  gap: 10px;
+}
+
+.artifactItem {
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border-subtle));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-card) 80%, #0f172a);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.artifactContent {
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 .manualCard input,
 .manualCard textarea,
 .manualCard select {
