@@ -12,6 +12,7 @@ from app.core.security import SessionData
 from app.core.settings import get_settings
 from app.services import artifact_store, conversation_store, cv_store, opportunity_store, person_store, session_store
 from app.services.ai_run_store import (
+    ACTION_ANALYZE_CULTURAL_FIT,
     ACTION_PREPARE_GUIDANCE,
     reset_ai_runs,
     upsert_current_ai_run,
@@ -229,6 +230,90 @@ class SseFlowsTests(unittest.TestCase):
         complete_payload = next(payload for name, payload in events if name == "message_complete")
         analysis_text = str(complete_payload.get("analysis_text", ""))
         self.assertEqual(analysis_text, streamed_text)
+
+    def test_analyze_profile_match_stream_emits_payload_and_updates_run(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Data Engineer",
+            company="DataCo",
+            location="Remote",
+            raw_text="Role details",
+        )
+        opportunity_id = created["opportunity_id"]
+        semantic = {
+            "source": "semantic_retrieval",
+            "query": "query",
+            "top_k": 24,
+            "snippets": ["s1"],
+        }
+        with patch.object(
+            opportunities_api,
+            "stream_analyze_profile_match_text",
+            return_value=(semantic, iter(["Ana", "lisis perfil"])),
+        ):
+            response = asyncio.run(
+                opportunities_api.analyze_profile_match_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    payload=opportunities_api.ActionRequest(force_recompute=True),
+                    _=self.session,
+                    settings=get_settings(),
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        deltas = [payload["delta"] for name, payload in events if name == "message_delta"]
+        self.assertEqual("".join(deltas), "Analisis perfil")
+        complete_payload = next(payload for name, payload in events if name == "message_complete")
+        self.assertEqual(complete_payload["analysis_text"], "Analisis perfil")
+        self.assertFalse(bool(complete_payload.get("served_from_cache", True)))
+        self.assertEqual(complete_payload["semantic_evidence"]["top_k"], 24)
+
+    def test_analyze_cultural_fit_stream_uses_cached_run_when_not_forced(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Culture Analyst",
+            company="People Co",
+            location="Remote",
+            raw_text="Role details",
+        )
+        opportunity_id = created["opportunity_id"]
+        upsert_current_ai_run(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            action_key=ACTION_ANALYZE_CULTURAL_FIT,
+            result_payload={
+                "analysis_text": "Fit cultural en cache",
+                "cultural_confidence": "medium",
+                "cultural_warnings": ["evidencia limitada"],
+                "cultural_signals": [],
+            },
+        )
+
+        with patch.object(
+            opportunities_api,
+            "stream_analyze_cultural_fit_text",
+            side_effect=AssertionError("should not recompute"),
+        ):
+            response = asyncio.run(
+                opportunities_api.analyze_cultural_fit_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    payload=opportunities_api.ActionRequest(force_recompute=False),
+                    _=self.session,
+                    settings=get_settings(),
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        deltas = [payload["delta"] for name, payload in events if name == "message_delta"]
+        self.assertEqual(deltas, ["Fit cultural en cache"])
+        complete_payload = next(payload for name, payload in events if name == "message_complete")
+        self.assertTrue(bool(complete_payload.get("served_from_cache", False)))
+        self.assertEqual(complete_payload["cultural_confidence"], "medium")
+        self.assertEqual(complete_payload["cultural_warnings"], ["evidencia limitada"])
 
     def test_prepare_stream_emits_channels_and_persists_artifacts(self) -> None:
         created = opportunity_store.import_text_opportunity(

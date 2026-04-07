@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `prompt layering global + historico IA + trazas exactas de request por proveedor en backend/UI`
+- checkpoint_actual: `trazas exactas de request + SSE separado por accion en analyze (perfil/cultura)`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
 - ultima_actualizacion: `2026-04-06`
 
@@ -107,6 +107,8 @@
 - frontend consume SSE de `analyze/prepare` con render incremental y fallback automatico a endpoints no-stream
 - frontend usa `analyze/stream` y `prepare/stream` como camino primario desde acciones de UI (`Analyze`/`Prepare`) con fallback no-stream si falla el canal SSE
 - `prepare/stream` alineado a control de consumo de V1: recibe `targets` y `force_recompute`, sirve cache por accion cuando aplica y solo genera/streaming de materiales seleccionados
+- backend expone SSE separado por accion para analyze: `.../analyze/profile-match/stream` y `.../analyze/cultural-fit/stream`
+- frontend usa endpoints SSE separados por accion en botones `Analyze perfil` y `Analyze cultura` (fallback a no-stream por accion)
 - suite backend verificada localmente: `8 tests` en `OK`
 - build frontend verificado localmente: `npm run build` en `OK`
 - pruebas de integracion de `prepare` y persistencia/reemplazo de artefactos agregadas en `apps/backend/tests/test_prepare_artifacts.py`
@@ -137,7 +139,7 @@
 - intento de mitigacion local ejecutado: downgrade de `anyio` de `4.13.0` a `4.4.0` en `.venv`; el bloqueo de `TestClient` persiste
 - suite backend revalidada tras hardening SSE: `51 tests` en `OK` (`skipped=1`)
 - suite backend revalidada tras refuerzo de contratos HTTP fallback/degradacion: `55 tests` en `OK` (`skipped=1`)
-- suite backend actualizada con contratos de `request-traces`: `60 tests` en `OK` (`skipped=1`)
+- suite backend actualizada con contratos SSE separados para analyze + `request-traces`: `62 tests` en `OK` (`skipped=1`)
 
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada de CV a Markdown (PyMuPDF/LlamaIndex) para mejorar jerarquia semantica

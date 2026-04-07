@@ -38,6 +38,7 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
 - en fit cultural, ausencia de evidencia para campos criticos se reporta como `indeterminado` + red flag (sin descarte automatico)
 - chat frontend usa streaming SSE real sobre `/chat/stream` con render incremental y fallback a `/chat` no-stream
 - criterio de producto: el streaming SSE no debe quedar restringido a chat; debe aplicarse tambien a salidas IA de `analyze` y `prepare`
+- `analyze` en frontend usa SSE separado por accion: `profile-match/stream` y `cultural-fit/stream` (fallback a no-stream)
 - observabilidad basica agregada en backend para errores/fallbacks de proveedores y retrieval semantico
 
 ## Siguiente paso
@@ -147,6 +148,8 @@ Mapa rapido endpoint -> flow:
 - `POST /api/persons/{person_id}/chat` y `.../chat/stream`: `guardrails_core + system_identity + task_chat`
 - `POST /api/persons/{person_id}/opportunities/{opportunity_id}/analyze/profile-match`: `guardrails_core + system_identity + task_analyze_profile_match`
 - `POST /api/persons/{person_id}/opportunities/{opportunity_id}/analyze/cultural-fit`: `guardrails_core + system_identity + task_analyze_cultural_fit`
+- `POST /api/persons/{person_id}/opportunities/{opportunity_id}/analyze/profile-match/stream`: SSE especifico de `analyze profile-match`
+- `POST /api/persons/{person_id}/opportunities/{opportunity_id}/analyze/cultural-fit/stream`: SSE especifico de `analyze cultural-fit`
 - `POST /api/persons/{person_id}/opportunities/{opportunity_id}/prepare`: `guardrails_core + system_identity + task_prepare_*` segun `targets`
 - `POST /api/persons/{person_id}/opportunities/{opportunity_id}/prepare/stream`: misma composicion de `prepare` con SSE por canal y soporte de `targets` + `force_recompute`
 - `GET /api/persons/{person_id}/opportunities/{opportunity_id}/ai-runs`: historico backend por accion IA (`action_key` opcional)
