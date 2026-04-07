@@ -29,6 +29,7 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
 - frontend agrupa trazas por `run_id` y habilita navegacion bidireccional `request <-> response` con vista unificada por ejecucion
 - administracion de busqueda agrega switches por proveedor (`Tavily`, `Adzuna`, `Remotive`) para habilitar/deshabilitar ejecucion por UI
 - busqueda Tavily aplica cap de query a `400` caracteres para evitar `HTTP 400` por longitud
+- respuesta de busqueda incluye `provider_status` por ejecucion (estado por proveedor, razon y conteo) y frontend lo muestra en el panel de busqueda
 - importacion manual de vacantes por URL y texto pegado desde frontend
 - carga de CV por persona (`/cv`) con un CV activo por perfil y extraccion base de texto
 - indexacion vectorial del CV activo habilitada (embeddings OpenAI + upsert/query en Pinecone cuando hay configuracion)

@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `admin de proveedores de busqueda + guard de query Tavily (400 chars) + observabilidad de trazas`
+- checkpoint_actual: `admin de proveedores + estado por proveedor en cada busqueda + guard de query Tavily (400 chars)`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
 - ultima_actualizacion: `2026-04-07`
 
@@ -54,12 +54,14 @@
 - busqueda Tavily de vacantes usa construccion de query configurable via `prompt_configs` (`search_jobs_tavily`)
 - busqueda de vacantes respeta habilitacion por proveedor (`tavily`, `adzuna`, `remotive`) definida en admin UI/API
 - query de Tavily para vacantes se recorta a maximo `400` caracteres para evitar `HTTP 400` por longitud
+- respuesta de busqueda expone `provider_status` por ejecucion (estado, razon y conteo por proveedor)
 - fit cultural Tavily usa construccion de query configurable via `prompt_configs` (`search_culture_tavily`)
 - pruebas de contrato/admin de prompt configs agregadas en `apps/backend/tests/test_prompt_config_admin.py` (`5 tests` en `OK`)
 - frontend incorpora seccion `Administracion de prompts (global V1)` para listar/editar `template_text`, `target_sources` e `is_active`
 - frontend consume endpoints admin de prompt configs y aplica validaciones basicas antes de guardar
 - frontend de admin prompts permite consultar versiones por flow y restaurar una version previa (rollback)
 - frontend incorpora seccion de administracion de proveedores de busqueda con checkboxes para habilitar/deshabilitar ejecucion por proveedor
+- frontend de busqueda muestra panel de diagnostico por proveedor usando `provider_status` de la ultima ejecucion
 - build frontend verificado localmente tras integracion UI admin: `npm run build` en `OK`
 - prompt configs ampliados para V1 con capas editables: `guardrails_core` (global), `system_identity` (global) y `task_*` por accion (`chat`, `analyze`, `prepare`)
 - arquitectura normativa actualizada con matriz operativa de prompts/parametros V1 (destino, objetivo, placeholders, alcance, riesgo y control de consumo)
