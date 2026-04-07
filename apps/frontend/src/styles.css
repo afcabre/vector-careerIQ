@@ -1,12 +1,18 @@
 :root {
-  color-scheme: light;
-  --bg: #f3efe6;
-  --panel: #fffaf2;
-  --ink: #1f1b16;
-  --muted: #6d6256;
-  --line: #d9cdbf;
-  --accent: #0e6b58;
-  --accent-strong: #084d40;
+  color-scheme: dark;
+  --bg-main: #0b1120;
+  --bg-deep: #111827;
+  --surface-card: #1e293b;
+  --surface-soft: #334155;
+  --accent: #22d3ee;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #f43f5e;
+  --text-primary: #f9fafb;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --border-subtle: #334155;
+  --ring: #22d3ee4d;
 }
 
 * {
@@ -15,106 +21,143 @@
 
 body {
   margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "IBM Plex Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   background:
-    radial-gradient(circle at top left, #fff6d9 0, transparent 28%),
-    linear-gradient(180deg, #f6f1e8 0%, var(--bg) 100%);
-  color: var(--ink);
+    radial-gradient(1200px 500px at 10% -10%, rgba(34, 211, 238, 0.09), transparent 55%),
+    radial-gradient(900px 400px at 95% 0%, rgba(16, 185, 129, 0.08), transparent 50%),
+    linear-gradient(180deg, #0b1120 0%, #0f172a 70%, #0b1120 100%);
+  color: var(--text-primary);
 }
 
-button {
+button,
+input,
+textarea,
+select {
   font: inherit;
 }
 
-input {
-  font: inherit;
-}
-
-textarea {
-  font: inherit;
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 3px var(--ring);
 }
 
 .shell {
   min-height: 100vh;
-  padding: 48px 20px 64px;
-  max-width: 1100px;
+  padding: 32px 20px 72px;
+  max-width: 1240px;
   margin: 0 auto;
 }
 
 .hero {
-  margin-bottom: 28px;
+  margin-bottom: 22px;
 }
 
 .eyebrow {
-  margin: 0 0 12px;
-  color: var(--accent-strong);
-  font-size: 0.9rem;
-  letter-spacing: 0.08em;
+  margin: 0 0 10px;
+  color: var(--accent);
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
 .hero h1 {
   margin: 0;
-  font-size: clamp(2.2rem, 5vw, 4.3rem);
-  line-height: 0.96;
-  max-width: 12ch;
+  font-size: clamp(1.9rem, 4vw, 3.1rem);
+  line-height: 1.03;
+  max-width: 20ch;
 }
 
 .compactTitle {
   margin: 0;
-  font-size: clamp(1.6rem, 4vw, 2.2rem);
+  font-size: clamp(1.3rem, 3vw, 1.9rem);
 }
 
 .lede {
-  max-width: 60ch;
-  color: var(--muted);
-  font-size: 1.05rem;
+  max-width: 68ch;
+  color: var(--text-secondary);
+  font-size: 1rem;
 }
 
 .panel {
-  background: color-mix(in srgb, var(--panel) 90%, white);
-  border: 1px solid var(--line);
-  border-radius: 28px;
-  padding: 24px;
-  box-shadow: 0 18px 50px rgba(31, 27, 22, 0.08);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-card) 88%, #0f172a),
+    color-mix(in srgb, var(--surface-card) 94%, #0f172a)
+  );
+  border: 1px solid var(--border-subtle);
+  border-radius: 22px;
+  padding: 22px;
+  box-shadow:
+    0 18px 42px rgba(2, 6, 23, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .panelHeader {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  gap: 14px;
   align-items: end;
-  margin-bottom: 24px;
+  margin-bottom: 18px;
 }
 
 .panelHeader h2 {
-  margin: 0 0 6px;
+  margin: 0 0 5px;
+  font-size: 1.15rem;
 }
 
 .panelHeader p {
   margin: 0;
-  color: var(--muted);
+  color: var(--text-secondary);
+}
+
+.workspaceTopbar {
+  position: sticky;
+  top: 8px;
+  z-index: 30;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  background: color-mix(in srgb, var(--bg-deep) 75%, transparent);
+  backdrop-filter: blur(8px);
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--border-subtle));
+}
+
+.workspaceTopbar .eyebrow {
+  margin-bottom: 4px;
 }
 
 .cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding: 4px 2px 10px;
+  scroll-snap-type: x mandatory;
 }
 
 .card {
-  border: 1px solid var(--line);
-  border-radius: 22px;
-  padding: 18px;
-  background: rgba(255, 255, 255, 0.72);
+  flex: 0 0 min(340px, 85vw);
+  scroll-snap-align: start;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 80%, var(--accent));
+  border-left: 4px solid var(--accent);
+  border-radius: 16px;
+  padding: 16px;
+  background: color-mix(in srgb, var(--surface-card) 90%, #0f172a);
 }
 
 .cardTag {
   display: inline-block;
   margin-bottom: 10px;
-  color: var(--accent-strong);
-  font-size: 0.8rem;
-  letter-spacing: 0.06em;
+  color: var(--accent);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
@@ -123,8 +166,8 @@ textarea {
 }
 
 .card p {
-  margin: 0 0 16px;
-  color: var(--muted);
+  margin: 0 0 12px;
+  color: var(--text-secondary);
 }
 
 .cardActions {
@@ -136,33 +179,44 @@ textarea {
 .cardActions button,
 .ghostButton {
   border-radius: 999px;
-  border: 1px solid var(--accent);
-  padding: 10px 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 70%, var(--border-subtle));
+  padding: 9px 14px;
   cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
 .cardActions button {
-  background: var(--accent);
-  color: white;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--text-primary);
+}
+
+.cardActions button:hover {
+  background: color-mix(in srgb, var(--accent) 34%, transparent);
 }
 
 .cardActions button.activeButton {
-  background: var(--accent-strong);
-  border-color: var(--accent-strong);
+  background: var(--accent);
+  color: #0b1120;
+  border-color: var(--accent);
+  font-weight: 700;
 }
 
 .ghostButton {
   background: transparent;
-  color: var(--accent-strong);
+  color: var(--accent);
+}
+
+.ghostButton:hover {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 .selectedPanel {
-  margin-top: 18px;
+  margin-top: 14px;
 }
 
 .metaText {
   margin: 0;
-  color: var(--muted);
+  color: var(--text-secondary);
   overflow-wrap: anywhere;
 }
 
@@ -172,38 +226,27 @@ textarea {
 
 .authForm {
   display: grid;
-  gap: 14px;
+  gap: 12px;
 }
 
 .field {
   display: grid;
   gap: 6px;
-  color: var(--muted);
+  color: var(--text-secondary);
 }
 
-.field input {
-  border: 1px solid var(--line);
+.field input,
+.field textarea,
+.field select {
+  border: 1px solid var(--border-subtle);
   border-radius: 12px;
   padding: 10px 12px;
-  background: #fff;
-  color: var(--ink);
+  background: color-mix(in srgb, var(--bg-deep) 90%, black);
+  color: var(--text-primary);
 }
 
 .field textarea {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 10px 12px;
-  background: #fff;
-  color: var(--ink);
   resize: vertical;
-}
-
-.field select {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 10px 12px;
-  background: #fff;
-  color: var(--ink);
 }
 
 .primaryButton {
@@ -211,17 +254,19 @@ textarea {
   border: 1px solid var(--accent);
   padding: 10px 16px;
   background: var(--accent);
-  color: white;
+  color: #0b1120;
+  font-weight: 700;
   cursor: pointer;
 }
 
-.primaryButton:disabled {
-  opacity: 0.7;
+.primaryButton:disabled,
+button:disabled {
+  opacity: 0.62;
   cursor: not-allowed;
 }
 
 .errorText {
-  color: #9a1f24;
+  color: var(--danger);
   margin: 0;
 }
 
@@ -231,30 +276,31 @@ textarea {
 }
 
 .chatBubble {
-  border-radius: 16px;
+  border-radius: 14px;
   padding: 12px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--border-subtle);
 }
 
 .chatBubbleUser {
-  background: rgba(14, 107, 88, 0.08);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 .chatBubbleAssistant {
-  background: rgba(255, 255, 255, 0.9);
+  background: color-mix(in srgb, var(--surface-card) 85%, #0f172a);
 }
 
 .chatRole {
   margin: 0 0 6px;
-  font-size: 0.8rem;
-  letter-spacing: 0.05em;
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  font-weight: 700;
   text-transform: uppercase;
-  color: var(--accent-strong);
+  color: var(--accent);
 }
 
 .chatContent {
   margin: 0;
-  color: var(--ink);
+  color: var(--text-primary);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -280,7 +326,11 @@ textarea {
 }
 
 .searchResultCard {
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.searchResultCard:hover {
+  transform: translateY(-1px);
 }
 
 .searchResultCardActive {
@@ -290,27 +340,27 @@ textarea {
 
 .inlineDetailCard {
   margin-top: 10px;
-  border: 1px solid var(--line);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 80%, var(--accent));
   border-radius: 12px;
   padding: 10px;
-  background: rgba(255, 255, 255, 0.92);
+  background: color-mix(in srgb, var(--surface-soft) 46%, #0f172a);
 }
 
 .payloadPre {
   margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  font-family: "Courier New", Courier, monospace;
-  font-size: 0.85rem;
-  color: var(--ink);
+  font-family: "JetBrains Mono", "Cascadia Code", "Fira Code", monospace;
+  font-size: 0.82rem;
+  color: var(--text-primary);
 }
 
 .chatForm input {
-  border: 1px solid var(--line);
+  border: 1px solid var(--border-subtle);
   border-radius: 12px;
   padding: 10px 12px;
-  background: #fff;
-  color: var(--ink);
+  background: color-mix(in srgb, var(--bg-deep) 90%, black);
+  color: var(--text-primary);
 }
 
 .manualGrid {
@@ -333,21 +383,22 @@ textarea {
 }
 
 .manualCard {
-  border: 1px solid var(--line);
-  border-radius: 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.85);
+  background: color-mix(in srgb, var(--surface-card) 88%, #0f172a);
   display: grid;
   gap: 8px;
 }
 
 .manualCard input,
-.manualCard textarea {
-  border: 1px solid var(--line);
+.manualCard textarea,
+.manualCard select {
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
   padding: 9px 10px;
-  background: #fff;
-  color: var(--ink);
+  background: color-mix(in srgb, var(--bg-deep) 90%, black);
+  color: var(--text-primary);
 }
 
 .manualCard textarea {
@@ -368,8 +419,12 @@ textarea {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--ink);
+  color: var(--text-primary);
   font-size: 0.95rem;
+}
+
+.checkboxRow input[type="checkbox"] {
+  accent-color: var(--accent);
 }
 
 .optionList {
@@ -379,7 +434,7 @@ textarea {
 
 .payloadDetails summary {
   cursor: pointer;
-  color: var(--accent-strong);
+  color: var(--accent);
   font-size: 0.9rem;
 }
 
@@ -387,13 +442,38 @@ textarea {
   margin: 18px 0 10px;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 860px) {
   .panelHeader {
     align-items: stretch;
     flex-direction: column;
   }
 
+  .workspaceTopbar {
+    align-items: stretch;
+    flex-direction: column;
+    position: static;
+  }
+
+  .hero h1 {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .shell {
+    padding: 20px 14px 52px;
+  }
+
+  .panel {
+    padding: 16px;
+    border-radius: 16px;
+  }
+
   .manualRow {
     grid-template-columns: 1fr;
+  }
+
+  .card {
+    flex-basis: 88vw;
   }
 }
