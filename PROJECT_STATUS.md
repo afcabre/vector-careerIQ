@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `hardening de request_traces + UX unificada por run_id + versionado/rollback de prompt configs`
+- checkpoint_actual: `admin de proveedores de busqueda + guard de query Tavily (400 chars) + observabilidad de trazas`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
 - ultima_actualizacion: `2026-04-07`
 
@@ -50,12 +50,16 @@
 - backend incorpora `prompt_config_store` con defaults V1, validacion y persistencia `memory/firestore`
 - backend expone endpoints admin `GET /api/admin/prompt-configs`, `GET /api/admin/prompt-configs/{flow_key}` y `PATCH /api/admin/prompt-configs/{flow_key}`
 - backend agrega historial de versiones en `prompt_config_versions` y endpoints admin `GET /api/admin/prompt-configs/{flow_key}/versions` + `POST /api/admin/prompt-configs/{flow_key}/rollback`
+- backend agrega configuracion global por proveedor de busqueda en `search_provider_configs` y endpoints admin `GET /api/admin/search-providers` + `PATCH /api/admin/search-providers/{provider_key}`
 - busqueda Tavily de vacantes usa construccion de query configurable via `prompt_configs` (`search_jobs_tavily`)
+- busqueda de vacantes respeta habilitacion por proveedor (`tavily`, `adzuna`, `remotive`) definida en admin UI/API
+- query de Tavily para vacantes se recorta a maximo `400` caracteres para evitar `HTTP 400` por longitud
 - fit cultural Tavily usa construccion de query configurable via `prompt_configs` (`search_culture_tavily`)
 - pruebas de contrato/admin de prompt configs agregadas en `apps/backend/tests/test_prompt_config_admin.py` (`5 tests` en `OK`)
 - frontend incorpora seccion `Administracion de prompts (global V1)` para listar/editar `template_text`, `target_sources` e `is_active`
 - frontend consume endpoints admin de prompt configs y aplica validaciones basicas antes de guardar
 - frontend de admin prompts permite consultar versiones por flow y restaurar una version previa (rollback)
+- frontend incorpora seccion de administracion de proveedores de busqueda con checkboxes para habilitar/deshabilitar ejecucion por proveedor
 - build frontend verificado localmente tras integracion UI admin: `npm run build` en `OK`
 - prompt configs ampliados para V1 con capas editables: `guardrails_core` (global), `system_identity` (global) y `task_*` por accion (`chat`, `analyze`, `prepare`)
 - arquitectura normativa actualizada con matriz operativa de prompts/parametros V1 (destino, objetivo, placeholders, alcance, riesgo y control de consumo)
@@ -149,6 +153,7 @@
 - suite backend revalidada tras refuerzo de contratos HTTP fallback/degradacion: `55 tests` en `OK` (`skipped=1`)
 - suite backend actualizada con contratos de enlace `run_id` en request traces: `63 tests` en `OK` (`skipped=1`)
 - suite backend revalidada con hardening de trazas y versionado/rollback de prompts: `67 tests` en `OK` (`skipped=1`)
+- suite backend revalidada con admin de proveedores y guard de longitud Tavily: `72 tests` en `OK` (`skipped=1`)
 
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada de CV a Markdown (PyMuPDF/LlamaIndex) para mejorar jerarquia semantica
