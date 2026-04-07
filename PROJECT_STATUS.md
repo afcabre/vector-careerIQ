@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `contratos HTTP reforzados para search-provider admin + provider_status en search + streaming visible en prepare`
+- checkpoint_actual: `diagnostico de proveedores endurecido en UI (motivo, HTTP status, detalle tecnico y copia) + contratos HTTP reforzados + streaming visible en prepare`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
 - ultima_actualizacion: `2026-04-07`
 
@@ -62,6 +62,7 @@
 - frontend de admin prompts permite consultar versiones por flow y restaurar una version previa (rollback)
 - frontend incorpora seccion de administracion de proveedores de busqueda con checkboxes para habilitar/deshabilitar ejecucion por proveedor
 - frontend de busqueda muestra panel de diagnostico por proveedor usando `provider_status` de la ultima ejecucion
+- frontend de busqueda muestra motivo amigable, `HTTP status` (si aplica), detalle tecnico y boton de copia por proveedor para depuracion rapida
 - contratos API de `search` reforzados para validar `provider_status` (fallo total, degradacion parcial y config faltante)
 - contratos API/admin de `search-providers` reforzados para `GET`/`PATCH` y manejo `404` en proveedor desconocido
 - `prepare/stream` en frontend muestra deltas no solo de `guidance_text`, tambien de `cover_letter` y `experience_summary`
