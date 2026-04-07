@@ -167,6 +167,19 @@ export type PromptConfig = {
   updated_at: string;
 };
 
+export type PromptConfigVersion = {
+  version_id: string;
+  flow_key: string;
+  template_text: string;
+  target_sources: string[];
+  is_active: boolean;
+  source_updated_by: string;
+  source_updated_at: string;
+  reason: string;
+  created_by: string;
+  created_at: string;
+};
+
 export type RequestTrace = {
   trace_id: string;
   person_id: string;
@@ -319,6 +332,36 @@ export async function updatePromptConfig(
     credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
+  });
+  return parseResponse<PromptConfig>(response);
+}
+
+export async function listPromptConfigVersions(
+  flowKey: string,
+  limit = 20
+): Promise<PromptConfigVersion[]> {
+  const params = new URLSearchParams();
+  params.set("limit", String(Math.max(1, Math.min(100, Math.trunc(limit)))));
+  const response = await fetch(
+    `${API_BASE}/admin/prompt-configs/${flowKey}/versions?${params.toString()}`,
+    {
+      method: "GET",
+      credentials: "include"
+    }
+  );
+  const payload = await parseResponse<{ items: PromptConfigVersion[] }>(response);
+  return payload.items;
+}
+
+export async function rollbackPromptConfig(
+  flowKey: string,
+  versionId: string
+): Promise<PromptConfig> {
+  const response = await fetch(`${API_BASE}/admin/prompt-configs/${flowKey}/rollback`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ version_id: versionId })
   });
   return parseResponse<PromptConfig>(response);
 }

@@ -10,6 +10,7 @@ import {
   Opportunity,
   Person,
   PromptConfig,
+  PromptConfigVersion,
   RequestTrace,
   SearchResult,
   SemanticEvidence,
@@ -28,6 +29,7 @@ import {
   listOpportunities,
   listPersons,
   listPromptConfigs,
+  listPromptConfigVersions,
   listRequestTraces,
   login,
   logout,
@@ -37,6 +39,7 @@ import {
   searchOpportunities,
   sendMessage,
   sendMessageStream,
+  rollbackPromptConfig as rollbackPromptConfigApi,
   updatePromptConfig as updatePromptConfigApi,
   updatePerson as updatePersonProfile,
   updateOpportunity,
@@ -258,6 +261,47 @@ function formatRequestTraceTimestamp(value: string): string {
   return formatAiRunTimestamp(value);
 }
 
+type RequestTraceGroup = {
+  group_id: string;
+  run_id: string;
+  items: RequestTrace[];
+  latest_created_at: string;
+  opportunity_id: string;
+};
+
+function groupRequestTracesByRunId(items: RequestTrace[]): RequestTraceGroup[] {
+  const grouped = new Map<string, RequestTraceGroup>();
+  for (const trace of items) {
+    const runId = trace.run_id.trim();
+    const key = runId || "__no_run_id__";
+    const current = grouped.get(key);
+    if (!current) {
+      grouped.set(key, {
+        group_id: key,
+        run_id: runId,
+        items: [trace],
+        latest_created_at: trace.created_at,
+        opportunity_id: trace.opportunity_id
+      });
+      continue;
+    }
+    current.items.push(trace);
+    if (trace.created_at > current.latest_created_at) {
+      current.latest_created_at = trace.created_at;
+    }
+    if (!current.opportunity_id && trace.opportunity_id) {
+      current.opportunity_id = trace.opportunity_id;
+    }
+  }
+
+  const groups = Array.from(grouped.values());
+  for (const group of groups) {
+    group.items.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }
+  groups.sort((a, b) => b.latest_created_at.localeCompare(a.latest_created_at));
+  return groups;
+}
+
 export default function App() {
   const [view, setView] = useState<ViewState>("checking");
   const [username, setUsername] = useState("tutor");
@@ -272,6 +316,16 @@ export default function App() {
   const [isLoadingPromptConfigs, setIsLoadingPromptConfigs] = useState(false);
   const [promptConfigReloadToken, setPromptConfigReloadToken] = useState(0);
   const [savingPromptFlowKey, setSavingPromptFlowKey] = useState<string | null>(null);
+  const [promptVersionsByFlow, setPromptVersionsByFlow] = useState<
+    Record<string, PromptConfigVersion[]>
+  >({});
+  const [expandedPromptVersions, setExpandedPromptVersions] = useState<
+    Record<string, boolean>
+  >({});
+  const [loadingPromptVersionsFlowKey, setLoadingPromptVersionsFlowKey] = useState<string | null>(
+    null
+  );
+  const [rollingBackPromptFlowKey, setRollingBackPromptFlowKey] = useState<string | null>(null);
   const [newPersonFullName, setNewPersonFullName] = useState("");
   const [newPersonTargetRolesInput, setNewPersonTargetRolesInput] = useState("");
   const [newPersonLocation, setNewPersonLocation] = useState("");
@@ -324,6 +378,7 @@ export default function App() {
   const [traceDestinationFilter, setTraceDestinationFilter] = useState("");
   const [traceOnlyActiveOpportunity, setTraceOnlyActiveOpportunity] = useState(false);
   const [traceRunIdFilter, setTraceRunIdFilter] = useState("");
+  const [focusedRunId, setFocusedRunId] = useState("");
   const [isAnalyzingProfile, setIsAnalyzingProfile] = useState(false);
   const [isAnalyzingCultural, setIsAnalyzingCultural] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
@@ -371,6 +426,8 @@ export default function App() {
       if (view !== "workspace") {
         setPromptConfigs([]);
         setPromptConfigDrafts({});
+        setPromptVersionsByFlow({});
+        setExpandedPromptVersions({});
         return;
       }
       setIsLoadingPromptConfigs(true);
@@ -443,6 +500,7 @@ export default function App() {
         setTraceDestinationFilter("");
         setTraceOnlyActiveOpportunity(false);
         setTraceRunIdFilter("");
+        setFocusedRunId("");
         setOpportunityNotes("");
         setOpportunityStatus("detected");
         return;
@@ -487,6 +545,12 @@ export default function App() {
 
   const selectedOpportunity =
     savedOpportunities.find((item) => item.opportunity_id === selectedOpportunityId) ?? null;
+  const aiRunsById = new Map(aiRuns.map((item) => [item.run_id, item] as const));
+  const requestTraceGroups = groupRequestTracesByRunId(requestTraces);
+  const focusedRun = focusedRunId ? aiRunsById.get(focusedRunId) ?? null : null;
+  const focusedRunRequestTraces = focusedRunId
+    ? requestTraces.filter((item) => item.run_id === focusedRunId)
+    : [];
 
   useEffect(() => {
     if (!selectedPersonId || !selectedOpportunityId) {
@@ -640,6 +704,8 @@ export default function App() {
     setPeople([]);
     setPromptConfigs([]);
     setPromptConfigDrafts({});
+    setPromptVersionsByFlow({});
+    setExpandedPromptVersions({});
     setNewPersonFullName("");
     setNewPersonTargetRolesInput("");
     setNewPersonLocation("");
@@ -663,6 +729,7 @@ export default function App() {
     setTraceDestinationFilter("");
     setTraceOnlyActiveOpportunity(false);
     setTraceRunIdFilter("");
+    setFocusedRunId("");
     setActiveCv(null);
     setSelectedCvFile(null);
   }
@@ -783,6 +850,9 @@ export default function App() {
           is_active: updated.is_active
         }
       }));
+      if (expandedPromptVersions[flowKey]) {
+        await loadPromptVersions(flowKey, true);
+      }
     } catch (error) {
       const message =
         error instanceof Error
@@ -791,6 +861,77 @@ export default function App() {
       setErrorMessage(message);
     } finally {
       setSavingPromptFlowKey(null);
+    }
+  }
+
+  async function loadPromptVersions(flowKey: string, force = false) {
+    if (!force && promptVersionsByFlow[flowKey]) {
+      return;
+    }
+    setLoadingPromptVersionsFlowKey(flowKey);
+    try {
+      const items = await listPromptConfigVersions(flowKey, 20);
+      setPromptVersionsByFlow((current) => ({
+        ...current,
+        [flowKey]: items
+      }));
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo cargar historial de versiones";
+      setErrorMessage(message);
+    } finally {
+      setLoadingPromptVersionsFlowKey((current) =>
+        current === flowKey ? null : current
+      );
+    }
+  }
+
+  function handleTogglePromptVersions(flowKey: string) {
+    setExpandedPromptVersions((current) => {
+      const next = !current[flowKey];
+      const updated = {
+        ...current,
+        [flowKey]: next
+      };
+      if (next) {
+        void loadPromptVersions(flowKey);
+      }
+      return updated;
+    });
+  }
+
+  async function handleRollbackPromptConfig(flowKey: string, versionId: string) {
+    if (!versionId.trim() || rollingBackPromptFlowKey) {
+      return;
+    }
+    const confirmed = window.confirm(
+      "Se restaurara esta version y se sobrescribira la configuracion actual. Continuar?"
+    );
+    if (!confirmed) {
+      return;
+    }
+    setRollingBackPromptFlowKey(flowKey);
+    setErrorMessage(null);
+    try {
+      const updated = await rollbackPromptConfigApi(flowKey, versionId);
+      setPromptConfigs((current) =>
+        current.map((item) => (item.flow_key === updated.flow_key ? updated : item))
+      );
+      setPromptConfigDrafts((current) => ({
+        ...current,
+        [flowKey]: {
+          template_text: updated.template_text,
+          target_sources_input: updated.target_sources.join("\n"),
+          is_active: updated.is_active
+        }
+      }));
+      await loadPromptVersions(flowKey, true);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo restaurar la version seleccionada";
+      setErrorMessage(message);
+    } finally {
+      setRollingBackPromptFlowKey((current) => (current === flowKey ? null : current));
     }
   }
 
@@ -1033,10 +1174,22 @@ export default function App() {
   }
 
   function handleFocusRunTrace(runId: string, opportunityId: string) {
+    setFocusedRunId(runId);
     setTraceRunIdFilter(runId);
     if (opportunityId) {
       setSelectedOpportunityId(opportunityId);
       setTraceOnlyActiveOpportunity(true);
+    }
+  }
+
+  function handleFocusRunResponse(runId: string, opportunityId: string) {
+    if (!runId) {
+      return;
+    }
+    setFocusedRunId(runId);
+    setAiRunActionFilter("");
+    if (opportunityId) {
+      setSelectedOpportunityId(opportunityId);
     }
   }
 
@@ -1636,6 +1789,10 @@ export default function App() {
                 is_active: config.is_active
               };
               const isSaving = savingPromptFlowKey === config.flow_key;
+              const isExpanded = Boolean(expandedPromptVersions[config.flow_key]);
+              const isLoadingVersions = loadingPromptVersionsFlowKey === config.flow_key;
+              const isRollingBack = rollingBackPromptFlowKey === config.flow_key;
+              const versions = promptVersionsByFlow[config.flow_key] ?? [];
               return (
                 <article className="manualCard" key={config.flow_key}>
                   <p className="chatRole">
@@ -1697,7 +1854,70 @@ export default function App() {
                     >
                       {isSaving ? "Guardando..." : "Guardar configuracion"}
                     </button>
+                    <button
+                      disabled={isSaving || isRollingBack}
+                      onClick={() => handleTogglePromptVersions(config.flow_key)}
+                      type="button"
+                    >
+                      {isExpanded ? "Ocultar versiones" : "Ver versiones"}
+                    </button>
                   </div>
+                  {isExpanded ? (
+                    <div className="chatList">
+                      {isLoadingVersions ? (
+                        <p className="metaText">Cargando historial...</p>
+                      ) : versions.length === 0 ? (
+                        <p className="metaText">Sin versiones registradas para este flujo.</p>
+                      ) : (
+                        versions.map((version) => (
+                          <article
+                            className="chatBubble chatBubbleAssistant"
+                            key={version.version_id}
+                          >
+                            <p className="chatRole">
+                              version: {version.version_id}
+                            </p>
+                            <p className="metaText">
+                              creada: {formatAiRunTimestamp(version.created_at)} por{" "}
+                              {version.created_by} · motivo: {version.reason}
+                            </p>
+                            <p className="metaText">
+                              snapshot origen: {version.source_updated_by} ·{" "}
+                              {formatAiRunTimestamp(version.source_updated_at)}
+                            </p>
+                            <details className="payloadDetails">
+                              <summary>Ver template versionado</summary>
+                              <pre className="payloadPre">{version.template_text}</pre>
+                            </details>
+                            {PROMPT_SOURCE_FLOW_KEYS.has(config.flow_key) ? (
+                              <details className="payloadDetails">
+                                <summary>Ver target_sources versionados</summary>
+                                <pre className="payloadPre">
+                                  {JSON.stringify(version.target_sources, null, 2)}
+                                </pre>
+                              </details>
+                            ) : null}
+                            <div className="cardActions">
+                              <button
+                                disabled={isRollingBack}
+                                onClick={() =>
+                                  void handleRollbackPromptConfig(
+                                    config.flow_key,
+                                    version.version_id
+                                  )
+                                }
+                                type="button"
+                              >
+                                {isRollingBack
+                                  ? "Restaurando..."
+                                  : "Restaurar esta version"}
+                              </button>
+                            </div>
+                          </article>
+                        ))
+                      )}
+                    </div>
+                  ) : null}
                 </article>
               );
             })}
@@ -2417,8 +2637,16 @@ export default function App() {
               <div className="chatList">
                 {aiRuns.map((run) => {
                   const previewText = getAiRunPreviewText(run);
+                  const isFocused = focusedRunId === run.run_id;
                   return (
-                    <article className="chatBubble chatBubbleAssistant" key={run.run_id}>
+                    <article
+                      className={
+                        isFocused
+                          ? "chatBubble chatBubbleAssistant searchResultCard searchResultCardActive"
+                          : "chatBubble chatBubbleAssistant"
+                      }
+                      key={run.run_id}
+                    >
                       <p className="chatRole">
                         {AI_RUN_ACTION_LABELS[run.action_key] ?? run.action_key}
                       </p>
@@ -2435,6 +2663,14 @@ export default function App() {
                           type="button"
                         >
                           Ver request exacto
+                        </button>
+                        <button
+                          onClick={() =>
+                            handleFocusRunResponse(run.run_id, run.opportunity_id)
+                          }
+                          type="button"
+                        >
+                          Ver request + response
                         </button>
                       </div>
                       {previewText ? (
@@ -2517,10 +2753,43 @@ export default function App() {
             {traceRunIdFilter ? (
               <div className="cardActions">
                 <p className="metaText">Filtro run_id activo: {traceRunIdFilter}</p>
-                <button onClick={() => setTraceRunIdFilter("")} type="button">
+                <button
+                  onClick={() => {
+                    setTraceRunIdFilter("");
+                    setFocusedRunId("");
+                  }}
+                  type="button"
+                >
                   Limpiar filtro run_id
                 </button>
               </div>
+            ) : null}
+            {focusedRunId ? (
+              <article className="manualCard">
+                <p className="chatRole">Vista unificada por run_id</p>
+                <p className="metaText">
+                  run_id: {focusedRunId} · requests: {focusedRunRequestTraces.length}
+                </p>
+                {focusedRun ? (
+                  <>
+                    <p className="metaText">
+                      accion:{" "}
+                      {AI_RUN_ACTION_LABELS[focusedRun.action_key] ?? focusedRun.action_key} ·
+                      actualizado: {formatAiRunTimestamp(focusedRun.updated_at)}
+                    </p>
+                    <details className="payloadDetails">
+                      <summary>Ver response payload persistido</summary>
+                      <pre className="payloadPre">
+                        {JSON.stringify(focusedRun.result_payload, null, 2)}
+                      </pre>
+                    </details>
+                  </>
+                ) : (
+                  <p className="metaText">
+                    La respuesta de este run no esta cargada en el panel actual.
+                  </p>
+                )}
+              </article>
             ) : null}
             {isLoadingRequestTraces ? (
               <p className="metaText">Cargando trazas...</p>
@@ -2528,25 +2797,66 @@ export default function App() {
               <p className="metaText">No hay trazas para los filtros seleccionados.</p>
             ) : (
               <div className="chatList">
-                {requestTraces.map((trace) => (
-                  <article className="chatBubble chatBubbleAssistant" key={trace.trace_id}>
-                    <p className="chatRole">
-                      {trace.destination.toUpperCase()} · {trace.flow_key}
-                    </p>
-                    <p className="metaText">
-                      trace_id: {trace.trace_id} · oportunidad:{" "}
-                      {trace.opportunity_id || "N/A"} · run_id:{" "}
-                      {trace.run_id || "N/A"} · fecha:{" "}
-                      {formatRequestTraceTimestamp(trace.created_at)}
-                    </p>
-                    <details className="payloadDetails">
-                      <summary>Ver request exacto</summary>
-                      <pre className="payloadPre">
-                        {JSON.stringify(trace.request_payload, null, 2)}
-                      </pre>
-                    </details>
-                  </article>
-                ))}
+                {requestTraceGroups.map((group) => {
+                  const linkedRun = group.run_id ? aiRunsById.get(group.run_id) ?? null : null;
+                  return (
+                    <article className="manualCard" key={group.group_id}>
+                      <p className="chatRole">
+                        {group.run_id ? `run_id: ${group.run_id}` : "run_id: N/A"}
+                      </p>
+                      <p className="metaText">
+                        {group.run_id
+                          ? linkedRun
+                            ? `accion: ${AI_RUN_ACTION_LABELS[linkedRun.action_key] ?? linkedRun.action_key}`
+                            : "accion: sin respuesta cargada"
+                          : "trazas sin enlace a ejecucion IA persistida"}
+                        {" · "}
+                        total requests: {group.items.length}
+                      </p>
+                      {group.run_id ? (
+                        <div className="cardActions">
+                          <button
+                            onClick={() =>
+                              handleFocusRunResponse(group.run_id, group.opportunity_id)
+                            }
+                            type="button"
+                          >
+                            Ver response asociada
+                          </button>
+                          <button
+                            onClick={() =>
+                              handleFocusRunTrace(group.run_id, group.opportunity_id)
+                            }
+                            type="button"
+                          >
+                            Filtrar requests de este run
+                          </button>
+                        </div>
+                      ) : null}
+                      <div className="chatList">
+                        {group.items.map((trace) => (
+                          <article className="chatBubble chatBubbleAssistant" key={trace.trace_id}>
+                            <p className="chatRole">
+                              {trace.destination.toUpperCase()} · {trace.flow_key}
+                            </p>
+                            <p className="metaText">
+                              trace_id: {trace.trace_id} · oportunidad:{" "}
+                              {trace.opportunity_id || "N/A"} · run_id:{" "}
+                              {trace.run_id || "N/A"} · fecha:{" "}
+                              {formatRequestTraceTimestamp(trace.created_at)}
+                            </p>
+                            <details className="payloadDetails">
+                              <summary>Ver request exacto</summary>
+                              <pre className="payloadPre">
+                                {JSON.stringify(trace.request_payload, null, 2)}
+                              </pre>
+                            </details>
+                          </article>
+                        ))}
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             )}
           </>
