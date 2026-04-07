@@ -301,6 +301,8 @@ select:focus-visible {
 .chatQuickStarts {
   display: grid;
   gap: 8px;
+  max-height: 146px;
+  overflow-y: auto;
 }
 
 .chatQuickStarts button {
@@ -407,6 +409,11 @@ button:disabled {
 
 .chatBubbleUser {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.chatBubbleUser .chatRole,
+.chatBubbleUser .chatContent {
+  color: #071120;
 }
 
 .chatBubbleAssistant {
@@ -608,8 +615,16 @@ button:disabled {
 
   .chatDrawer {
     width: 100vw;
+    top: auto;
+    bottom: 0;
+    height: min(82vh, 680px);
     border-left: 0;
     border-top: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border-subtle));
+    transform: translateY(100%);
+  }
+
+  .chatDrawerOpen {
+    transform: translateY(0);
   }
 
   .manualRow {

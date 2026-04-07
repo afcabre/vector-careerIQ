@@ -88,20 +88,20 @@ const OPPORTUNITY_STATUSES = [
 ] as const;
 
 const AI_RUN_ACTION_LABELS: Record<string, string> = {
-  analyze_profile_match: "Analyze perfil-vacante",
-  analyze_cultural_fit: "Analyze fit cultural",
-  prepare_guidance_text: "Prepare ayuda textual",
-  prepare_cover_letter: "Prepare carta de presentacion",
-  prepare_experience_summary: "Prepare resumen de experiencia"
+  analyze_profile_match: "Analizar perfil-vacante",
+  analyze_cultural_fit: "Analizar ajuste cultural",
+  prepare_guidance_text: "Preparar guia de perfil",
+  prepare_cover_letter: "Preparar carta de presentacion",
+  prepare_experience_summary: "Preparar resumen de experiencia"
 };
 
 const AI_RUN_ACTION_FILTERS: Array<{ value: string; label: string }> = [
   { value: "", label: "Todas las acciones" },
-  { value: "analyze_profile_match", label: "Analyze perfil-vacante" },
-  { value: "analyze_cultural_fit", label: "Analyze fit cultural" },
-  { value: "prepare_guidance_text", label: "Prepare ayuda textual" },
-  { value: "prepare_cover_letter", label: "Prepare carta de presentacion" },
-  { value: "prepare_experience_summary", label: "Prepare resumen de experiencia" }
+  { value: "analyze_profile_match", label: "Analizar perfil-vacante" },
+  { value: "analyze_cultural_fit", label: "Analizar ajuste cultural" },
+  { value: "prepare_guidance_text", label: "Preparar guia de perfil" },
+  { value: "prepare_cover_letter", label: "Preparar carta de presentacion" },
+  { value: "prepare_experience_summary", label: "Preparar resumen de experiencia" }
 ];
 
 const TRACE_DESTINATION_FILTERS: Array<{ value: string; label: string }> = [
@@ -115,14 +115,14 @@ const TRACE_DESTINATION_FILTERS: Array<{ value: string; label: string }> = [
 const PROMPT_FLOW_LABELS: Record<string, string> = {
   search_jobs_tavily: "Busqueda de vacantes (Tavily)",
   search_culture_tavily: "Fit cultural (Tavily)",
-  guardrails_core: "Guardrails Core (global)",
-  system_identity: "System Identity (global)",
-  task_chat: "Task Prompt: Chat",
-  task_analyze_profile_match: "Task Prompt: Analyze Perfil-Vacante",
-  task_analyze_cultural_fit: "Task Prompt: Analyze Fit Cultural",
-  task_prepare_guidance: "Task Prompt: Prepare Guidance",
-  task_prepare_cover_letter: "Task Prompt: Prepare Carta",
-  task_prepare_experience_summary: "Task Prompt: Prepare Resumen"
+  guardrails_core: "Guardrails core (global)",
+  system_identity: "Identidad del sistema (global)",
+  task_chat: "Prompt de tarea: Chat",
+  task_analyze_profile_match: "Prompt de tarea: Analizar perfil-vacante",
+  task_analyze_cultural_fit: "Prompt de tarea: Analizar ajuste cultural",
+  task_prepare_guidance: "Prompt de tarea: Preparar guia de perfil",
+  task_prepare_cover_letter: "Prompt de tarea: Preparar carta",
+  task_prepare_experience_summary: "Prompt de tarea: Preparar resumen"
 };
 
 const PROMPT_FLOW_ORDER: string[] = [
@@ -396,9 +396,9 @@ function buildSearchProviderDiagnostic(status: SearchProviderStatus): SearchProv
 
 function formatSearchProviderStatus(status: SearchProviderStatus): string {
   const diagnostic = buildSearchProviderDiagnostic(status);
-  const enabledText = status.enabled ? "enabled" : "disabled";
-  const attemptedText = status.attempted ? "attempted" : "not attempted";
-  return `${diagnostic.statusLabel} · ${enabledText} · ${attemptedText} · results=${status.results_count}`;
+  const enabledText = status.enabled ? "habilitado" : "deshabilitado";
+  const attemptedText = status.attempted ? "ejecutado" : "no ejecutado";
+  return `${diagnostic.statusLabel} · ${enabledText} · ${attemptedText} · resultados=${status.results_count}`;
 }
 
 function buildSearchProviderDiagnosticText(status: SearchProviderStatus): string {
@@ -764,7 +764,7 @@ export default function App() {
     : showAdminPromptsPage
       ? "Administracion global"
       : showProfilePage
-        ? "Perfil y DNA"
+        ? "Perfil y ADN"
         : showOpportunitiesPage
           ? "Explorador de oportunidades"
           : "Analisis y preparacion";
@@ -1362,7 +1362,7 @@ export default function App() {
             selectedOpportunityId,
             traceRunIdFilter
           );
-          setErrorMessage("Streaming no disponible. Se uso envio no-stream como fallback.");
+          setErrorMessage("Streaming no disponible. Se uso envio sin streaming como respaldo.");
           return;
         } catch {
           // Keep original stream failure message below.
@@ -1675,7 +1675,7 @@ export default function App() {
           traceRunIdFilter
         );
         setErrorMessage(
-          "Streaming de analyze no disponible. Se uso endpoint no-stream como fallback."
+          "Streaming de analisis no disponible. Se uso endpoint sin streaming como respaldo."
         );
       } catch {
         const message =
@@ -1743,7 +1743,7 @@ export default function App() {
           traceRunIdFilter
         );
         setErrorMessage(
-          "Streaming de analyze no disponible. Se uso endpoint no-stream como fallback."
+          "Streaming de analisis no disponible. Se uso endpoint sin streaming como respaldo."
         );
       } catch {
         const message = error instanceof Error ? error.message : "No se pudo analizar fit cultural";
@@ -1857,7 +1857,7 @@ export default function App() {
           traceRunIdFilter
         );
         setErrorMessage(
-          "Streaming de prepare no disponible. Se uso endpoint no-stream como fallback."
+          "Streaming de preparacion no disponible. Se uso endpoint sin streaming como respaldo."
         );
       } catch {
         const message =
@@ -2335,7 +2335,7 @@ export default function App() {
           <div>
             <h2>Administracion de prompts (global V1)</h2>
             <p>
-              Ajusta guardrails, identidad y task prompts de chat/analyze/prepare. Tambien
+              Ajusta guardrails, identidad y prompts de tarea para chat/analisis/preparacion. Tambien
               puedes editar consultas Tavily para busqueda y fit cultural.
             </p>
           </div>
@@ -2705,7 +2705,7 @@ export default function App() {
               {activeCv.text_truncated ? " (truncado para V1)" : ""}
             </p>
             <article className="chatBubble chatBubbleAssistant">
-              <p className="chatRole">Preview</p>
+              <p className="chatRole">Vista previa</p>
               <p className="chatContent">
                 {activeCv.extracted_text_preview || "No se obtuvo texto util del archivo."}
               </p>
@@ -2733,7 +2733,7 @@ export default function App() {
           >
             <header className="chatDrawerHeader">
               <div>
-                <p className="eyebrow">Chat Assistant</p>
+                <p className="eyebrow">Asistente IA</p>
                 <h2>Conversacion contextual</h2>
                 <p className="metaText">
                   {selectedPerson ? selectedPerson.full_name : "Sin persona activa"}
@@ -2771,7 +2771,7 @@ export default function App() {
                   )}
                   {isSendingMessage ? (
                     <article className="chatBubble chatBubbleAssistant">
-                      <p className="chatRole">Asistente (stream)</p>
+                      <p className="chatRole">Asistente (SSE)</p>
                       <p className="chatContent">
                         {streamingAssistantText || "Procesando respuesta..."}
                       </p>
@@ -3064,7 +3064,7 @@ export default function App() {
                     onClick={() => setSelectedOpportunityId(item.opportunity_id)}
                     type="button"
                   >
-                    {selectedOpportunityId === item.opportunity_id ? "Activa" : "Abrir"}
+                    {selectedOpportunityId === item.opportunity_id ? "Seleccionada" : "Seleccionar"}
                   </button>
                   <button
                     onClick={() => {
@@ -3111,7 +3111,7 @@ export default function App() {
                     onClick={() => setSelectedOpportunityId(item.opportunity_id)}
                     type="button"
                   >
-                    {selectedOpportunityId === item.opportunity_id ? "Activa" : "Abrir"}
+                    {selectedOpportunityId === item.opportunity_id ? "Seleccionada" : "Seleccionar"}
                   </button>
                   <button
                     disabled={isAnalyzingProfile}
@@ -3120,7 +3120,7 @@ export default function App() {
                   >
                     {isAnalyzingProfile && selectedOpportunityId === item.opportunity_id
                       ? "Analizando perfil..."
-                      : "Analyze perfil"}
+                      : "Analizar perfil"}
                   </button>
                   <button
                     disabled={isAnalyzingCultural}
@@ -3129,7 +3129,7 @@ export default function App() {
                   >
                     {isAnalyzingCultural && selectedOpportunityId === item.opportunity_id
                       ? "Analizando cultura..."
-                      : "Analyze cultura"}
+                      : "Analizar cultura"}
                   </button>
                   <button
                     disabled={isPreparing}
@@ -3138,7 +3138,7 @@ export default function App() {
                   >
                     {isPreparing && selectedOpportunityId === item.opportunity_id
                       ? "Preparando..."
-                      : "Prepare seleccionado"}
+                      : "Preparar seleccion"}
                   </button>
                   <button
                     disabled={isLoadingArtifacts}
@@ -3147,7 +3147,7 @@ export default function App() {
                   >
                     {isLoadingArtifacts && selectedOpportunityId === item.opportunity_id
                       ? "Cargando..."
-                      : "Artifacts"}
+                      : "Artefactos"}
                   </button>
                 </div>
               </article>
@@ -3208,7 +3208,7 @@ export default function App() {
               />
               <span>Forzar recalculo IA (si no, usa ultimo persistido)</span>
             </label>
-            <p className="metaText">Preparar materiales: selecciona lo que quieras generar.</p>
+            <p className="metaText">Preparar materiales: selecciona lo que quieres generar.</p>
             <div className="optionList">
               <label className="checkboxRow">
                 <input
@@ -3323,7 +3323,7 @@ export default function App() {
         ) : null}
         {guidanceText ? (
           <article className="chatBubble chatBubbleAssistant">
-            <p className="chatRole">Guidance</p>
+            <p className="chatRole">Guia de perfil</p>
             <p className="chatContent">{guidanceText}</p>
           </article>
         ) : null}

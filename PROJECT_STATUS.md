@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `Lote 4 UI completado: AI_CHAT_DRAWER contextual implementado con quick starts y push layout`
+- checkpoint_actual: `Lote 5 UI completado: microcopy en espanol + ajuste responsive del AI_CHAT_DRAWER`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
 - ultima_actualizacion: `2026-04-07`
 
@@ -94,6 +94,9 @@
 - drawer de chat mantiene historial unico por persona y reutiliza pipeline SSE existente de `chat/stream` con fallback no-stream
 - layout con drawer aplica patron push en desktop (`shellWithChatDrawer`) y comportamiento responsive en movil
 - build frontend revalidado tras implementacion de chat drawer: `npm run build` en `OK`
+- microcopy frontend unificado en espanol para acciones principales de analisis/preparacion/artefactos y etiquetas de resultados
+- drawer de chat refinado para movil como panel inferior (`bottom sheet`) con quick starts scrollables y mejor usabilidad
+- build frontend revalidado tras cierre de microcopy/UX: `npm run build` en `OK`
 - contratos API de `search` reforzados para validar `provider_status` (fallo total, degradacion parcial y config faltante)
 - contratos API/admin de `search-providers` reforzados para `GET`/`PATCH` y manejo `404` en proveedor desconocido
 - `prepare/stream` en frontend muestra deltas no solo de `guidance_text`, tambien de `cover_letter` y `experience_summary`
@@ -206,5 +209,5 @@
 - riesgo operativo local: entorno de desarrollo modificado para diagnostico (`anyio` downgraded en `.venv`) sin solucion aun para el bloqueo ASGI
 
 ## Siguiente Actividad
-- ajustar microcopy y labels finales para coherencia en espanol (`Guia de perfil`, acciones de prepare y titulos de panel)
 - evaluar componente `ARTEFACT_EDITOR_PANEL` simplificado para V1 (solo lectura estructurada + export basico diferido)
+- revisar navegacion/jerarquia visual final de pagina `analysis` para reducir densidad de informacion en una sola vista
