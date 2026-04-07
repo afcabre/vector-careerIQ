@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `Lote 3 UI completado: analysis desacoplado con lista propia de oportunidades y acciones IA por fila`
+- checkpoint_actual: `Lote 4 UI completado: AI_CHAT_DRAWER contextual implementado con quick starts y push layout`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
 - ultima_actualizacion: `2026-04-07`
 
@@ -90,6 +90,10 @@
 - pagina `opportunities` mantiene foco de exploracion y guardado; sus guardadas ahora priorizan apertura y derivacion a `analysis`
 - al entrar a `analysis` sin oportunidad activa, se selecciona automaticamente la primera oportunidad guardada para reducir friccion
 - build frontend revalidado tras desacople de `analysis`: `npm run build` en `OK`
+- `AI_CHAT_DRAWER` implementado en frontend para vistas contextuales (`profile`, `opportunities`, `analysis`) con boton flotante, panel derecho y quick starts
+- drawer de chat mantiene historial unico por persona y reutiliza pipeline SSE existente de `chat/stream` con fallback no-stream
+- layout con drawer aplica patron push en desktop (`shellWithChatDrawer`) y comportamiento responsive en movil
+- build frontend revalidado tras implementacion de chat drawer: `npm run build` en `OK`
 - contratos API de `search` reforzados para validar `provider_status` (fallo total, degradacion parcial y config faltante)
 - contratos API/admin de `search-providers` reforzados para `GET`/`PATCH` y manejo `404` en proveedor desconocido
 - `prepare/stream` en frontend muestra deltas no solo de `guidance_text`, tambien de `cover_letter` y `experience_summary`
@@ -202,5 +206,5 @@
 - riesgo operativo local: entorno de desarrollo modificado para diagnostico (`anyio` downgraded en `.venv`) sin solucion aun para el bloqueo ASGI
 
 ## Siguiente Actividad
-- iniciar `Lote 4` del refactor UI: implementar `AI_CHAT_DRAWER` contextual (right drawer) en vistas de candidato, manteniendo historial unico por persona
 - ajustar microcopy y labels finales para coherencia en espanol (`Guia de perfil`, acciones de prepare y titulos de panel)
+- evaluar componente `ARTEFACT_EDITOR_PANEL` simplificado para V1 (solo lectura estructurada + export basico diferido)

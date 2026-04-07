@@ -143,6 +143,11 @@ const SEARCH_PROVIDER_LABELS: Record<string, string> = {
   remotive: "Remotive",
   tavily: "Tavily"
 };
+const CHAT_QUICK_STARTS = [
+  "Resume el perfil actual en fortalezas y posibles brechas para postulacion.",
+  "Que 3 vacantes deberia priorizar primero y por que?",
+  "Que ajustes minimos recomiendas para mejorar fit con las vacantes activas?"
+];
 
 type PromptConfigDraft = {
   template_text: string;
@@ -628,6 +633,7 @@ export default function App() {
   const [profileYearsExperienceInput, setProfileYearsExperienceInput] = useState("");
   const [profileSkillsInput, setProfileSkillsInput] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isChatDrawerOpen, setIsChatDrawerOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -751,6 +757,8 @@ export default function App() {
   const showAnalysisPage = parsedRoute.page === "analysis";
   const showContextualSidebar = showProfilePage || showOpportunitiesPage || showAnalysisPage;
   const showConversationSection = showContextualSidebar;
+  const shellClassName =
+    showConversationSection && isChatDrawerOpen ? "shell shellWithChatDrawer" : "shell";
   const currentPageLabel = showCandidatesPage
     ? "Seleccion de candidato"
     : showAdminPromptsPage
@@ -769,6 +777,13 @@ export default function App() {
         : showOpportunitiesPage
           ? "Busca, revisa e importa oportunidades para el contexto activo."
           : "Ejecuta analisis y prepara entregables por oportunidad.";
+  const chatQuickStarts = selectedPerson
+    ? [
+        `Cual es el foco de posicionamiento para ${selectedPerson.full_name} hoy?`,
+        `Que vacantes deberia priorizar para ${selectedPerson.full_name}?`,
+        "Que mejoras de perfil recomiendas antes de postular?"
+      ]
+    : CHAT_QUICK_STARTS;
 
   function navigateTo(path: string, options?: { replace?: boolean }) {
     if (typeof window === "undefined") {
@@ -878,6 +893,13 @@ export default function App() {
     }
     setSelectedOpportunityId(savedOpportunities[0].opportunity_id);
   }, [showAnalysisPage, savedOpportunities, selectedOpportunityId]);
+
+  useEffect(() => {
+    if (showConversationSection && selectedPersonId) {
+      return;
+    }
+    setIsChatDrawerOpen(false);
+  }, [showConversationSection, selectedPersonId]);
 
   const selectedOpportunity =
     savedOpportunities.find((item) => item.opportunity_id === selectedOpportunityId) ?? null;
@@ -1299,19 +1321,19 @@ export default function App() {
     }
   }
 
-  async function handleSendMessage(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selectedPersonId || !chatInput.trim() || isSendingMessage) {
+  async function submitChatMessage(rawMessage: string) {
+    if (!selectedPersonId || !rawMessage.trim() || isSendingMessage) {
       return;
     }
-    const messageToSend = chatInput.trim();
+    const personId = selectedPersonId;
+    const messageToSend = rawMessage.trim();
     setIsSendingMessage(true);
     setStreamingAssistantText("");
     setErrorMessage(null);
     let streamedAnyDelta = false;
     try {
       const updatedConversation = await sendMessageStream(
-        selectedPersonId,
+        personId,
         messageToSend,
         (delta) => {
           streamedAnyDelta = true;
@@ -1321,7 +1343,7 @@ export default function App() {
       setConversation(updatedConversation);
       setChatInput("");
       await refreshRequestTracesFor(
-        selectedPersonId,
+        personId,
         traceDestinationFilter,
         traceOnlyActiveOpportunity,
         selectedOpportunityId,
@@ -1330,11 +1352,11 @@ export default function App() {
     } catch (error) {
       if (!streamedAnyDelta) {
         try {
-          const updatedConversation = await sendMessage(selectedPersonId, messageToSend);
+          const updatedConversation = await sendMessage(personId, messageToSend);
           setConversation(updatedConversation);
           setChatInput("");
           await refreshRequestTracesFor(
-            selectedPersonId,
+            personId,
             traceDestinationFilter,
             traceOnlyActiveOpportunity,
             selectedOpportunityId,
@@ -1352,6 +1374,19 @@ export default function App() {
       setStreamingAssistantText("");
       setIsSendingMessage(false);
     }
+  }
+
+  async function handleSendMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await submitChatMessage(chatInput);
+  }
+
+  async function handleQuickStart(message: string) {
+    if (!isChatDrawerOpen) {
+      setIsChatDrawerOpen(true);
+    }
+    setChatInput(message);
+    await submitChatMessage(message);
   }
 
   async function handleSearch(event: FormEvent<HTMLFormElement>) {
@@ -2057,7 +2092,7 @@ export default function App() {
   }
 
   return (
-    <main className="shell">
+    <main className={shellClassName}>
       <section className="panel workspaceTopbar">
         <div>
           <p className="eyebrow">CareerIQ</p>
@@ -2684,55 +2719,96 @@ export default function App() {
         </section>
       ) : null}
       {showConversationSection ? (
-        <section className="panel selectedPanel">
-        <h2>Conversacion</h2>
-        {isConversationLoading ? (
-          <p className="metaText">Cargando conversacion...</p>
-        ) : (
-          <div className="chatList">
-            {(conversation?.messages ?? []).length === 0 && !isSendingMessage ? (
-              <p className="metaText">No hay mensajes aun para este perfil.</p>
-            ) : (
-              conversation?.messages.map((message) => (
-                <article
-                  className={
-                    message.role === "user"
-                      ? "chatBubble chatBubbleUser"
-                      : "chatBubble chatBubbleAssistant"
-                  }
-                  key={message.message_id}
-                >
-                  <p className="chatRole">{message.role === "user" ? "Tutor" : "Asistente"}</p>
-                  <p className="chatContent">{message.content}</p>
-                </article>
-              ))
-            )}
-            {isSendingMessage ? (
-              <article className="chatBubble chatBubbleAssistant">
-                <p className="chatRole">Asistente (stream)</p>
-                <p className="chatContent">
-                  {streamingAssistantText || "Procesando respuesta..."}
-                </p>
-              </article>
-            ) : null}
-          </div>
-        )}
-        <form className="chatForm" onSubmit={handleSendMessage}>
-          <input
-            disabled={!selectedPersonId || isSendingMessage}
-            onChange={(event) => setChatInput(event.target.value)}
-            placeholder="Escribe un mensaje para este perfil..."
-            value={chatInput}
-          />
+        <>
           <button
-            className="primaryButton"
-            disabled={!selectedPersonId || isSendingMessage || !chatInput.trim()}
-            type="submit"
+            className="chatDrawerToggle"
+            onClick={() => setIsChatDrawerOpen((current) => !current)}
+            type="button"
           >
-            {isSendingMessage ? "Enviando..." : "Enviar"}
+            {isChatDrawerOpen ? "Cerrar chat" : "Chat IA"}
           </button>
-        </form>
-        </section>
+          <aside
+            aria-hidden={!isChatDrawerOpen}
+            className={isChatDrawerOpen ? "chatDrawer chatDrawerOpen" : "chatDrawer"}
+          >
+            <header className="chatDrawerHeader">
+              <div>
+                <p className="eyebrow">Chat Assistant</p>
+                <h2>Conversacion contextual</h2>
+                <p className="metaText">
+                  {selectedPerson ? selectedPerson.full_name : "Sin persona activa"}
+                </p>
+              </div>
+              <button
+                className="ghostButton"
+                onClick={() => setIsChatDrawerOpen(false)}
+                type="button"
+              >
+                Cerrar
+              </button>
+            </header>
+            <div className="chatDrawerBody">
+              {isConversationLoading ? (
+                <p className="metaText">Cargando conversacion...</p>
+              ) : (
+                <div className="chatList">
+                  {(conversation?.messages ?? []).length === 0 && !isSendingMessage ? (
+                    <p className="metaText">No hay mensajes aun para este perfil.</p>
+                  ) : (
+                    conversation?.messages.map((message) => (
+                      <article
+                        className={
+                          message.role === "user"
+                            ? "chatBubble chatBubbleUser"
+                            : "chatBubble chatBubbleAssistant"
+                        }
+                        key={message.message_id}
+                      >
+                        <p className="chatRole">{message.role === "user" ? "Tutor" : "Asistente"}</p>
+                        <p className="chatContent">{message.content}</p>
+                      </article>
+                    ))
+                  )}
+                  {isSendingMessage ? (
+                    <article className="chatBubble chatBubbleAssistant">
+                      <p className="chatRole">Asistente (stream)</p>
+                      <p className="chatContent">
+                        {streamingAssistantText || "Procesando respuesta..."}
+                      </p>
+                    </article>
+                  ) : null}
+                </div>
+              )}
+            </div>
+            <div className="chatQuickStarts">
+              {chatQuickStarts.map((message) => (
+                <button
+                  disabled={!selectedPersonId || isSendingMessage}
+                  key={message}
+                  onClick={() => void handleQuickStart(message)}
+                  type="button"
+                >
+                  {message}
+                </button>
+              ))}
+            </div>
+            <form className="chatForm chatDrawerForm" onSubmit={handleSendMessage}>
+              <input
+                disabled={!selectedPersonId || isSendingMessage}
+                onChange={(event) => setChatInput(event.target.value)}
+                placeholder="Escribe un mensaje para este perfil..."
+                value={chatInput}
+              />
+              <button
+                className="primaryButton"
+                disabled={!selectedPersonId || isSendingMessage || !chatInput.trim()}
+                type="submit"
+              >
+                {isSendingMessage ? "Enviando..." : "Enviar"}
+              </button>
+            </form>
+          </aside>
+        </>
       ) : null}
       {showOpportunitiesPage ? (
         <section className="panel selectedPanel">
