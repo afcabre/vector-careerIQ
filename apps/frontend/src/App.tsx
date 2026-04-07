@@ -12,6 +12,7 @@ import {
   PromptConfig,
   PromptConfigVersion,
   RequestTrace,
+  SearchProviderConfig,
   SearchResult,
   SemanticEvidence,
   analyzeCulturalFitStream,
@@ -30,6 +31,7 @@ import {
   listPersons,
   listPromptConfigs,
   listPromptConfigVersions,
+  listSearchProviderConfigs,
   listRequestTraces,
   login,
   logout,
@@ -40,6 +42,7 @@ import {
   sendMessage,
   sendMessageStream,
   rollbackPromptConfig as rollbackPromptConfigApi,
+  updateSearchProviderConfig as updateSearchProviderConfigApi,
   updatePromptConfig as updatePromptConfigApi,
   updatePerson as updatePersonProfile,
   updateOpportunity,
@@ -107,6 +110,11 @@ const PROMPT_FLOW_ORDER: string[] = [
   "task_prepare_experience_summary"
 ];
 const PROMPT_SOURCE_FLOW_KEYS = new Set(["search_jobs_tavily", "search_culture_tavily"]);
+const SEARCH_PROVIDER_LABELS: Record<string, string> = {
+  adzuna: "Adzuna (RapidAPI)",
+  remotive: "Remotive",
+  tavily: "Tavily"
+};
 
 type PromptConfigDraft = {
   template_text: string;
@@ -316,6 +324,9 @@ export default function App() {
   const [isLoadingPromptConfigs, setIsLoadingPromptConfigs] = useState(false);
   const [promptConfigReloadToken, setPromptConfigReloadToken] = useState(0);
   const [savingPromptFlowKey, setSavingPromptFlowKey] = useState<string | null>(null);
+  const [searchProviderConfigs, setSearchProviderConfigs] = useState<SearchProviderConfig[]>([]);
+  const [isLoadingSearchProviderConfigs, setIsLoadingSearchProviderConfigs] = useState(false);
+  const [savingSearchProviderKey, setSavingSearchProviderKey] = useState<string | null>(null);
   const [promptVersionsByFlow, setPromptVersionsByFlow] = useState<
     Record<string, PromptConfigVersion[]>
   >({});
@@ -424,6 +435,7 @@ export default function App() {
   useEffect(() => {
     const loadPromptConfigs = async () => {
       if (view !== "workspace") {
+        setSearchProviderConfigs([]);
         setPromptConfigs([]);
         setPromptConfigDrafts({});
         setPromptVersionsByFlow({});
@@ -431,19 +443,25 @@ export default function App() {
         return;
       }
       setIsLoadingPromptConfigs(true);
+      setIsLoadingSearchProviderConfigs(true);
       setErrorMessage(null);
       try {
-        const items = await listPromptConfigs();
+        const [items, providerItems] = await Promise.all([
+          listPromptConfigs(),
+          listSearchProviderConfigs()
+        ]);
         setPromptConfigs(items);
         setPromptConfigDrafts(buildPromptConfigDrafts(items));
+        setSearchProviderConfigs(providerItems);
       } catch (error) {
         const message =
           error instanceof Error
             ? error.message
-            : "No se pudo cargar la configuracion de prompts";
+            : "No se pudo cargar configuraciones de administracion";
         setErrorMessage(message);
       } finally {
         setIsLoadingPromptConfigs(false);
+        setIsLoadingSearchProviderConfigs(false);
       }
     };
     void loadPromptConfigs();
@@ -457,6 +475,16 @@ export default function App() {
     const rankA = indexA >= 0 ? indexA : Number.MAX_SAFE_INTEGER;
     const rankB = indexB >= 0 ? indexB : Number.MAX_SAFE_INTEGER;
     return rankA - rankB;
+  });
+  const searchProviderOrder: Array<SearchProviderConfig["provider_key"]> = [
+    "tavily",
+    "adzuna",
+    "remotive"
+  ];
+  const orderedSearchProviderConfigs = [...searchProviderConfigs].sort((a, b) => {
+    const indexA = searchProviderOrder.indexOf(a.provider_key);
+    const indexB = searchProviderOrder.indexOf(b.provider_key);
+    return indexA - indexB;
   });
 
   useEffect(() => {
@@ -702,6 +730,7 @@ export default function App() {
     setPassword("");
     setSelectedPersonId(null);
     setPeople([]);
+    setSearchProviderConfigs([]);
     setPromptConfigs([]);
     setPromptConfigDrafts({});
     setPromptVersionsByFlow({});
@@ -861,6 +890,29 @@ export default function App() {
       setErrorMessage(message);
     } finally {
       setSavingPromptFlowKey(null);
+    }
+  }
+
+  async function handleToggleSearchProvider(
+    providerKey: "adzuna" | "remotive" | "tavily",
+    isEnabled: boolean
+  ) {
+    if (savingSearchProviderKey) {
+      return;
+    }
+    setSavingSearchProviderKey(providerKey);
+    setErrorMessage(null);
+    try {
+      const updated = await updateSearchProviderConfigApi(providerKey, isEnabled);
+      setSearchProviderConfigs((current) =>
+        current.map((item) => (item.provider_key === updated.provider_key ? updated : item))
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo actualizar el proveedor";
+      setErrorMessage(message);
+    } finally {
+      setSavingSearchProviderKey((current) => (current === providerKey ? null : current));
     }
   }
 
@@ -1756,6 +1808,63 @@ export default function App() {
             </button>
           </div>
         </form>
+      </section>
+
+      <section className="panel selectedPanel">
+        <header className="panelHeader">
+          <div>
+            <h2>Administracion de proveedores de busqueda</h2>
+            <p>
+              Habilita o deshabilita proveedores de vacantes desde UI para controlar
+              conectividad y diagnostico.
+            </p>
+          </div>
+          <button
+            className="ghostButton"
+            disabled={isLoadingSearchProviderConfigs || isLoadingPromptConfigs}
+            onClick={() => setPromptConfigReloadToken((current) => current + 1)}
+            type="button"
+          >
+            {isLoadingSearchProviderConfigs ? "Actualizando..." : "Refrescar"}
+          </button>
+        </header>
+        {isLoadingSearchProviderConfigs ? (
+          <p className="metaText">Cargando proveedores...</p>
+        ) : orderedSearchProviderConfigs.length === 0 ? (
+          <p className="metaText">No hay proveedores configurados.</p>
+        ) : (
+          <div className="promptConfigGrid">
+            {orderedSearchProviderConfigs.map((provider) => {
+              const isSaving = savingSearchProviderKey === provider.provider_key;
+              return (
+                <article className="manualCard" key={provider.provider_key}>
+                  <p className="chatRole">
+                    {SEARCH_PROVIDER_LABELS[provider.provider_key] ?? provider.provider_key}
+                  </p>
+                  <p className="metaText">provider_key: {provider.provider_key}</p>
+                  <label className="checkboxRow">
+                    <input
+                      checked={provider.is_enabled}
+                      disabled={isSaving}
+                      onChange={(event) =>
+                        void handleToggleSearchProvider(
+                          provider.provider_key,
+                          event.target.checked
+                        )
+                      }
+                      type="checkbox"
+                    />
+                    <span>Proveedor habilitado</span>
+                  </label>
+                  <p className="metaText">
+                    Ultima actualizacion: {new Date(provider.updated_at).toLocaleString()} por{" "}
+                    {provider.updated_by}
+                  </p>
+                </article>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       <section className="panel selectedPanel">

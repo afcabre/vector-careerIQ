@@ -191,6 +191,14 @@ export type RequestTrace = {
   created_at: string;
 };
 
+export type SearchProviderConfig = {
+  provider_key: "adzuna" | "remotive" | "tavily";
+  is_enabled: boolean;
+  updated_by: string;
+  created_at: string;
+  updated_at: string;
+};
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
 
 async function parseResponse<T>(response: Response): Promise<T> {
@@ -270,6 +278,28 @@ export async function listRequestTraces(
   });
   const payload = await parseResponse<{ items: RequestTrace[] }>(response);
   return payload.items;
+}
+
+export async function listSearchProviderConfigs(): Promise<SearchProviderConfig[]> {
+  const response = await fetch(`${API_BASE}/admin/search-providers`, {
+    method: "GET",
+    credentials: "include"
+  });
+  const payload = await parseResponse<{ items: SearchProviderConfig[] }>(response);
+  return payload.items;
+}
+
+export async function updateSearchProviderConfig(
+  providerKey: "adzuna" | "remotive" | "tavily",
+  isEnabled: boolean
+): Promise<SearchProviderConfig> {
+  const response = await fetch(`${API_BASE}/admin/search-providers/${providerKey}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ is_enabled: isEnabled })
+  });
+  return parseResponse<SearchProviderConfig>(response);
 }
 
 export async function createPerson(payload: {
