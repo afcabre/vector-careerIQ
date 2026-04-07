@@ -100,6 +100,8 @@
 - `ARTEFACT_EDITOR_PANEL` simplificado implementado en `analysis`: lectura estructurada por tipo de material + accion de copiado por bloque
 - pagina `analysis` reorganizada para reducir densidad: bloque principal de resultados + `Historico IA` y `Trazas IA/API` colapsables por defecto
 - build frontend revalidado tras ajuste de jerarquia visual en `analysis`: `npm run build` en `OK`
+- ajustes de legibilidad aplicados en frontend: mayor contraste en burbujas de usuario (`chatBubbleUser`), mejora de textos secundarios y tipografia/espaciado en movil
+- build frontend revalidado tras hardening visual de contraste: `npm run build` en `OK`
 - contratos API de `search` reforzados para validar `provider_status` (fallo total, degradacion parcial y config faltante)
 - contratos API/admin de `search-providers` reforzados para `GET`/`PATCH` y manejo `404` en proveedor desconocido
 - `prepare/stream` en frontend muestra deltas no solo de `guidance_text`, tambien de `cover_letter` y `experience_summary`
@@ -215,3 +217,7 @@
 ## Siguiente Actividad
 - revisar pulido final de estilos y espaciado en `analysis` para mejorar legibilidad en pantallas pequenas
 - decidir cierre de alcance UI V1 y preparar corte de estabilizacion (QA visual + smoke test funcional)
+
+## Ajustes Post-UI Confirmados
+- hacer `semantic_evidence` colapsable por defecto en la vista de `analysis`
+- mover `top_k` de evidencia semantica a parametro configurable desde administracion (con persistencia)
