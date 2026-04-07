@@ -17,6 +17,7 @@ from app.services.ai_run_store import (
     AI_ACTION_KEYS,
     get_current_ai_run,
     list_ai_runs,
+    new_ai_run_id,
     upsert_current_ai_run,
 )
 from app.services.artifact_store import ARTIFACT_TYPES, list_current_artifacts, upsert_current_artifact
@@ -480,11 +481,13 @@ def analyze_profile_match_action(
                         served_from_cache=True,
                     )
 
-    result = analyze_profile_match(person, opportunity, settings)
+    run_id = new_ai_run_id()
+    result = analyze_profile_match(person, opportunity, settings, run_id=run_id)
     upsert_current_ai_run(
         person_id=person_id,
         opportunity_id=opportunity_id,
         action_key=ACTION_ANALYZE_PROFILE_MATCH,
+        run_id=run_id,
         result_payload={
             "analysis_text": result["analysis_text"],
             "semantic_evidence": result["semantic_evidence"],
@@ -549,11 +552,13 @@ def analyze_cultural_fit_action(
                         served_from_cache=True,
                     )
 
-    result = analyze_cultural_fit(person, opportunity, settings)
+    run_id = new_ai_run_id()
+    result = analyze_cultural_fit(person, opportunity, settings, run_id=run_id)
     upsert_current_ai_run(
         person_id=person_id,
         opportunity_id=opportunity_id,
         action_key=ACTION_ANALYZE_CULTURAL_FIT,
+        run_id=run_id,
         result_payload={
             "analysis_text": result["analysis_text"],
             "cultural_confidence": result["cultural_confidence"],
@@ -657,10 +662,12 @@ async def analyze_profile_match_stream(
                     "stage": "analyze_profile_match_running",
                 },
             )
+            run_id = new_ai_run_id()
             semantic_evidence, stream = stream_analyze_profile_match_text(
                 person,
                 opportunity,
                 settings,
+                run_id=run_id,
             )
             analysis_text = ""
             for delta in stream:
@@ -680,6 +687,7 @@ async def analyze_profile_match_stream(
                 person_id=person_id,
                 opportunity_id=opportunity_id,
                 action_key=ACTION_ANALYZE_PROFILE_MATCH,
+                run_id=run_id,
                 result_payload={
                     "analysis_text": analysis_text,
                     "semantic_evidence": semantic_evidence,
@@ -797,10 +805,12 @@ async def analyze_cultural_fit_stream(
                     "stage": "analyze_cultural_fit_running",
                 },
             )
+            run_id = new_ai_run_id()
             confidence, warnings, signals, stream = stream_analyze_cultural_fit_text(
                 person,
                 opportunity,
                 settings,
+                run_id=run_id,
             )
             analysis_text = ""
             for delta in stream:
@@ -820,6 +830,7 @@ async def analyze_cultural_fit_stream(
                 person_id=person_id,
                 opportunity_id=opportunity_id,
                 action_key=ACTION_ANALYZE_CULTURAL_FIT,
+                run_id=run_id,
                 result_payload={
                     "analysis_text": analysis_text,
                     "cultural_confidence": confidence,
@@ -1089,11 +1100,13 @@ def prepare(
 
     missing_targets = [target for target in targets if target not in outputs]
     if missing_targets:
+        run_ids_by_target = {target: new_ai_run_id() for target in missing_targets}
         generated = prepare_selected_materials(
             person=person,
             opportunity=opportunity,
             settings=settings,
             targets=missing_targets,
+            run_ids_by_target=run_ids_by_target,
         )
         semantic_evidence = generated["semantic_evidence"]
         for target, content in generated["outputs"].items():
@@ -1103,6 +1116,7 @@ def prepare(
                 person_id=person_id,
                 opportunity_id=opportunity_id,
                 action_key=_prepare_action_key(target),
+                run_id=run_ids_by_target.get(target, ""),
                 result_payload={
                     "content": cleaned,
                     "semantic_evidence": semantic_evidence,
@@ -1234,12 +1248,20 @@ async def prepare_stream(
             missing_targets = [target for target in targets if target not in outputs]
             if missing_targets:
                 served_from_cache = False
+                run_ids_by_target = {
+                    target: new_ai_run_id() for target in missing_targets
+                }
                 (
                     bundle,
                     guidance_stream,
                     cover_stream,
                     summary_stream,
-                ) = stream_prepare_sections(person, opportunity, settings)
+                ) = stream_prepare_sections(
+                    person,
+                    opportunity,
+                    settings,
+                    run_ids_by_target=run_ids_by_target,
+                )
                 semantic_evidence = bundle["semantic_evidence"]
                 stream_by_target = {
                     PREPARE_TARGET_GUIDANCE: guidance_stream,
@@ -1273,6 +1295,7 @@ async def prepare_stream(
                         person_id=person_id,
                         opportunity_id=opportunity_id,
                         action_key=_prepare_action_key(target),
+                        run_id=run_ids_by_target.get(target, ""),
                         result_payload={
                             "content": outputs[target],
                             "semantic_evidence": semantic_evidence,

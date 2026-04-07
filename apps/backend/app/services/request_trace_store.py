@@ -11,6 +11,7 @@ class RequestTraceRecord(TypedDict):
     trace_id: str
     person_id: str
     opportunity_id: str
+    run_id: str
     destination: str
     flow_key: str
     request_payload: dict[str, Any]
@@ -43,6 +44,7 @@ def _normalize(payload: dict[str, Any] | None) -> RequestTraceRecord:
         "trace_id": str(source.get("trace_id", "")),
         "person_id": str(source.get("person_id", "")),
         "opportunity_id": str(source.get("opportunity_id", "")),
+        "run_id": str(source.get("run_id", "")),
         "destination": str(source.get("destination", "")),
         "flow_key": str(source.get("flow_key", "")),
         "request_payload": raw_request_payload,
@@ -69,11 +71,13 @@ def add_request_trace(
     flow_key: str,
     request_payload: dict[str, Any],
     opportunity_id: str = "",
+    run_id: str = "",
 ) -> RequestTraceRecord:
     record: RequestTraceRecord = {
         "trace_id": _new_id(),
         "person_id": person_id,
         "opportunity_id": opportunity_id.strip(),
+        "run_id": run_id.strip(),
         "destination": destination.strip().lower(),
         "flow_key": flow_key.strip(),
         "request_payload": request_payload,
@@ -87,10 +91,12 @@ def list_request_traces(
     person_id: str,
     opportunity_id: str | None = None,
     destination: str | None = None,
+    run_id: str | None = None,
     limit: int = 50,
 ) -> list[RequestTraceRecord]:
     normalized_destination = (destination or "").strip().lower()
     normalized_opportunity_id = (opportunity_id or "").strip()
+    normalized_run_id = (run_id or "").strip()
 
     if _is_firestore_backend():
         settings = get_settings()
@@ -107,6 +113,8 @@ def list_request_traces(
         items = [item for item in items if item["opportunity_id"] == normalized_opportunity_id]
     if normalized_destination:
         items = [item for item in items if item["destination"] == normalized_destination]
+    if normalized_run_id:
+        items = [item for item in items if item["run_id"] == normalized_run_id]
     items = sorted(items, key=lambda item: item["created_at"], reverse=True)
     return items[: max(1, limit)]
 

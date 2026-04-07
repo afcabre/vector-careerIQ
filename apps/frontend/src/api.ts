@@ -171,6 +171,7 @@ export type RequestTrace = {
   trace_id: string;
   person_id: string;
   opportunity_id: string;
+  run_id: string;
   destination: string;
   flow_key: string;
   request_payload: Record<string, unknown>;
@@ -234,7 +235,7 @@ export async function listPersons(): Promise<Person[]> {
 
 export async function listRequestTraces(
   personId: string,
-  params?: { opportunityId?: string; destination?: string; limit?: number }
+  params?: { opportunityId?: string; destination?: string; runId?: string; limit?: number }
 ): Promise<RequestTrace[]> {
   const query = new URLSearchParams();
   if (params?.opportunityId?.trim()) {
@@ -242,6 +243,9 @@ export async function listRequestTraces(
   }
   if (params?.destination?.trim()) {
     query.set("destination", params.destination.trim().toLowerCase());
+  }
+  if (params?.runId?.trim()) {
+    query.set("run_id", params.runId.trim());
   }
   if (typeof params?.limit === "number" && Number.isFinite(params.limit)) {
     query.set("limit", String(Math.max(1, Math.min(200, Math.trunc(params.limit)))));

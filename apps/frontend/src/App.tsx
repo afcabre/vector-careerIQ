@@ -323,6 +323,7 @@ export default function App() {
   const [isLoadingRequestTraces, setIsLoadingRequestTraces] = useState(false);
   const [traceDestinationFilter, setTraceDestinationFilter] = useState("");
   const [traceOnlyActiveOpportunity, setTraceOnlyActiveOpportunity] = useState(false);
+  const [traceRunIdFilter, setTraceRunIdFilter] = useState("");
   const [isAnalyzingProfile, setIsAnalyzingProfile] = useState(false);
   const [isAnalyzingCultural, setIsAnalyzingCultural] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
@@ -441,6 +442,7 @@ export default function App() {
         setRequestTraces([]);
         setTraceDestinationFilter("");
         setTraceOnlyActiveOpportunity(false);
+        setTraceRunIdFilter("");
         setOpportunityNotes("");
         setOpportunityStatus("detected");
         return;
@@ -503,13 +505,15 @@ export default function App() {
       selectedPersonId,
       traceDestinationFilter,
       traceOnlyActiveOpportunity,
-      selectedOpportunityId
+      selectedOpportunityId,
+      traceRunIdFilter
     );
   }, [
     selectedPersonId,
     selectedOpportunityId,
     traceDestinationFilter,
-    traceOnlyActiveOpportunity
+    traceOnlyActiveOpportunity,
+    traceRunIdFilter
   ]);
 
   useEffect(() => {
@@ -658,6 +662,7 @@ export default function App() {
     setRequestTraces([]);
     setTraceDestinationFilter("");
     setTraceOnlyActiveOpportunity(false);
+    setTraceRunIdFilter("");
     setActiveCv(null);
     setSelectedCvFile(null);
   }
@@ -814,7 +819,8 @@ export default function App() {
         selectedPersonId,
         traceDestinationFilter,
         traceOnlyActiveOpportunity,
-        selectedOpportunityId
+        selectedOpportunityId,
+        traceRunIdFilter
       );
     } catch (error) {
       if (!streamedAnyDelta) {
@@ -826,7 +832,8 @@ export default function App() {
             selectedPersonId,
             traceDestinationFilter,
             traceOnlyActiveOpportunity,
-            selectedOpportunityId
+            selectedOpportunityId,
+            traceRunIdFilter
           );
           setErrorMessage("Streaming no disponible. Se uso envio no-stream como fallback.");
           return;
@@ -858,7 +865,8 @@ export default function App() {
         selectedPersonId,
         traceDestinationFilter,
         traceOnlyActiveOpportunity,
-        selectedOpportunityId
+        selectedOpportunityId,
+        traceRunIdFilter
       );
     } catch (error) {
       const message =
@@ -1000,7 +1008,8 @@ export default function App() {
     personId: string,
     destination: string,
     onlyActiveOpportunity: boolean,
-    selectedOpportunityForScope: string | null
+    selectedOpportunityForScope: string | null,
+    runId: string = ""
   ) {
     setIsLoadingRequestTraces(true);
     try {
@@ -1010,6 +1019,7 @@ export default function App() {
           onlyActiveOpportunity && selectedOpportunityForScope
             ? selectedOpportunityForScope
             : undefined,
+        runId: runId || undefined,
         limit: 60
       });
       setRequestTraces(items);
@@ -1019,6 +1029,14 @@ export default function App() {
       setErrorMessage(message);
     } finally {
       setIsLoadingRequestTraces(false);
+    }
+  }
+
+  function handleFocusRunTrace(runId: string, opportunityId: string) {
+    setTraceRunIdFilter(runId);
+    if (opportunityId) {
+      setSelectedOpportunityId(opportunityId);
+      setTraceOnlyActiveOpportunity(true);
     }
   }
 
@@ -1066,7 +1084,8 @@ export default function App() {
         personId,
         traceDestinationFilter,
         traceOnlyActiveOpportunity,
-        opportunityId
+        opportunityId,
+        traceRunIdFilter
       );
     } catch (error) {
       try {
@@ -1081,7 +1100,8 @@ export default function App() {
           personId,
           traceDestinationFilter,
           traceOnlyActiveOpportunity,
-          opportunityId
+          opportunityId,
+          traceRunIdFilter
         );
         setErrorMessage(
           "Streaming de analyze no disponible. Se uso endpoint no-stream como fallback."
@@ -1130,7 +1150,8 @@ export default function App() {
         personId,
         traceDestinationFilter,
         traceOnlyActiveOpportunity,
-        opportunityId
+        opportunityId,
+        traceRunIdFilter
       );
     } catch (error) {
       try {
@@ -1147,7 +1168,8 @@ export default function App() {
           personId,
           traceDestinationFilter,
           traceOnlyActiveOpportunity,
-          opportunityId
+          opportunityId,
+          traceRunIdFilter
         );
         setErrorMessage(
           "Streaming de analyze no disponible. Se uso endpoint no-stream como fallback."
@@ -1217,7 +1239,8 @@ export default function App() {
         personId,
         traceDestinationFilter,
         traceOnlyActiveOpportunity,
-        opportunityId
+        opportunityId,
+        traceRunIdFilter
       );
     } catch (error) {
       try {
@@ -1240,7 +1263,8 @@ export default function App() {
           personId,
           traceDestinationFilter,
           traceOnlyActiveOpportunity,
-          opportunityId
+          opportunityId,
+          traceRunIdFilter
         );
         setErrorMessage(
           "Streaming de prepare no disponible. Se uso endpoint no-stream como fallback."
@@ -2403,6 +2427,16 @@ export default function App() {
                         {formatAiRunTimestamp(run.updated_at)}
                         {run.is_current ? " · vigente" : ""}
                       </p>
+                      <div className="cardActions">
+                        <button
+                          onClick={() =>
+                            handleFocusRunTrace(run.run_id, run.opportunity_id)
+                          }
+                          type="button"
+                        >
+                          Ver request exacto
+                        </button>
+                      </div>
                       {previewText ? (
                         <p className="chatContent">{previewText}</p>
                       ) : (
@@ -2442,7 +2476,8 @@ export default function App() {
                     selectedPersonId,
                     traceDestinationFilter,
                     traceOnlyActiveOpportunity,
-                    selectedOpportunityId
+                    selectedOpportunityId,
+                    traceRunIdFilter
                   )
                 : undefined
             }
@@ -2479,6 +2514,14 @@ export default function App() {
                 <span>Solo oportunidad activa</span>
               </label>
             </div>
+            {traceRunIdFilter ? (
+              <div className="cardActions">
+                <p className="metaText">Filtro run_id activo: {traceRunIdFilter}</p>
+                <button onClick={() => setTraceRunIdFilter("")} type="button">
+                  Limpiar filtro run_id
+                </button>
+              </div>
+            ) : null}
             {isLoadingRequestTraces ? (
               <p className="metaText">Cargando trazas...</p>
             ) : requestTraces.length === 0 ? (
@@ -2492,7 +2535,8 @@ export default function App() {
                     </p>
                     <p className="metaText">
                       trace_id: {trace.trace_id} · oportunidad:{" "}
-                      {trace.opportunity_id || "N/A"} · fecha:{" "}
+                      {trace.opportunity_id || "N/A"} · run_id:{" "}
+                      {trace.run_id || "N/A"} · fecha:{" "}
                       {formatRequestTraceTimestamp(trace.created_at)}
                     </p>
                     <details className="payloadDetails">

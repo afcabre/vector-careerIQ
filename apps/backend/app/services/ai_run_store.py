@@ -45,6 +45,10 @@ def _new_id() -> str:
     return f"r-{uuid.uuid4().hex[:10]}"
 
 
+def new_ai_run_id() -> str:
+    return _new_id()
+
+
 def _is_firestore_backend() -> bool:
     settings = get_settings()
     return settings.persistence_backend.lower() == "firestore"
@@ -130,6 +134,7 @@ def upsert_current_ai_run(
     opportunity_id: str,
     action_key: str,
     result_payload: dict[str, Any],
+    run_id: str | None = None,
 ) -> AIRunRecord:
     if action_key not in AI_ACTION_KEYS:
         raise ValueError("Invalid action_key")
@@ -147,7 +152,7 @@ def upsert_current_ai_run(
         _save(item)
 
     record: AIRunRecord = {
-        "run_id": _new_id(),
+        "run_id": run_id.strip() if isinstance(run_id, str) and run_id.strip() else _new_id(),
         "person_id": person_id,
         "opportunity_id": opportunity_id,
         "action_key": action_key,

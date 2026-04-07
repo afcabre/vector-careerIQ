@@ -167,10 +167,12 @@ def _trace_openai_request(
     temperature: float,
     stream: bool,
     opportunity_id: str = "",
+    run_id: str = "",
 ) -> None:
     add_request_trace(
         person_id=person_id,
         opportunity_id=opportunity_id,
+        run_id=run_id,
         destination="openai",
         flow_key=flow_key,
         request_payload={
@@ -225,6 +227,7 @@ def complete_prompt(
     person_id: str = "",
     opportunity_id: str = "",
     flow_key: str = "generic_complete",
+    run_id: str = "",
 ) -> str:
     client = _client(settings)
     if client is None:
@@ -242,6 +245,7 @@ def complete_prompt(
             settings=settings,
             temperature=temperature,
             stream=False,
+            run_id=run_id,
         )
     try:
         response = client.chat.completions.create(
@@ -268,6 +272,7 @@ def stream_prompt(
     person_id: str = "",
     opportunity_id: str = "",
     flow_key: str = "generic_stream",
+    run_id: str = "",
 ) -> Iterator[str]:
     client = _client(settings)
     if client is None:
@@ -288,6 +293,7 @@ def stream_prompt(
             settings=settings,
             temperature=temperature,
             stream=True,
+            run_id=run_id,
         )
     try:
         stream = client.chat.completions.create(

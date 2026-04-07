@@ -15,6 +15,7 @@ class RequestTraceResponse(BaseModel):
     trace_id: str
     person_id: str
     opportunity_id: str
+    run_id: str
     destination: str
     flow_key: str
     request_payload: dict[str, Any]
@@ -30,6 +31,7 @@ def list_person_request_traces(
     person_id: str,
     opportunity_id: str | None = Query(default=None),
     destination: str | None = Query(default=None),
+    run_id: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     _: SessionData = Depends(require_operator_session),
 ) -> RequestTraceListResponse:
@@ -43,6 +45,7 @@ def list_person_request_traces(
         person_id=person_id,
         opportunity_id=opportunity_id,
         destination=destination,
+        run_id=run_id,
         limit=limit,
     )
     return RequestTraceListResponse(items=[RequestTraceResponse(**item) for item in items])

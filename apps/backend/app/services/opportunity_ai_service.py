@@ -364,6 +364,7 @@ def _tavily_culture_signals(
     opportunity: OpportunityRecord,
     settings: Settings,
     max_results: int = 4,
+    run_id: str = "",
 ) -> tuple[list[CulturalSignal], list[str]]:
     warnings: list[str] = []
     if not settings.tavily_api_key:
@@ -399,6 +400,7 @@ def _tavily_culture_signals(
     add_request_trace(
         person_id=person["person_id"],
         opportunity_id=opportunity["opportunity_id"],
+        run_id=run_id,
         destination="tavily",
         flow_key="search_culture_tavily",
         request_payload={
@@ -608,6 +610,7 @@ def stream_analyze_profile_match_text(
     person: PersonRecord,
     opportunity: OpportunityRecord,
     settings: Settings,
+    run_id: str = "",
 ):
     semantic_evidence = _build_semantic_evidence(person, opportunity, settings, top_k=24)
     user_prompt = build_prompt_text(
@@ -640,6 +643,7 @@ def stream_analyze_profile_match_text(
         person_id=person["person_id"],
         opportunity_id=opportunity["opportunity_id"],
         flow_key="analyze_profile_match_stream",
+        run_id=run_id,
     )
     return semantic_evidence, stream
 
@@ -648,8 +652,9 @@ def stream_analyze_cultural_fit_text(
     person: PersonRecord,
     opportunity: OpportunityRecord,
     settings: Settings,
+    run_id: str = "",
 ):
-    signals, warnings = _tavily_culture_signals(person, opportunity, settings)
+    signals, warnings = _tavily_culture_signals(person, opportunity, settings, run_id=run_id)
     confidence = _cultural_confidence(len(signals))
     user_prompt = build_prompt_text(
         flow_key=FLOW_TASK_ANALYZE_CULTURAL_FIT,
@@ -679,6 +684,7 @@ def stream_analyze_cultural_fit_text(
         person_id=person["person_id"],
         opportunity_id=opportunity["opportunity_id"],
         flow_key="analyze_cultural_fit_stream",
+        run_id=run_id,
     )
     return confidence, warnings, signals, stream
 
@@ -687,8 +693,10 @@ def stream_prepare_sections(
     person: PersonRecord,
     opportunity: OpportunityRecord,
     settings: Settings,
+    run_ids_by_target: dict[str, str] | None = None,
 ):
     bundle = build_prepare_prompt_bundle(person, opportunity, settings)
+    run_ids = run_ids_by_target or {}
     guidance_stream = stream_prompt(
         bundle["system_prompt"],
         bundle["guidance_prompt"],
@@ -697,6 +705,7 @@ def stream_prepare_sections(
         person_id=person["person_id"],
         opportunity_id=opportunity["opportunity_id"],
         flow_key="prepare_guidance_text_stream",
+        run_id=run_ids.get(PREPARE_TARGET_GUIDANCE, ""),
     )
     cover_stream = stream_prompt(
         bundle["system_prompt"],
@@ -706,6 +715,7 @@ def stream_prepare_sections(
         person_id=person["person_id"],
         opportunity_id=opportunity["opportunity_id"],
         flow_key="prepare_cover_letter_stream",
+        run_id=run_ids.get(PREPARE_TARGET_COVER_LETTER, ""),
     )
     summary_stream = stream_prompt(
         bundle["system_prompt"],
@@ -715,6 +725,7 @@ def stream_prepare_sections(
         person_id=person["person_id"],
         opportunity_id=opportunity["opportunity_id"],
         flow_key="prepare_experience_summary_stream",
+        run_id=run_ids.get(PREPARE_TARGET_EXPERIENCE_SUMMARY, ""),
     )
     return bundle, guidance_stream, cover_stream, summary_stream
 
@@ -723,6 +734,7 @@ def analyze_profile_match(
     person: PersonRecord,
     opportunity: OpportunityRecord,
     settings: Settings,
+    run_id: str = "",
 ) -> AnalyzeProfileMatchResult:
     semantic_evidence = _build_semantic_evidence(person, opportunity, settings, top_k=24)
     user_prompt = build_prompt_text(
@@ -755,6 +767,7 @@ def analyze_profile_match(
         person_id=person["person_id"],
         opportunity_id=opportunity["opportunity_id"],
         flow_key="analyze_profile_match",
+        run_id=run_id,
     )
     response = enforce_output_guardrails(response)
     if response == FALLBACK_MESSAGE:
@@ -772,8 +785,9 @@ def analyze_cultural_fit(
     person: PersonRecord,
     opportunity: OpportunityRecord,
     settings: Settings,
+    run_id: str = "",
 ) -> AnalyzeCulturalFitResult:
-    signals, warnings = _tavily_culture_signals(person, opportunity, settings)
+    signals, warnings = _tavily_culture_signals(person, opportunity, settings, run_id=run_id)
     confidence = _cultural_confidence(len(signals))
     user_prompt = build_prompt_text(
         flow_key=FLOW_TASK_ANALYZE_CULTURAL_FIT,
@@ -803,6 +817,7 @@ def analyze_cultural_fit(
         person_id=person["person_id"],
         opportunity_id=opportunity["opportunity_id"],
         flow_key="analyze_cultural_fit",
+        run_id=run_id,
     )
     response = enforce_output_guardrails(response)
     if response == FALLBACK_MESSAGE:
@@ -823,6 +838,7 @@ def prepare_selected_materials(
     opportunity: OpportunityRecord,
     settings: Settings,
     targets: list[str],
+    run_ids_by_target: dict[str, str] | None = None,
 ) -> PreparationSelectionResult:
     selected = [target for target in targets if target in PREPARE_TARGETS]
     if not selected:
@@ -830,6 +846,7 @@ def prepare_selected_materials(
 
     bundle = build_prepare_prompt_bundle(person, opportunity, settings)
     outputs: dict[str, str] = {}
+    run_ids = run_ids_by_target or {}
 
     if PREPARE_TARGET_GUIDANCE in selected:
         guidance = complete_prompt(
@@ -840,6 +857,7 @@ def prepare_selected_materials(
             person_id=person["person_id"],
             opportunity_id=opportunity["opportunity_id"],
             flow_key="prepare_guidance_text",
+            run_id=run_ids.get(PREPARE_TARGET_GUIDANCE, ""),
         )
         if guidance == FALLBACK_MESSAGE:
             guidance = (
@@ -858,6 +876,7 @@ def prepare_selected_materials(
             person_id=person["person_id"],
             opportunity_id=opportunity["opportunity_id"],
             flow_key="prepare_cover_letter",
+            run_id=run_ids.get(PREPARE_TARGET_COVER_LETTER, ""),
         )
         if cover_letter == FALLBACK_MESSAGE:
             cover_letter = (
@@ -876,6 +895,7 @@ def prepare_selected_materials(
             person_id=person["person_id"],
             opportunity_id=opportunity["opportunity_id"],
             flow_key="prepare_experience_summary",
+            run_id=run_ids.get(PREPARE_TARGET_EXPERIENCE_SUMMARY, ""),
         )
         if experience_summary == FALLBACK_MESSAGE:
             experience_summary = (
