@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `Ajuste UX perfil+cultura aplicado: titulo instruccional en perfil y evaluacion cultural simplificada por coincidencias/diferencias/indeterminado`
+- checkpoint_actual: `Ajuste UX oportunidades: tab Busqueda + CTA Cargar + guardadas diferenciadas y navegacion contextual renombrada a Analisis`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
 - ultima_actualizacion: `2026-04-07`
 
@@ -107,7 +107,7 @@
 - UX de analisis refinada para reducir carga cognitiva: `Senales culturales` y `Evidencia semantica CV` ahora se muestran colapsadas por defecto
 - UX de navegacion externa mejorada: URLs de resultados, oportunidades y senales culturales ahora son enlaces clicables (`target=_blank`) con estilo visual consistente
 - topbar de workspace replanteado para operacion diaria: marca a la izquierda, selector central de candidato con menu (incluye `Cambiar candidato` hacia `/candidates`), navegacion contextual (`Perfil`, `Oportunidades`, `Analisis`) y acciones globales por icono (`Administracion`, `Cerrar sesion`) a la derecha
-- nomenclatura de tabs contextuales ajustada para flujo real V1: `Perfil | Busqueda | Alineación`
+- nomenclatura de tabs contextuales ajustada para flujo real V1: `Perfil | Busqueda | Analisis`
 - regla UX explicita aplicada: sin candidato activo se ocultan tabs contextuales; con candidato activo se muestran tabs de contexto
 - pasada fina UX en header desktop/movil: legibilidad de tab largo, `nowrap`, scroll horizontal de tabs en pantallas pequenas y refinamiento visual del estado activo
 - vista de candidatos refinada: `Agregar perfil` ahora abre/cierra el formulario de alta bajo demanda; cuando no hay registros el formulario se abre automaticamente
@@ -129,6 +129,18 @@
 - hero de la vista de perfil compactado (titulo con menor peso y menor separacion respecto al topbar/panel)
 - hero de perfil ajustado a texto instruccional (no nombre propio), para mantener consistencia operacional en la vista
 - analisis cultural alineado para V1 via plantillas de prompt configurables: enfoque en `coincide/no coincide/indeterminado`, sin descarte automatico por vacios de evidencia y con conclusion abierta
+- busqueda de oportunidades refinada en UI: `target_roles` del perfil visibles como chips seleccionables que agregan/quitan terminos al query
+- carga manual de vacantes simplificada en UI: un solo formulario por `URL` en bloque colapsable
+- panel de estado de proveedores compactado en bloque colapsable para priorizar visualizacion inmediata de resultados
+- campo de busqueda en oportunidades ajustado a copy `Buscar roles de interés` y boton `Buscar` reubicado debajo del selector de roles
+- flujo de importacion manual simplificado en UI: se elimina formulario `desde texto` y se conserva formulario unificado por URL
+- regla V1 reforzada para carga manual por URL: `descripcion/snapshot` obligatorio (frontend + backend), ya que no hay scraping automatico
+- bloque `Carga manual de oportunidades` reubicado junto al segmento de `Oportunidades guardadas` para reducir ruido en la zona superior de resultados
+- `Log de proveedores (ultima busqueda)` refinado como panel colapsable con estilo monospace y menor densidad vertical
+- estructura de descubrimiento de oportunidades alineada a layout unificado: tabs `Busqueda` y `Carga manual`, con render condicional por modo
+- composicion de busqueda refinada: etiqueta `Buscar oportunidades, roles o empresas`, chips de roles en cabecera y boton `Buscar` full-width en el bloque superior
+- carga manual integrada como segundo tab (`Carga manual`) manteniendo formulario unificado por URL, snapshot obligatorio y CTA `Cargar`
+- `Oportunidades guardadas` ajustado en jerarquia visual: heading con mayor presencia, cards con tipografia/espaciado refinado y sin acciones redundantes dentro de la vista de busqueda
 - build frontend revalidado tras hardening visual de contraste: `npm run build` en `OK`
 - contratos API de `search` reforzados para validar `provider_status` (fallo total, degradacion parcial y config faltante)
 - contratos API/admin de `search-providers` reforzados para `GET`/`PATCH` y manejo `404` en proveedor desconocido

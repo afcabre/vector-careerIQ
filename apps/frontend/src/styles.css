@@ -586,6 +586,7 @@ select:focus-visible {
 .metaChip {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border-subtle));
   background: color-mix(in srgb, var(--bg-main) 75%, transparent);
@@ -593,6 +594,97 @@ select:focus-visible {
   font-size: 0.78rem;
   line-height: 1;
   padding: 6px 9px;
+}
+
+.metaChipActive {
+  border-color: color-mix(in srgb, var(--accent) 78%, white);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent) 28%, var(--bg-main));
+}
+
+button.metaChip {
+  cursor: pointer;
+  transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+
+button.metaChip:hover {
+  border-color: color-mix(in srgb, var(--accent) 65%, white);
+}
+
+.searchRoleComposer {
+  gap: 10px;
+}
+
+.searchRoleHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.searchRoleHeader .roleChipGroup {
+  margin-bottom: 0;
+}
+
+.searchRoleActions {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.opportunityModeTabs {
+  display: flex;
+  gap: 16px;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border-subtle));
+  margin: 8px 0 10px;
+}
+
+.opportunityModeTab {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0 0 8px;
+  min-height: auto;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.opportunityModeTab:hover {
+  color: var(--text-primary);
+}
+
+.opportunityModeTabActive {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.roleChipGroup {
+  margin-bottom: 0;
+}
+
+.searchComposerForm {
+  gap: 10px;
+}
+
+.searchActionRow {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.searchSubmitButton {
+  width: 100%;
+}
+
+.miniButton {
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+}
+
+.opportunityManualPanel {
+  margin-top: 10px;
 }
 
 .authPanel {
@@ -1025,8 +1117,90 @@ button:disabled {
   margin-top: 10px;
 }
 
+.providerStatusPanel {
+  margin-top: 6px;
+}
+
+.providerStatusList {
+  display: grid;
+  gap: 8px;
+}
+
+.providerStatusItem {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  background: color-mix(in srgb, var(--bg-main) 70%, transparent);
+}
+
+.providerStatusTitle {
+  margin: 0 0 3px;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+
+.providerStatusLog {
+  margin: 0;
+  font-family: "JetBrains Mono", "Cascadia Code", "Fira Code", monospace;
+  font-size: 0.68rem;
+  line-height: 1.3;
+  color: #9fb0c5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.providerStatusLogMuted {
+  margin-top: 4px;
+  color: #7f8ea3;
+}
+
+.providerStatusHint {
+  margin: 3px 0 0;
+  font-family: "JetBrains Mono", "Cascadia Code", "Fira Code", monospace;
+  font-size: 0.66rem;
+  color: #7f8ea3;
+}
+
 .subheading {
   margin: 18px 0 10px;
+}
+
+.savedOpportunitiesHeading {
+  margin-top: 22px;
+  margin-bottom: 12px;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.savedOpportunityCard {
+  display: grid;
+  gap: 10px;
+  padding: 18px 20px;
+  border: 1px solid color-mix(in srgb, var(--accent) 52%, var(--border-subtle));
+  background:
+    linear-gradient(
+      120deg,
+      color-mix(in srgb, var(--surface-card) 88%, #0f172a),
+      color-mix(in srgb, var(--surface-soft) 42%, #0f172a)
+    );
+}
+
+.savedOpportunityStatus {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.07em;
+}
+
+.savedOpportunityTitle {
+  margin: 0;
+  font-size: clamp(1.05rem, 1.5vw, 1.32rem);
+  line-height: 1.28;
+  font-weight: 600;
+}
+
+.savedOpportunityLink {
+  margin: 0;
 }
 
 .subheadingCompact {

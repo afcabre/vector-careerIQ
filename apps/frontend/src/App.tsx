@@ -25,7 +25,6 @@ import {
   getActiveCV,
   getActiveCVText,
   getSession,
-  importOpportunityByText,
   importOpportunityByUrl,
   listOpportunityAiRuns,
   listOpportunityArtifacts,
@@ -428,34 +427,42 @@ function buildSearchProviderDiagnostic(status: SearchProviderStatus): SearchProv
   };
 }
 
-function formatSearchProviderStatus(status: SearchProviderStatus): string {
-  const diagnostic = buildSearchProviderDiagnostic(status);
-  const enabledText = status.enabled ? "habilitado" : "deshabilitado";
-  const attemptedText = status.attempted ? "ejecutado" : "no ejecutado";
-  return `${diagnostic.statusLabel} · ${enabledText} · ${attemptedText} · resultados=${status.results_count}`;
+function normalizeSearchQuery(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }
 
-function buildSearchProviderDiagnosticText(status: SearchProviderStatus): string {
-  const diagnostic = buildSearchProviderDiagnostic(status);
-  const lines = [
-    `provider_key=${status.provider_key}`,
-    `status=${status.status}`,
-    `enabled=${status.enabled}`,
-    `attempted=${status.attempted}`,
-    `results_count=${status.results_count}`,
-    `reason_code=${status.reason}`,
-    `reason_display=${diagnostic.reasonLabel}`
-  ];
-  if (diagnostic.httpStatus) {
-    lines.push(`http_status=${diagnostic.httpStatus}`);
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function roleToken(role: string): string {
+  return `"${role.replace(/"/g, "").trim()}"`;
+}
+
+function hasRoleToken(query: string, role: string): boolean {
+  const token = roleToken(role);
+  if (!token || token === "\"\"") {
+    return false;
   }
-  if (diagnostic.rawReason) {
-    lines.push(`reason_raw=${diagnostic.rawReason}`);
+  const pattern = new RegExp(`(?:^|\\s)${escapeRegex(token)}(?=\\s|$)`, "i");
+  return pattern.test(query);
+}
+
+function addRoleToken(query: string, role: string): string {
+  const token = roleToken(role);
+  if (!token || token === "\"\"" || hasRoleToken(query, role)) {
+    return normalizeSearchQuery(query);
   }
-  if (status.query_truncated) {
-    lines.push("query_truncated=true");
+  return normalizeSearchQuery(`${query} ${token}`);
+}
+
+function removeRoleToken(query: string, role: string): string {
+  const token = roleToken(role);
+  if (!token || token === "\"\"") {
+    return normalizeSearchQuery(query);
   }
-  return lines.join("\n");
+  const pattern = new RegExp(`(?:^|\\s)${escapeRegex(token)}(?=\\s|$)`, "gi");
+  return normalizeSearchQuery(query.replace(pattern, " "));
 }
 
 async function copyToClipboard(text: string): Promise<void> {
@@ -606,21 +613,18 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchProviderStatus, setSearchProviderStatus] = useState<SearchProviderStatus[]>([]);
-  const [copiedSearchProviderKey, setCopiedSearchProviderKey] = useState<string | null>(null);
   const [selectedSearchResultId, setSelectedSearchResultId] = useState<string | null>(null);
   const [searchWarnings, setSearchWarnings] = useState<string[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [opportunityDiscoveryMode, setOpportunityDiscoveryMode] = useState<"search" | "manual">(
+    "search"
+  );
   const [manualUrl, setManualUrl] = useState("");
   const [manualUrlTitle, setManualUrlTitle] = useState("");
   const [manualUrlCompany, setManualUrlCompany] = useState("");
   const [manualUrlLocation, setManualUrlLocation] = useState("");
   const [manualUrlRawText, setManualUrlRawText] = useState("");
-  const [manualTextTitle, setManualTextTitle] = useState("");
-  const [manualTextCompany, setManualTextCompany] = useState("");
-  const [manualTextLocation, setManualTextLocation] = useState("");
-  const [manualTextRawText, setManualTextRawText] = useState("");
   const [isImportingUrl, setIsImportingUrl] = useState(false);
-  const [isImportingText, setIsImportingText] = useState(false);
   const [savedOpportunities, setSavedOpportunities] = useState<Opportunity[]>([]);
   const [activeCv, setActiveCv] = useState<ActiveCV | null>(null);
   const [activeCvFullText, setActiveCvFullText] = useState("");
@@ -808,7 +812,7 @@ export default function App() {
         ? "Perfil"
         : showOpportunitiesPage
           ? "Busqueda de oportunidades"
-          : "Alineación";
+          : "Análisis";
   const currentPageTitle = showCandidatesPage
     ? "Selecciona un perfil para abrir su contexto."
     : showAdminPromptsPage
@@ -817,12 +821,22 @@ export default function App() {
         ? "Gestiona perfil y CV del perfil activo."
         : showOpportunitiesPage
           ? "Busca, revisa e importa oportunidades para el contexto activo."
-          : "Evalua alineación del perfil y prepara entregables por oportunidad.";
+          : "Analiza el perfil y prepara entregables por oportunidad.";
   const currentPageLede = showContextualSidebar
     ? showProfilePage
       ? null
-      : "Usa las pestañas para gestionar perfil, busqueda y alineación."
+      : "Usa las pestañas para gestionar perfil, busqueda y análisis."
     : "Este flujo separa acceso del tutor y contexto del perfil consultado.";
+  const searchRoleKeywords = Array.from(
+    new Set(
+      (selectedPerson?.target_roles ?? [])
+        .map((item) => item.trim())
+        .filter(Boolean)
+    )
+  );
+  const selectedSearchRoleCount = searchRoleKeywords.filter((role) =>
+    hasRoleToken(searchQuery, role)
+  ).length;
   const chatQuickStarts = selectedPerson
     ? [
         `Cual es el foco de posicionamiento para ${selectedPerson.full_name} hoy?`,
@@ -1025,6 +1039,10 @@ export default function App() {
     setSearchProviderStatus([]);
     setSelectedSearchResultId(null);
     setSearchWarnings([]);
+  }, [selectedPersonId]);
+
+  useEffect(() => {
+    setOpportunityDiscoveryMode("search");
   }, [selectedPersonId]);
 
   useEffect(() => {
@@ -1480,7 +1498,6 @@ export default function App() {
     setIsSearching(true);
     setErrorMessage(null);
     setSearchProviderStatus([]);
-    setCopiedSearchProviderKey(null);
     try {
       const payload = await searchOpportunities(selectedPersonId, searchQuery.trim(), 6);
       setSearchResults(payload.items);
@@ -1519,22 +1536,6 @@ export default function App() {
       setErrorMessage(message);
     } finally {
       setSavingResultId(null);
-    }
-  }
-
-  async function handleCopySearchProviderDiagnostics(status: SearchProviderStatus) {
-    try {
-      await copyToClipboard(buildSearchProviderDiagnosticText(status));
-      setCopiedSearchProviderKey(status.provider_key);
-      window.setTimeout(() => {
-        setCopiedSearchProviderKey((current) =>
-          current === status.provider_key ? null : current
-        );
-      }, 1600);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "No se pudo copiar el diagnostico";
-      setErrorMessage(message);
     }
   }
 
@@ -1604,18 +1605,24 @@ export default function App() {
 
   async function handleImportByUrl(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedPersonId || !manualUrl.trim() || isImportingUrl) {
+    const sourceUrl = manualUrl.trim();
+    const rawText = manualUrlRawText.trim();
+    if (!selectedPersonId || !sourceUrl || isImportingUrl) {
+      return;
+    }
+    if (rawText.length < 8) {
+      setErrorMessage("La descripcion/snapshot es obligatoria (minimo 8 caracteres).");
       return;
     }
     setIsImportingUrl(true);
     setErrorMessage(null);
     try {
       const payload = await importOpportunityByUrl(selectedPersonId, {
-        source_url: manualUrl.trim(),
+        source_url: sourceUrl,
         title: manualUrlTitle.trim(),
         company: manualUrlCompany.trim(),
         location: manualUrlLocation.trim(),
-        raw_text: manualUrlRawText.trim()
+        raw_text: rawText
       });
       const items = await listOpportunities(selectedPersonId);
       setSavedOpportunities(items);
@@ -1634,39 +1641,32 @@ export default function App() {
     }
   }
 
-  async function handleImportByText(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (
-      !selectedPersonId ||
-      !manualTextTitle.trim() ||
-      !manualTextRawText.trim() ||
-      isImportingText
-    ) {
-      return;
-    }
-    setIsImportingText(true);
-    setErrorMessage(null);
-    try {
-      const item = await importOpportunityByText(selectedPersonId, {
-        title: manualTextTitle.trim(),
-        company: manualTextCompany.trim(),
-        location: manualTextLocation.trim(),
-        raw_text: manualTextRawText.trim()
-      });
-      const items = await listOpportunities(selectedPersonId);
-      setSavedOpportunities(items);
-      setSelectedOpportunityId(item.opportunity_id);
-      setManualTextTitle("");
-      setManualTextCompany("");
-      setManualTextLocation("");
-      setManualTextRawText("");
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "No se pudo importar por texto";
-      setErrorMessage(message);
-    } finally {
-      setIsImportingText(false);
-    }
+  function handleToggleSearchRole(role: string) {
+    setSearchQuery((current) =>
+      hasRoleToken(current, role)
+        ? removeRoleToken(current, role)
+        : addRoleToken(current, role)
+    );
+  }
+
+  function handleSelectAllSearchRoles() {
+    setSearchQuery((current) => {
+      let next = current;
+      for (const role of searchRoleKeywords) {
+        next = addRoleToken(next, role);
+      }
+      return next;
+    });
+  }
+
+  function handleClearSearchRoles() {
+    setSearchQuery((current) => {
+      let next = current;
+      for (const role of searchRoleKeywords) {
+        next = removeRoleToken(next, role);
+      }
+      return next;
+    });
   }
 
   async function refreshAiRunsFor(
@@ -2286,7 +2286,7 @@ export default function App() {
                 onClick={() => navigateTo(buildContextPath(selectedPerson.person_id, "analysis"))}
                 type="button"
               >
-                Alineación
+                Análisis
               </button>
             </nav>
           ) : null}
@@ -3043,75 +3043,214 @@ export default function App() {
       ) : null}
       {showOpportunitiesPage ? (
         <section className="panel selectedPanel">
-        <h2>Busqueda y oportunidades</h2>
-        <form className="chatForm" onSubmit={handleSearch}>
-          <input
-            disabled={!selectedPersonId || isSearching}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Buscar vacantes para el perfil activo..."
-            value={searchQuery}
-          />
+        <h2>Descubrimiento de vacantes</h2>
+        <div className="opportunityModeTabs" role="tablist" aria-label="Modo de descubrimiento">
           <button
-            className="primaryButton"
-            disabled={!selectedPersonId || isSearching || !searchQuery.trim()}
-            type="submit"
+            className={
+              opportunityDiscoveryMode === "search"
+                ? "opportunityModeTab opportunityModeTabActive"
+                : "opportunityModeTab"
+            }
+            aria-selected={opportunityDiscoveryMode === "search"}
+            onClick={() => setOpportunityDiscoveryMode("search")}
+            role="tab"
+            type="button"
           >
-            {isSearching ? "Buscando..." : "Buscar"}
+            Búsqueda
           </button>
-        </form>
-        {searchWarnings.length > 0 ? (
-          <p className="metaText">Avisos: {searchWarnings.join(" | ")}</p>
-        ) : null}
-        {searchProviderStatus.length > 0 ? (
-          <article className="manualCard">
-            <p className="chatRole">Estado de proveedores (ultima busqueda)</p>
-            <div className="chatList">
-              {searchProviderStatus.map((status) => {
-                const diagnostic = buildSearchProviderDiagnostic(status);
-                return (
-                  <article
-                    className="chatBubble chatBubbleAssistant"
-                    key={`provider-status-${status.provider_key}`}
-                  >
-                    <p className="chatRole">
-                      {SEARCH_PROVIDER_LABELS[status.provider_key] ?? status.provider_key}
-                    </p>
-                    <p className="metaText">{formatSearchProviderStatus(status)}</p>
-                    <p className="metaText">Motivo: {diagnostic.reasonLabel}</p>
-                    {diagnostic.httpStatus ? (
-                      <p className="metaText">HTTP status: {diagnostic.httpStatus}</p>
-                    ) : null}
-                    {status.query_truncated ? (
-                      <p className="metaText">
-                        Tavily query truncada automaticamente a 400 caracteres.
-                      </p>
-                    ) : null}
-                    {diagnostic.rawReason ? (
-                      <details className="payloadDetails">
-                        <summary>Ver detalle tecnico</summary>
-                        <pre className="payloadPre">{diagnostic.rawReason}</pre>
-                      </details>
-                    ) : null}
-                    <div className="cardActions">
+          <button
+            className={
+              opportunityDiscoveryMode === "manual"
+                ? "opportunityModeTab opportunityModeTabActive"
+                : "opportunityModeTab"
+            }
+            aria-selected={opportunityDiscoveryMode === "manual"}
+            onClick={() => setOpportunityDiscoveryMode("manual")}
+            role="tab"
+            type="button"
+          >
+            Carga manual
+          </button>
+        </div>
+        {opportunityDiscoveryMode === "search" ? (
+          <>
+            <form className="chatForm searchComposerForm" onSubmit={handleSearch}>
+              <label className="field">
+                Buscar oportunidades, roles o empresas
+                <input
+                  disabled={!selectedPersonId || isSearching}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Product Designer, UX Researcher, Bogota..."
+                  value={searchQuery}
+                />
+              </label>
+              {searchRoleKeywords.length > 0 ? (
+                <article className="manualCard searchRoleComposer">
+                  <div className="searchRoleHeader">
+                    <div className="metaChips roleChipGroup">
+                      {searchRoleKeywords.map((role) => {
+                        const selected = hasRoleToken(searchQuery, role);
+                        return (
+                          <button
+                            className={selected ? "metaChip metaChipActive" : "metaChip"}
+                            key={`search-role-${role}`}
+                            onClick={() => handleToggleSearchRole(role)}
+                            type="button"
+                          >
+                            {role}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="cardActions searchRoleActions">
                       <button
-                        onClick={() => void handleCopySearchProviderDiagnostics(status)}
+                        className="ghostButton miniButton"
+                        disabled={!selectedPersonId || searchRoleKeywords.length === 0}
+                        onClick={handleSelectAllSearchRoles}
                         type="button"
                       >
-                        {copiedSearchProviderKey === status.provider_key
-                          ? "Diagnostico copiado"
-                          : "Copiar diagnostico"}
+                        Seleccionar todas
+                      </button>
+                      <button
+                        className="ghostButton miniButton"
+                        disabled={!selectedPersonId || selectedSearchRoleCount === 0}
+                        onClick={handleClearSearchRoles}
+                        type="button"
+                      >
+                        Limpiar seleccion
                       </button>
                     </div>
+                  </div>
+                </article>
+              ) : null}
+              <div className="searchActionRow">
+                <button
+                  className="primaryButton searchSubmitButton"
+                  disabled={!selectedPersonId || isSearching || !searchQuery.trim()}
+                  type="submit"
+                >
+                  {isSearching ? "Buscando..." : "Buscar"}
+                </button>
+              </div>
+            </form>
+            {searchWarnings.length > 0 ? (
+              <p className="metaText">Avisos: {searchWarnings.join(" | ")}</p>
+            ) : null}
+            <div className="chatList">
+              {searchResults.length === 0 ? (
+                <p className="metaText">No hay resultados de busqueda recientes.</p>
+              ) : (
+                searchResults.map((result) => (
+                  <article
+                    className={
+                      selectedSearchResultId === result.search_result_id
+                        ? "chatBubble chatBubbleAssistant searchResultCard searchResultCardActive"
+                        : "chatBubble chatBubbleAssistant searchResultCard"
+                    }
+                    key={result.search_result_id}
+                  >
+                    <p className="chatRole">{result.source_provider}</p>
+                    <p className="chatContent">{result.title}</p>
+                    <div className="metaChips">
+                      <span className="metaChip">{result.company || "Empresa no identificada"}</span>
+                      <span className="metaChip">{result.location || "Ubicacion no especificada"}</span>
+                    </div>
+                    <p className="metaText">
+                      <ExternalUrlText url={result.source_url} />
+                    </p>
+                    <p className="metaText">{result.snippet}</p>
+                    <div className="cardActions">
+                      <button
+                        className={
+                          selectedSearchResultId === result.search_result_id ? "activeButton" : ""
+                        }
+                        onClick={() =>
+                          setSelectedSearchResultId((current) =>
+                            current === result.search_result_id ? null : result.search_result_id
+                          )
+                        }
+                        type="button"
+                      >
+                        {selectedSearchResultId === result.search_result_id
+                          ? "Cerrar detalle"
+                          : "Abrir detalle"}
+                      </button>
+                      <button
+                        disabled={savingResultId === result.search_result_id}
+                        onClick={() => void handleSaveSearchResult(result)}
+                        type="button"
+                      >
+                        {savingResultId === result.search_result_id
+                          ? "Guardando..."
+                          : "Guardar como oportunidad"}
+                      </button>
+                    </div>
+                    {selectedSearchResultId === result.search_result_id ? (
+                      <article className="inlineDetailCard">
+                        <p className="chatRole">Detalle (no persistido)</p>
+                        <p className="metaText">
+                          Proveedor: {result.source_provider} · Empresa:{" "}
+                          {result.company || "No identificada"} · Ubicacion:{" "}
+                          {result.location || "No especificada"}
+                        </p>
+                        <p className="metaText">
+                          URL: <ExternalUrlText noValueText="No disponible" url={result.source_url} />
+                        </p>
+                        <article className="chatBubble chatBubbleAssistant">
+                          <p className="chatRole">Snippet</p>
+                          <p className="chatContent">{result.snippet || "Sin snippet"}</p>
+                        </article>
+                        <article className="chatBubble chatBubbleUser">
+                          <p className="chatRole">Payload normalizado</p>
+                          <pre className="payloadPre">
+                            {JSON.stringify(result.normalized_payload, null, 2)}
+                          </pre>
+                        </article>
+                        <p className="metaText">
+                          Capturado: {new Date(result.captured_at).toLocaleString()}
+                        </p>
+                      </article>
+                    ) : null}
                   </article>
-                );
-              })}
+                ))
+              )}
             </div>
-          </article>
-        ) : null}
-        <h3 className="subheading">Carga manual de vacantes</h3>
-        <div className="manualGrid">
-          <form className="manualCard" onSubmit={handleImportByUrl}>
-            <p className="chatRole">Desde URL</p>
+            {searchProviderStatus.length > 0 ? (
+              <details className="collapsibleSection providerStatusPanel">
+                <summary>Log tecnico de proveedores (ultima busqueda)</summary>
+                <div className="providerStatusList">
+                  {searchProviderStatus.map((status) => {
+                    const diagnostic = buildSearchProviderDiagnostic(status);
+                    const providerLabel =
+                      SEARCH_PROVIDER_LABELS[status.provider_key] ?? status.provider_key;
+                    return (
+                      <article
+                        className="providerStatusItem"
+                        key={`provider-status-${status.provider_key}`}
+                      >
+                        <p className="providerStatusTitle">{providerLabel}</p>
+                        <pre className="providerStatusLog">{`${status.provider_key} | ${diagnostic.statusLabel} | results=${status.results_count} | reason=${status.reason}`}</pre>
+                        {status.query_truncated ? (
+                          <p className="providerStatusHint">query_truncated=true</p>
+                        ) : null}
+                        {diagnostic.rawReason ? (
+                          <details className="payloadDetails">
+                            <summary>Detalle tecnico</summary>
+                            <pre className="providerStatusLog providerStatusLogMuted">
+                              {diagnostic.rawReason}
+                            </pre>
+                          </details>
+                        ) : null}
+                      </article>
+                    );
+                  })}
+                </div>
+              </details>
+            ) : null}
+          </>
+        ) : (
+          <form className="manualCard opportunityManualPanel" onSubmit={handleImportByUrl}>
+            <p className="chatRole">Carga manual de oportunidades</p>
             <input
               disabled={!selectedPersonId || isImportingUrl}
               onChange={(event) => setManualUrl(event.target.value)}
@@ -3141,141 +3280,28 @@ export default function App() {
             <textarea
               disabled={!selectedPersonId || isImportingUrl}
               onChange={(event) => setManualUrlRawText(event.target.value)}
-              placeholder="Snapshot o resumen textual (opcional)"
+              placeholder="Descripcion o snapshot textual (obligatorio)"
               rows={3}
               value={manualUrlRawText}
             />
-            <button
-              className="primaryButton"
-              disabled={!selectedPersonId || isImportingUrl || !manualUrl.trim()}
-              type="submit"
-            >
-              {isImportingUrl ? "Importando..." : "Importar URL"}
-            </button>
-          </form>
-          <form className="manualCard" onSubmit={handleImportByText}>
-            <p className="chatRole">Desde texto</p>
-            <input
-              disabled={!selectedPersonId || isImportingText}
-              onChange={(event) => setManualTextTitle(event.target.value)}
-              placeholder="Titulo de la vacante"
-              value={manualTextTitle}
-            />
-            <div className="manualRow">
-              <input
-                disabled={!selectedPersonId || isImportingText}
-                onChange={(event) => setManualTextCompany(event.target.value)}
-                placeholder="Empresa (opcional)"
-                value={manualTextCompany}
-              />
-              <input
-                disabled={!selectedPersonId || isImportingText}
-                onChange={(event) => setManualTextLocation(event.target.value)}
-                placeholder="Ubicacion (opcional)"
-                value={manualTextLocation}
-              />
-            </div>
-            <textarea
-              disabled={!selectedPersonId || isImportingText}
-              onChange={(event) => setManualTextRawText(event.target.value)}
-              placeholder="Pega aqui el contenido de la vacante"
-              rows={3}
-              value={manualTextRawText}
-            />
+            <p className="metaText">
+              Requerido: describe la vacante (minimo 8 caracteres).
+            </p>
             <button
               className="primaryButton"
               disabled={
                 !selectedPersonId ||
-                isImportingText ||
-                !manualTextTitle.trim() ||
-                !manualTextRawText.trim()
+                isImportingUrl ||
+                !manualUrl.trim() ||
+                manualUrlRawText.trim().length < 8
               }
               type="submit"
             >
-              {isImportingText ? "Importando..." : "Importar texto"}
+              {isImportingUrl ? "Importando..." : "Cargar"}
             </button>
           </form>
-        </div>
-        <div className="chatList">
-          {searchResults.length === 0 ? (
-            <p className="metaText">No hay resultados de busqueda recientes.</p>
-          ) : (
-            searchResults.map((result) => (
-              <article
-                className={
-                  selectedSearchResultId === result.search_result_id
-                    ? "chatBubble chatBubbleAssistant searchResultCard searchResultCardActive"
-                    : "chatBubble chatBubbleAssistant searchResultCard"
-                }
-                key={result.search_result_id}
-              >
-                <p className="chatRole">{result.source_provider}</p>
-                <p className="chatContent">{result.title}</p>
-                <div className="metaChips">
-                  <span className="metaChip">{result.company || "Empresa no identificada"}</span>
-                  <span className="metaChip">{result.location || "Ubicacion no especificada"}</span>
-                </div>
-                <p className="metaText">
-                  <ExternalUrlText url={result.source_url} />
-                </p>
-                <p className="metaText">{result.snippet}</p>
-                <div className="cardActions">
-                  <button
-                    className={
-                      selectedSearchResultId === result.search_result_id ? "activeButton" : ""
-                    }
-                    onClick={() =>
-                      setSelectedSearchResultId((current) =>
-                        current === result.search_result_id ? null : result.search_result_id
-                      )
-                    }
-                    type="button"
-                  >
-                    {selectedSearchResultId === result.search_result_id
-                      ? "Cerrar detalle"
-                      : "Abrir detalle"}
-                  </button>
-                  <button
-                    disabled={savingResultId === result.search_result_id}
-                    onClick={() => void handleSaveSearchResult(result)}
-                    type="button"
-                  >
-                    {savingResultId === result.search_result_id
-                      ? "Guardando..."
-                      : "Guardar como oportunidad"}
-                  </button>
-                </div>
-                {selectedSearchResultId === result.search_result_id ? (
-                  <article className="inlineDetailCard">
-                    <p className="chatRole">Detalle (no persistido)</p>
-                    <p className="metaText">
-                      Proveedor: {result.source_provider} · Empresa:{" "}
-                      {result.company || "No identificada"} · Ubicacion:{" "}
-                      {result.location || "No especificada"}
-                    </p>
-                    <p className="metaText">
-                      URL: <ExternalUrlText noValueText="No disponible" url={result.source_url} />
-                    </p>
-                    <article className="chatBubble chatBubbleAssistant">
-                      <p className="chatRole">Snippet</p>
-                      <p className="chatContent">{result.snippet || "Sin snippet"}</p>
-                    </article>
-                    <article className="chatBubble chatBubbleUser">
-                      <p className="chatRole">Payload normalizado</p>
-                      <pre className="payloadPre">
-                        {JSON.stringify(result.normalized_payload, null, 2)}
-                      </pre>
-                    </article>
-                    <p className="metaText">
-                      Capturado: {new Date(result.captured_at).toLocaleString()}
-                    </p>
-                  </article>
-                ) : null}
-              </article>
-            ))
-          )}
-        </div>
-        <h3 className="subheading">Oportunidades guardadas</h3>
+        )}
+        <h3 className="subheading savedOpportunitiesHeading">Oportunidades guardadas</h3>
         {isLoadingOpportunities ? (
           <p className="metaText">Cargando oportunidades...</p>
         ) : savedOpportunities.length === 0 ? (
@@ -3283,38 +3309,19 @@ export default function App() {
         ) : (
           <div className="chatList">
             {savedOpportunities.map((item) => (
-              <article className="chatBubble chatBubbleUser" key={item.opportunity_id}>
-                <p className="chatRole">{item.status}</p>
-                <p className="chatContent">{item.title}</p>
+              <article
+                className="chatBubble chatBubbleUser savedOpportunityCard"
+                key={item.opportunity_id}
+              >
+                <p className="chatRole savedOpportunityStatus">{item.status.toUpperCase()}</p>
+                <p className="chatContent savedOpportunityTitle">{item.title}</p>
                 <div className="metaChips">
                   <span className="metaChip">{item.company || "Empresa no identificada"}</span>
                   <span className="metaChip">{item.location || "Ubicacion no especificada"}</span>
                 </div>
-                <p className="metaText">
+                <p className="metaText savedOpportunityLink">
                   <ExternalUrlText url={item.source_url} />
                 </p>
-                <div className="cardActions">
-                  <button
-                    className={
-                      selectedOpportunityId === item.opportunity_id ? "activeButton" : ""
-                    }
-                    onClick={() => setSelectedOpportunityId(item.opportunity_id)}
-                    type="button"
-                  >
-                    {selectedOpportunityId === item.opportunity_id ? "Seleccionada" : "Seleccionar"}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSelectedOpportunityId(item.opportunity_id);
-                      if (selectedPersonId) {
-                        navigateTo(buildContextPath(selectedPersonId, "analysis"));
-                      }
-                    }}
-                    type="button"
-                  >
-                    Ir a analisis
-                  </button>
-                </div>
               </article>
             ))}
           </div>
