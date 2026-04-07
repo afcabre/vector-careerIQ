@@ -30,6 +30,8 @@ from app.services.opportunity_ai_service import (
     analyze_opportunity,
     prepare_application_materials,
     prepare_selected_materials,
+    stream_analyze_cultural_fit_text,
+    stream_analyze_profile_match_text,
     stream_analyze_text,
     stream_prepare_sections,
 )
@@ -241,6 +243,31 @@ def _prepare_action_key(target: str) -> str:
     if not value:
         raise ValueError("Invalid prepare target")
     return value
+
+
+def _as_cultural_warnings(payload: Any) -> list[str]:
+    if not isinstance(payload, list):
+        return []
+    return [str(item) for item in payload if str(item).strip()]
+
+
+def _as_cultural_signals(payload: Any) -> list[dict[str, str]]:
+    if not isinstance(payload, list):
+        return []
+    items: list[dict[str, str]] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        items.append(
+            {
+                "source_provider": str(item.get("source_provider", "")),
+                "source_url": str(item.get("source_url", "")),
+                "title": str(item.get("title", "")),
+                "snippet": str(item.get("snippet", "")),
+                "captured_at": str(item.get("captured_at", "")),
+            }
+        )
+    return items
 
 
 @router.post("/from-search")
@@ -510,23 +537,8 @@ def analyze_cultural_fit_action(
             if isinstance(cached_payload, dict):
                 text = str(cached_payload.get("analysis_text", "")).strip()
                 confidence = str(cached_payload.get("cultural_confidence", "")).strip()
-                warnings_raw = cached_payload.get("cultural_warnings", [])
-                signals_raw = cached_payload.get("cultural_signals", [])
-                warnings = [str(item) for item in warnings_raw if str(item).strip()]
-                signals: list[dict[str, Any]] = []
-                if isinstance(signals_raw, list):
-                    for item in signals_raw:
-                        if not isinstance(item, dict):
-                            continue
-                        signals.append(
-                            {
-                                "source_provider": str(item.get("source_provider", "")),
-                                "source_url": str(item.get("source_url", "")),
-                                "title": str(item.get("title", "")),
-                                "snippet": str(item.get("snippet", "")),
-                                "captured_at": str(item.get("captured_at", "")),
-                            }
-                        )
+                warnings = _as_cultural_warnings(cached_payload.get("cultural_warnings"))
+                signals = _as_cultural_signals(cached_payload.get("cultural_signals"))
                 if text:
                     return AnalyzeCulturalFitResponse(
                         opportunity=_to_response(opportunity),
@@ -564,6 +576,286 @@ def analyze_cultural_fit_action(
         cultural_signals=result["cultural_signals"],
         served_from_cache=False,
     )
+
+
+@router.post("/{opportunity_id}/analyze/profile-match/stream")
+async def analyze_profile_match_stream(
+    person_id: str,
+    opportunity_id: str,
+    payload: ActionRequest | None = None,
+    _: SessionData = Depends(require_operator_session),
+    settings: Settings = Depends(get_settings),
+) -> StreamingResponse:
+    person = get_person(person_id)
+    if not person:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Person not found",
+        )
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    async def event_generator():
+        try:
+            request_payload = payload or ActionRequest()
+            yield _serialize_sse(
+                "message_start",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "channel": "analysis_text",
+                },
+            )
+            if not request_payload.force_recompute:
+                cached = get_current_ai_run(
+                    person_id=person_id,
+                    opportunity_id=opportunity_id,
+                    action_key=ACTION_ANALYZE_PROFILE_MATCH,
+                )
+                if cached and isinstance(cached.get("result_payload"), dict):
+                    cached_payload = cached["result_payload"]
+                    text = str(cached_payload.get("analysis_text", "")).strip()
+                    evidence = _as_semantic_evidence(cached_payload.get("semantic_evidence"))
+                    if text:
+                        yield _serialize_sse(
+                            "tool_status",
+                            {
+                                "person_id": person_id,
+                                "opportunity_id": opportunity_id,
+                                "stage": "analyze_profile_match_cached",
+                            },
+                        )
+                        yield _serialize_sse(
+                            "message_delta",
+                            {
+                                "person_id": person_id,
+                                "opportunity_id": opportunity_id,
+                                "channel": "analysis_text",
+                                "delta": text,
+                            },
+                        )
+                        yield _serialize_sse(
+                            "message_complete",
+                            {
+                                "opportunity": opportunity,
+                                "analysis_text": text,
+                                "semantic_evidence": evidence,
+                                "served_from_cache": True,
+                            },
+                        )
+                        return
+
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "analyze_profile_match_running",
+                },
+            )
+            semantic_evidence, stream = stream_analyze_profile_match_text(
+                person,
+                opportunity,
+                settings,
+            )
+            analysis_text = ""
+            for delta in stream:
+                analysis_text += delta
+                yield _serialize_sse(
+                    "message_delta",
+                    {
+                        "person_id": person_id,
+                        "opportunity_id": opportunity_id,
+                        "channel": "analysis_text",
+                        "delta": delta,
+                    },
+                )
+                await asyncio.sleep(0)
+
+            upsert_current_ai_run(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                action_key=ACTION_ANALYZE_PROFILE_MATCH,
+                result_payload={
+                    "analysis_text": analysis_text,
+                    "semantic_evidence": semantic_evidence,
+                },
+            )
+            updated = update_saved_opportunity(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                status="analyzed",
+                notes=opportunity.get("notes", ""),
+            )
+            final_item = updated or opportunity
+            yield _serialize_sse(
+                "message_complete",
+                {
+                    "opportunity": final_item,
+                    "analysis_text": analysis_text,
+                    "semantic_evidence": semantic_evidence,
+                    "served_from_cache": False,
+                },
+            )
+        except Exception as exc:  # pragma: no cover - network stream path
+            yield _serialize_sse(
+                "error",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "detail": str(exc),
+                },
+            )
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.post("/{opportunity_id}/analyze/cultural-fit/stream")
+async def analyze_cultural_fit_stream(
+    person_id: str,
+    opportunity_id: str,
+    payload: ActionRequest | None = None,
+    _: SessionData = Depends(require_operator_session),
+    settings: Settings = Depends(get_settings),
+) -> StreamingResponse:
+    person = get_person(person_id)
+    if not person:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Person not found",
+        )
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    async def event_generator():
+        try:
+            request_payload = payload or ActionRequest()
+            yield _serialize_sse(
+                "message_start",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "channel": "analysis_text",
+                },
+            )
+            if not request_payload.force_recompute:
+                cached = get_current_ai_run(
+                    person_id=person_id,
+                    opportunity_id=opportunity_id,
+                    action_key=ACTION_ANALYZE_CULTURAL_FIT,
+                )
+                if cached and isinstance(cached.get("result_payload"), dict):
+                    cached_payload = cached["result_payload"]
+                    text = str(cached_payload.get("analysis_text", "")).strip()
+                    confidence = str(cached_payload.get("cultural_confidence", "")).strip()
+                    warnings = _as_cultural_warnings(cached_payload.get("cultural_warnings"))
+                    signals = _as_cultural_signals(cached_payload.get("cultural_signals"))
+                    if text:
+                        yield _serialize_sse(
+                            "tool_status",
+                            {
+                                "person_id": person_id,
+                                "opportunity_id": opportunity_id,
+                                "stage": "analyze_cultural_fit_cached",
+                            },
+                        )
+                        yield _serialize_sse(
+                            "message_delta",
+                            {
+                                "person_id": person_id,
+                                "opportunity_id": opportunity_id,
+                                "channel": "analysis_text",
+                                "delta": text,
+                            },
+                        )
+                        yield _serialize_sse(
+                            "message_complete",
+                            {
+                                "opportunity": opportunity,
+                                "analysis_text": text,
+                                "cultural_confidence": confidence,
+                                "cultural_warnings": warnings,
+                                "cultural_signals": signals,
+                                "served_from_cache": True,
+                            },
+                        )
+                        return
+
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "analyze_cultural_fit_running",
+                },
+            )
+            confidence, warnings, signals, stream = stream_analyze_cultural_fit_text(
+                person,
+                opportunity,
+                settings,
+            )
+            analysis_text = ""
+            for delta in stream:
+                analysis_text += delta
+                yield _serialize_sse(
+                    "message_delta",
+                    {
+                        "person_id": person_id,
+                        "opportunity_id": opportunity_id,
+                        "channel": "analysis_text",
+                        "delta": delta,
+                    },
+                )
+                await asyncio.sleep(0)
+
+            upsert_current_ai_run(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                action_key=ACTION_ANALYZE_CULTURAL_FIT,
+                result_payload={
+                    "analysis_text": analysis_text,
+                    "cultural_confidence": confidence,
+                    "cultural_warnings": warnings,
+                    "cultural_signals": signals,
+                },
+            )
+            updated = update_saved_opportunity(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                status="analyzed",
+                notes=opportunity.get("notes", ""),
+            )
+            final_item = updated or opportunity
+            yield _serialize_sse(
+                "message_complete",
+                {
+                    "opportunity": final_item,
+                    "analysis_text": analysis_text,
+                    "cultural_confidence": confidence,
+                    "cultural_warnings": warnings,
+                    "cultural_signals": signals,
+                    "served_from_cache": False,
+                },
+            )
+        except Exception as exc:  # pragma: no cover - network stream path
+            yield _serialize_sse(
+                "error",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "detail": str(exc),
+                },
+            )
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.post("/{opportunity_id}/analyze")

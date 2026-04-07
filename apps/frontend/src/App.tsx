@@ -13,7 +13,8 @@ import {
   RequestTrace,
   SearchResult,
   SemanticEvidence,
-  analyzeOpportunityStream,
+  analyzeCulturalFitStream,
+  analyzeProfileMatchStream,
   analyzeCulturalFit,
   analyzeProfileMatch,
   createPerson,
@@ -1043,19 +1044,20 @@ export default function App() {
     setIsAnalyzingProfile(true);
     setErrorMessage(null);
     setAnalysisText("");
+    setCulturalConfidence("");
+    setCulturalWarnings([]);
+    setCulturalSignals([]);
     try {
-      const payload = await analyzeOpportunityStream(
+      const payload = await analyzeProfileMatchStream(
         personId,
         opportunityId,
+        forceRecomputeAi,
         (delta) => {
           setAnalysisText((current) => `${current}${delta}`);
         }
       );
       setAnalysisText(payload.analysis_text);
       setSemanticEvidence(payload.semantic_evidence);
-      setCulturalConfidence(payload.cultural_confidence);
-      setCulturalWarnings(payload.cultural_warnings);
-      setCulturalSignals(payload.cultural_signals);
       const items = await listOpportunities(personId);
       setSavedOpportunities(items);
       setSelectedOpportunityId(opportunityId);
@@ -1106,10 +1108,12 @@ export default function App() {
     setCulturalWarnings([]);
     setCulturalSignals([]);
     setAnalysisText("");
+    setSemanticEvidence(null);
     try {
-      const payload = await analyzeOpportunityStream(
+      const payload = await analyzeCulturalFitStream(
         personId,
         opportunityId,
+        forceRecomputeAi,
         (delta) => {
           setAnalysisText((current) => `${current}${delta}`);
         }
@@ -1118,7 +1122,6 @@ export default function App() {
       setCulturalConfidence(payload.cultural_confidence);
       setCulturalWarnings(payload.cultural_warnings);
       setCulturalSignals(payload.cultural_signals);
-      setSemanticEvidence(payload.semantic_evidence);
       const items = await listOpportunities(personId);
       setSavedOpportunities(items);
       setSelectedOpportunityId(opportunityId);

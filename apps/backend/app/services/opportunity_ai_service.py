@@ -604,6 +604,85 @@ def stream_analyze_text(
     return bundle, stream
 
 
+def stream_analyze_profile_match_text(
+    person: PersonRecord,
+    opportunity: OpportunityRecord,
+    settings: Settings,
+):
+    semantic_evidence = _build_semantic_evidence(person, opportunity, settings, top_k=24)
+    user_prompt = build_prompt_text(
+        flow_key=FLOW_TASK_ANALYZE_PROFILE_MATCH,
+        context={
+            "person_context": _person_context(person),
+            "opportunity_context": _opportunity_context(opportunity),
+            "semantic_evidence_context": _semantic_evidence_context(semantic_evidence),
+        },
+        fallback=(
+            "Analiza ajuste perfil-vacante.\n"
+            "Formato:\n"
+            "1) Ajuste general\n"
+            "2) Fortalezas\n"
+            "3) Brechas\n"
+            "4) Recomendacion accionable\n\n"
+            f"Persona:\n{_person_context(person)}\n\n"
+            f"Vacante:\n{_opportunity_context(opportunity)}\n\n"
+            f"Evidencia semantica CV:\n{_semantic_evidence_context(semantic_evidence)}"
+        ),
+    )
+    stream = stream_prompt(
+        _system_prompt_base(
+            person,
+            suspicious_input=_is_suspicious_opportunity_input(opportunity),
+        ),
+        user_prompt,
+        settings,
+        temperature=0.2,
+        person_id=person["person_id"],
+        opportunity_id=opportunity["opportunity_id"],
+        flow_key="analyze_profile_match_stream",
+    )
+    return semantic_evidence, stream
+
+
+def stream_analyze_cultural_fit_text(
+    person: PersonRecord,
+    opportunity: OpportunityRecord,
+    settings: Settings,
+):
+    signals, warnings = _tavily_culture_signals(person, opportunity, settings)
+    confidence = _cultural_confidence(len(signals))
+    user_prompt = build_prompt_text(
+        flow_key=FLOW_TASK_ANALYZE_CULTURAL_FIT,
+        context={
+            "person_context": _person_context(person),
+            "opportunity_context": _opportunity_context(opportunity),
+            "cultural_evidence_context": _cultural_evidence_context(signals),
+            "confidence_hint": confidence,
+        },
+        fallback=(
+            "Analiza fit cultural/condiciones de trabajo de forma cualitativa.\n"
+            "Incluye coincidencias, brechas y red flags por evidencia insuficiente.\n\n"
+            f"Persona:\n{_person_context(person)}\n\n"
+            f"Vacante:\n{_opportunity_context(opportunity)}\n\n"
+            f"Senales culturales externas:\n{_cultural_evidence_context(signals)}\n\n"
+            f"Nivel de confianza sugerido por evidencia: {confidence}"
+        ),
+    )
+    stream = stream_prompt(
+        _system_prompt_base(
+            person,
+            suspicious_input=_is_suspicious_opportunity_input(opportunity),
+        ),
+        user_prompt,
+        settings,
+        temperature=0.2,
+        person_id=person["person_id"],
+        opportunity_id=opportunity["opportunity_id"],
+        flow_key="analyze_cultural_fit_stream",
+    )
+    return confidence, warnings, signals, stream
+
+
 def stream_prepare_sections(
     person: PersonRecord,
     opportunity: OpportunityRecord,

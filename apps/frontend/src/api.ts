@@ -678,6 +678,154 @@ export async function analyzeOpportunityStream(
   return completedPayload;
 }
 
+export async function analyzeProfileMatchStream(
+  personId: string,
+  opportunityId: string,
+  forceRecompute: boolean,
+  onDelta: (delta: string) => void
+): Promise<AnalyzeProfileMatchPayload> {
+  const response = await fetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/analyze/profile-match/stream`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ force_recompute: forceRecompute })
+    }
+  );
+  if (!response.ok) {
+    let messageText = `Request failed: ${response.status}`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) {
+        messageText = payload.detail;
+      }
+    } catch {
+      // Ignore parsing errors for stream setup failures.
+    }
+    throw new Error(messageText);
+  }
+  if (!response.body) {
+    throw new Error("Streaming response body is empty");
+  }
+
+  const decoder = new TextDecoder();
+  const reader = response.body.getReader();
+  let pending = "";
+  let completedPayload: AnalyzeProfileMatchPayload | null = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+    pending += decoder.decode(value, { stream: true });
+    const consumed = consumeSseBuffer(pending, (eventName, payload) => {
+      if (eventName === "message_delta") {
+        const delta = payload.delta;
+        const channel = payload.channel;
+        if (channel === "analysis_text" && typeof delta === "string" && delta.length > 0) {
+          onDelta(delta);
+        }
+      } else if (eventName === "message_complete") {
+        completedPayload = payload as unknown as AnalyzeProfileMatchPayload;
+      }
+    });
+    pending = consumed.remainder;
+  }
+  if (pending.trim()) {
+    consumeSseBuffer(`${pending}\n\n`, (eventName, payload) => {
+      if (eventName === "message_delta") {
+        const delta = payload.delta;
+        const channel = payload.channel;
+        if (channel === "analysis_text" && typeof delta === "string" && delta.length > 0) {
+          onDelta(delta);
+        }
+      } else if (eventName === "message_complete") {
+        completedPayload = payload as unknown as AnalyzeProfileMatchPayload;
+      }
+    });
+  }
+  if (!completedPayload) {
+    throw new Error("Analyze profile-match stream ended without completion payload");
+  }
+  return completedPayload;
+}
+
+export async function analyzeCulturalFitStream(
+  personId: string,
+  opportunityId: string,
+  forceRecompute: boolean,
+  onDelta: (delta: string) => void
+): Promise<AnalyzeCulturalFitPayload> {
+  const response = await fetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/analyze/cultural-fit/stream`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ force_recompute: forceRecompute })
+    }
+  );
+  if (!response.ok) {
+    let messageText = `Request failed: ${response.status}`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) {
+        messageText = payload.detail;
+      }
+    } catch {
+      // Ignore parsing errors for stream setup failures.
+    }
+    throw new Error(messageText);
+  }
+  if (!response.body) {
+    throw new Error("Streaming response body is empty");
+  }
+
+  const decoder = new TextDecoder();
+  const reader = response.body.getReader();
+  let pending = "";
+  let completedPayload: AnalyzeCulturalFitPayload | null = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+    pending += decoder.decode(value, { stream: true });
+    const consumed = consumeSseBuffer(pending, (eventName, payload) => {
+      if (eventName === "message_delta") {
+        const delta = payload.delta;
+        const channel = payload.channel;
+        if (channel === "analysis_text" && typeof delta === "string" && delta.length > 0) {
+          onDelta(delta);
+        }
+      } else if (eventName === "message_complete") {
+        completedPayload = payload as unknown as AnalyzeCulturalFitPayload;
+      }
+    });
+    pending = consumed.remainder;
+  }
+  if (pending.trim()) {
+    consumeSseBuffer(`${pending}\n\n`, (eventName, payload) => {
+      if (eventName === "message_delta") {
+        const delta = payload.delta;
+        const channel = payload.channel;
+        if (channel === "analysis_text" && typeof delta === "string" && delta.length > 0) {
+          onDelta(delta);
+        }
+      } else if (eventName === "message_complete") {
+        completedPayload = payload as unknown as AnalyzeCulturalFitPayload;
+      }
+    });
+  }
+  if (!completedPayload) {
+    throw new Error("Analyze cultural-fit stream ended without completion payload");
+  }
+  return completedPayload;
+}
+
 export async function prepareOpportunityStream(
   personId: string,
   opportunityId: string,
