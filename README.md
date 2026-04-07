@@ -25,6 +25,8 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
 - frontend permite consulta explicita de historico IA persistido por oportunidad (filtro opcional por `action_key`)
 - backend persiste trazas de request exacto enviado a `OpenAI`, `Tavily`, `Adzuna` y `Remotive` (sin secretos)
 - frontend muestra trazas de request por persona con filtros de destino y oportunidad activa
+- hardening de `request_traces` aplicado: redaccion automatica de secretos y cap de tamano de payload con truncamiento seguro
+- frontend agrupa trazas por `run_id` y habilita navegacion bidireccional `request <-> response` con vista unificada por ejecucion
 - importacion manual de vacantes por URL y texto pegado desde frontend
 - carga de CV por persona (`/cv`) con un CV activo por perfil y extraccion base de texto
 - indexacion vectorial del CV activo habilitada (embeddings OpenAI + upsert/query en Pinecone cuando hay configuracion)
@@ -40,6 +42,7 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
 - criterio de producto: el streaming SSE no debe quedar restringido a chat; debe aplicarse tambien a salidas IA de `analyze` y `prepare`
 - `analyze` en frontend usa SSE separado por accion: `profile-match/stream` y `cultural-fit/stream` (fallback a no-stream)
 - observabilidad basica agregada en backend para errores/fallbacks de proveedores y retrieval semantico
+- administracion de prompts extendida con historial de versiones por `flow_key` y rollback manual desde UI/API
 
 ## Siguiente paso
 - ampliar pruebas de seguridad para casos edge de prompt injection en flujos streaming
@@ -154,6 +157,8 @@ Mapa rapido endpoint -> flow:
 - `POST /api/persons/{person_id}/opportunities/{opportunity_id}/prepare/stream`: misma composicion de `prepare` con SSE por canal y soporte de `targets` + `force_recompute`
 - `GET /api/persons/{person_id}/opportunities/{opportunity_id}/ai-runs`: historico backend por accion IA (`action_key` opcional)
 - `GET /api/persons/{person_id}/request-traces`: historial de request payload exacto por destino (`destination`, `opportunity_id`, `run_id`, `limit` opcionales)
+- `GET /api/admin/prompt-configs/{flow_key}/versions`: historial de versiones por flow de prompt
+- `POST /api/admin/prompt-configs/{flow_key}/rollback`: restaurar una version previa del flow
 - `POST /api/persons/{person_id}/search`: `search_jobs_tavily`
 - senales culturales en `analyze_cultural_fit`: `search_culture_tavily`
 

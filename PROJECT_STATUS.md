@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `trazas exactas de request + SSE separado por accion en analyze (perfil/cultura)`
+- checkpoint_actual: `hardening de request_traces + UX unificada por run_id + versionado/rollback de prompt configs`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
 - ultima_actualizacion: `2026-04-07`
 
@@ -49,11 +49,13 @@
 - arquitectura actualizada con `Prompt Admin`, `Prompt Config Router/Service` y endpoints admin de configuracion
 - backend incorpora `prompt_config_store` con defaults V1, validacion y persistencia `memory/firestore`
 - backend expone endpoints admin `GET /api/admin/prompt-configs`, `GET /api/admin/prompt-configs/{flow_key}` y `PATCH /api/admin/prompt-configs/{flow_key}`
+- backend agrega historial de versiones en `prompt_config_versions` y endpoints admin `GET /api/admin/prompt-configs/{flow_key}/versions` + `POST /api/admin/prompt-configs/{flow_key}/rollback`
 - busqueda Tavily de vacantes usa construccion de query configurable via `prompt_configs` (`search_jobs_tavily`)
 - fit cultural Tavily usa construccion de query configurable via `prompt_configs` (`search_culture_tavily`)
 - pruebas de contrato/admin de prompt configs agregadas en `apps/backend/tests/test_prompt_config_admin.py` (`5 tests` en `OK`)
 - frontend incorpora seccion `Administracion de prompts (global V1)` para listar/editar `template_text`, `target_sources` e `is_active`
 - frontend consume endpoints admin de prompt configs y aplica validaciones basicas antes de guardar
+- frontend de admin prompts permite consultar versiones por flow y restaurar una version previa (rollback)
 - build frontend verificado localmente tras integracion UI admin: `npm run build` en `OK`
 - prompt configs ampliados para V1 con capas editables: `guardrails_core` (global), `system_identity` (global) y `task_*` por accion (`chat`, `analyze`, `prepare`)
 - arquitectura normativa actualizada con matriz operativa de prompts/parametros V1 (destino, objetivo, placeholders, alcance, riesgo y control de consumo)
@@ -66,6 +68,8 @@
 - frontend incorpora panel de trazas para visualizar request exacto por destino y filtrar por oportunidad activa
 - trazas `request_traces` ahora soportan `run_id` para vinculo 1:1 con ejecuciones persistidas (`ai_action_runs`)
 - backend permite filtrar trazas por `run_id` y frontend habilita foco desde `Historico IA` con boton `Ver request exacto`
+- `request_traces` endurecido con saneo de payload: redaccion automatica de secretos (api_key/token/password/authorization) y truncamiento seguro por cap de tamano
+- frontend agrupa trazas por `run_id`, habilita navegacion bidireccional `request <-> response` y muestra vista unificada por ejecucion
 - arquitectura documenta politica de ventana de contexto y cantidad de mensajes por flujo OpenAI (`chat`, `analyze`, `prepare`, legacy combinado)
 - README incluye resumen operativo de reglas de contexto OpenAI V1 y referencia al detalle normativo
 - API agrega acciones separadas de analisis: `POST .../analyze/profile-match` y `POST .../analyze/cultural-fit`
@@ -144,6 +148,7 @@
 - suite backend revalidada tras hardening SSE: `51 tests` en `OK` (`skipped=1`)
 - suite backend revalidada tras refuerzo de contratos HTTP fallback/degradacion: `55 tests` en `OK` (`skipped=1`)
 - suite backend actualizada con contratos de enlace `run_id` en request traces: `63 tests` en `OK` (`skipped=1`)
+- suite backend revalidada con hardening de trazas y versionado/rollback de prompts: `67 tests` en `OK` (`skipped=1`)
 
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada de CV a Markdown (PyMuPDF/LlamaIndex) para mejorar jerarquia semantica
@@ -156,4 +161,4 @@
 
 ## Siguiente Actividad
 - investigar y cerrar el bloqueo del harness ASGI para reactivar el test HTTP hoy marcado `skip`
-- evaluar mejora futura de saneo incremental por deltas SSE sin romper paridad ni latencia
+- reforzar cobertura de contratos HTTP para endpoints nuevos de versionado/rollback en entorno API real
