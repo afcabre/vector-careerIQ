@@ -83,6 +83,9 @@
 - frontend incorpora navegacion global (candidatos/admin) y navegacion contextual por candidato (perfil/oportunidades/analisis)
 - secciones principales quedan segmentadas por pagina: seleccion de candidatos, administracion global, perfil+CV, explorador de oportunidades, analisis+trazas
 - build frontend revalidado tras lote de navegacion multipagina: `npm run build` en `OK`
+- frontend aplica tema oscuro base `Speech Brand DNA` en `styles.css` (tokens de color, superficies, tipografia y estados interactivos)
+- frontend refuerza componentes visuales de V1: avatar en tarjetas de candidatos + chips de metadatos en tarjetas de oportunidades
+- build frontend revalidado tras ajustes dark mode: `npm run build` en `OK`
 - contratos API de `search` reforzados para validar `provider_status` (fallo total, degradacion parcial y config faltante)
 - contratos API/admin de `search-providers` reforzados para `GET`/`PATCH` y manejo `404` en proveedor desconocido
 - `prepare/stream` en frontend muestra deltas no solo de `guidance_text`, tambien de `cover_letter` y `experience_summary`

@@ -259,6 +259,15 @@ function buildDefaultCulturalPreferences(): Record<string, CulturalFieldPreferen
   return defaults;
 }
 
+function getPersonInitials(fullName: string): string {
+  return fullName
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("") || "NA";
+}
+
 function buildPromptConfigDrafts(
   configs: PromptConfig[]
 ): Record<string, PromptConfigDraft> {
@@ -2131,9 +2140,14 @@ export default function App() {
         <div className="cards">
           {people.map((person) => (
             <article className="card" key={person.person_id}>
-              <span className="cardTag">{person.person_id}</span>
-              <h3>{person.full_name}</h3>
-              <p>{person.target_roles.join(", ")}</p>
+              <div className="cardHeader">
+                <div className="candidateAvatar">{getPersonInitials(person.full_name)}</div>
+                <div>
+                  <span className="cardTag">{person.person_id}</span>
+                  <h3>{person.full_name}</h3>
+                </div>
+              </div>
+              <p>{person.target_roles[0] ?? "Sin rol objetivo"}</p>
               <p className="metaText">
                 {person.location} · {person.years_experience} anos
               </p>
@@ -2883,10 +2897,11 @@ export default function App() {
               >
                 <p className="chatRole">{result.source_provider}</p>
                 <p className="chatContent">{result.title}</p>
-                <p className="metaText">
-                  {result.company || "Empresa no identificada"}
-                  {result.source_url ? ` · ${result.source_url}` : ""}
-                </p>
+                <div className="metaChips">
+                  <span className="metaChip">{result.company || "Empresa no identificada"}</span>
+                  <span className="metaChip">{result.location || "Ubicacion no especificada"}</span>
+                </div>
+                <p className="metaText">{result.source_url || "URL no disponible"}</p>
                 <p className="metaText">{result.snippet}</p>
                 <div className="cardActions">
                   <button
@@ -2953,10 +2968,11 @@ export default function App() {
               <article className="chatBubble chatBubbleUser" key={item.opportunity_id}>
                 <p className="chatRole">{item.status}</p>
                 <p className="chatContent">{item.title}</p>
-                <p className="metaText">
-                  {item.company || "Empresa no identificada"}
-                  {item.source_url ? ` · ${item.source_url}` : ""}
-                </p>
+                <div className="metaChips">
+                  <span className="metaChip">{item.company || "Empresa no identificada"}</span>
+                  <span className="metaChip">{item.location || "Ubicacion no especificada"}</span>
+                </div>
+                <p className="metaText">{item.source_url || "URL no disponible"}</p>
                 <div className="cardActions">
                   <button
                     className={

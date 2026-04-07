@@ -151,6 +151,27 @@ select:focus-visible {
   background: color-mix(in srgb, var(--surface-card) 90%, #0f172a);
 }
 
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.candidateAvatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 70%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
 .cardTag {
   display: inline-block;
   margin-bottom: 10px;
@@ -218,6 +239,25 @@ select:focus-visible {
   margin: 0;
   color: var(--text-secondary);
   overflow-wrap: anywhere;
+}
+
+.metaChips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.metaChip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border-subtle));
+  background: color-mix(in srgb, var(--bg-main) 75%, transparent);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1;
+  padding: 6px 9px;
 }
 
 .authPanel {
