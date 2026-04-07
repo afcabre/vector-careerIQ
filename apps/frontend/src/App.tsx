@@ -51,6 +51,33 @@ import {
 } from "./api";
 
 type ViewState = "checking" | "login" | "workspace";
+type WorkspacePage = "candidates" | "admin-prompts" | "profile" | "opportunities" | "analysis";
+type ParsedWorkspaceRoute = {
+  page: WorkspacePage;
+  personId: string | null;
+};
+
+function parseWorkspacePath(pathname: string): ParsedWorkspaceRoute {
+  const normalized = pathname.replace(/\/+$/, "") || "/";
+  if (normalized === "/" || normalized === "/candidates") {
+    return { page: "candidates", personId: null };
+  }
+  if (normalized === "/admin/prompts") {
+    return { page: "admin-prompts", personId: null };
+  }
+  const match = normalized.match(/^\/c\/([^/]+)\/(profile|opportunities|analysis)$/);
+  if (!match) {
+    return { page: "candidates", personId: null };
+  }
+  const personId = decodeURIComponent(match[1]);
+  const page = match[2] as WorkspacePage;
+  return { page, personId };
+}
+
+function buildContextPath(personId: string, page: "profile" | "opportunities" | "analysis"): string {
+  return `/c/${encodeURIComponent(personId)}/${page}`;
+}
+
 const OPPORTUNITY_STATUSES = [
   "detected",
   "analyzed",
@@ -483,6 +510,12 @@ function groupRequestTracesByRunId(items: RequestTrace[]): RequestTraceGroup[] {
 
 export default function App() {
   const [view, setView] = useState<ViewState>("checking");
+  const [currentPath, setCurrentPath] = useState<string>(() => {
+    if (typeof window === "undefined") {
+      return "/candidates";
+    }
+    return window.location.pathname || "/candidates";
+  });
   const [username, setUsername] = useState("tutor");
   const [password, setPassword] = useState("");
   const [operatorName, setOperatorName] = useState("");
@@ -588,6 +621,19 @@ export default function App() {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const onPopState = () => {
+      setCurrentPath(window.location.pathname || "/candidates");
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+    };
+  }, []);
+
+  useEffect(() => {
     const boot = async () => {
       try {
         const session = await getSession();
@@ -598,12 +644,41 @@ export default function App() {
           setSelectedPersonId(items[0].person_id);
         }
         setView("workspace");
+        if ((window.location.pathname || "/") === "/login") {
+          navigateTo("/candidates", { replace: true });
+        }
       } catch {
         setView("login");
+        navigateTo("/login", { replace: true });
       }
     };
     void boot();
   }, []);
+
+  useEffect(() => {
+    if (view !== "workspace") {
+      return;
+    }
+    const route = parseWorkspacePath(currentPath);
+    if (!route.personId) {
+      if (currentPath === "/" || currentPath === "/login") {
+        navigateTo("/candidates", { replace: true });
+      }
+      return;
+    }
+    if (people.length === 0) {
+      navigateTo("/candidates", { replace: true });
+      return;
+    }
+    const exists = people.some((item) => item.person_id === route.personId);
+    if (!exists) {
+      navigateTo(`/c/${people[0].person_id}/profile`, { replace: true });
+      return;
+    }
+    if (selectedPersonId !== route.personId) {
+      setSelectedPersonId(route.personId);
+    }
+  }, [view, currentPath, people, selectedPersonId]);
 
   useEffect(() => {
     const loadPromptConfigs = async () => {
@@ -659,6 +734,50 @@ export default function App() {
     const indexB = searchProviderOrder.indexOf(b.provider_key);
     return indexA - indexB;
   });
+  const parsedRoute = parseWorkspacePath(currentPath);
+  const showCandidatesPage = parsedRoute.page === "candidates";
+  const showAdminPromptsPage = parsedRoute.page === "admin-prompts";
+  const showProfilePage = parsedRoute.page === "profile";
+  const showOpportunitiesPage = parsedRoute.page === "opportunities";
+  const showAnalysisPage = parsedRoute.page === "analysis";
+  const showContextualSidebar = showProfilePage || showOpportunitiesPage || showAnalysisPage;
+  const showConversationSection = showContextualSidebar;
+  const currentPageLabel = showCandidatesPage
+    ? "Seleccion de candidato"
+    : showAdminPromptsPage
+      ? "Administracion global"
+      : showProfilePage
+        ? "Perfil y DNA"
+        : showOpportunitiesPage
+          ? "Explorador de oportunidades"
+          : "Analisis y preparacion";
+  const currentPageTitle = showCandidatesPage
+    ? "Selecciona una persona consultada para abrir su contexto."
+    : showAdminPromptsPage
+      ? "Ajusta prompts globales y proveedores de busqueda."
+      : showProfilePage
+        ? "Edita perfil y preferencias del candidato activo."
+        : showOpportunitiesPage
+          ? "Busca, revisa e importa oportunidades para el contexto activo."
+          : "Ejecuta analisis y prepara entregables por oportunidad.";
+
+  function navigateTo(path: string, options?: { replace?: boolean }) {
+    if (typeof window === "undefined") {
+      setCurrentPath(path);
+      return;
+    }
+    const replace = Boolean(options?.replace);
+    if (window.location.pathname === path) {
+      setCurrentPath(path);
+      return;
+    }
+    if (replace) {
+      window.history.replaceState({}, "", path);
+    } else {
+      window.history.pushState({}, "", path);
+    }
+    setCurrentPath(path);
+  }
 
   useEffect(() => {
     const loadConversation = async () => {
@@ -880,6 +999,7 @@ export default function App() {
         setSelectedPersonId(items[0].person_id);
       }
       setView("workspace");
+      navigateTo("/candidates", { replace: true });
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "No se pudo iniciar sesion";
@@ -900,6 +1020,7 @@ export default function App() {
       return;
     }
     setView("login");
+    navigateTo("/login", { replace: true });
     setOperatorName("");
     setPassword("");
     setSelectedPersonId(null);
@@ -979,6 +1100,7 @@ export default function App() {
       const items = await listPersons();
       setPeople(items);
       setSelectedPersonId(created.person_id);
+      navigateTo(buildContextPath(created.person_id, "profile"));
       setNewPersonFullName("");
       setNewPersonTargetRolesInput("");
       setNewPersonLocation("");
@@ -1920,24 +2042,90 @@ export default function App() {
 
   return (
     <main className="shell">
+      <section className="panel workspaceTopbar">
+        <div>
+          <p className="eyebrow">CareerIQ</p>
+          <p className="metaText">
+            Operador autenticado: <strong>{operatorName}</strong>
+          </p>
+        </div>
+        <div className="cardActions">
+          <button
+            className={showCandidatesPage ? "activeButton" : ""}
+            onClick={() => navigateTo("/candidates")}
+            type="button"
+          >
+            Candidatos
+          </button>
+          <button
+            className={showAdminPromptsPage ? "activeButton" : ""}
+            onClick={() => navigateTo("/admin/prompts")}
+            type="button"
+          >
+            Administracion
+          </button>
+          <button className="ghostButton" onClick={handleLogout} type="button">
+            Cerrar sesion
+          </button>
+        </div>
+      </section>
+
+      {showContextualSidebar && selectedPerson ? (
+        <section className="panel selectedPanel">
+          <header className="panelHeader">
+            <div>
+              <h2>{selectedPerson.full_name}</h2>
+              <p>
+                ID: {selectedPerson.person_id} · {selectedPerson.target_roles.join(", ")}
+              </p>
+            </div>
+            <div className="cardActions">
+              <button
+                className={showProfilePage ? "activeButton" : ""}
+                onClick={() => navigateTo(buildContextPath(selectedPerson.person_id, "profile"))}
+                type="button"
+              >
+                Perfil
+              </button>
+              <button
+                className={showOpportunitiesPage ? "activeButton" : ""}
+                onClick={() =>
+                  navigateTo(buildContextPath(selectedPerson.person_id, "opportunities"))
+                }
+                type="button"
+              >
+                Oportunidades
+              </button>
+              <button
+                className={showAnalysisPage ? "activeButton" : ""}
+                onClick={() => navigateTo(buildContextPath(selectedPerson.person_id, "analysis"))}
+                type="button"
+              >
+                Analisis
+              </button>
+            </div>
+          </header>
+        </section>
+      ) : null}
+
       <section className="hero">
-        <p className="eyebrow">Tutor Workspace</p>
-        <h1>Selecciona una persona consultada para abrir su contexto.</h1>
+        <p className="eyebrow">{currentPageLabel}</p>
+        <h1>{currentPageTitle}</h1>
         <p className="lede">
-          Operador autenticado: <strong>{operatorName}</strong>. Este flujo ya
-          separa acceso del tutor y contexto de la persona consultada.
+          {showContextualSidebar && selectedPerson
+            ? `Contexto activo: ${selectedPerson.full_name}.`
+            : "Este flujo separa acceso del tutor y contexto de la persona consultada."}
         </p>
       </section>
 
-      <section className="panel">
+      {showCandidatesPage ? (
+        <section className="panel">
         <header className="panelHeader">
           <div>
             <h2>Personas consultadas</h2>
             <p>Selecciona el perfil activo para continuar a chat y oportunidades.</p>
           </div>
-          <button className="ghostButton" onClick={handleLogout} type="button">
-            Cerrar sesion
-          </button>
+          <p className="metaText">{people.length} registradas</p>
         </header>
 
         <div className="cards">
@@ -1954,7 +2142,10 @@ export default function App() {
                   className={
                     person.person_id === selectedPersonId ? "activeButton" : ""
                   }
-                  onClick={() => setSelectedPersonId(person.person_id)}
+                  onClick={() => {
+                    setSelectedPersonId(person.person_id);
+                    navigateTo(buildContextPath(person.person_id, "profile"));
+                  }}
                   type="button"
                 >
                   {person.person_id === selectedPersonId
@@ -2020,9 +2211,11 @@ export default function App() {
             </button>
           </div>
         </form>
-      </section>
+        </section>
+      ) : null}
 
-      <section className="panel selectedPanel">
+      {showAdminPromptsPage ? (
+        <section className="panel selectedPanel">
         <header className="panelHeader">
           <div>
             <h2>Administracion de proveedores de busqueda</h2>
@@ -2077,9 +2270,11 @@ export default function App() {
             })}
           </div>
         )}
-      </section>
+        </section>
+      ) : null}
 
-      <section className="panel selectedPanel">
+      {showAdminPromptsPage ? (
+        <section className="panel selectedPanel">
         <header className="panelHeader">
           <div>
             <h2>Administracion de prompts (global V1)</h2>
@@ -2244,9 +2439,11 @@ export default function App() {
             })}
           </div>
         )}
-      </section>
+        </section>
+      ) : null}
 
-      <section className="panel selectedPanel">
+      {showProfilePage ? (
+        <section className="panel selectedPanel">
         <h2>Contexto activo</h2>
         {selectedPerson ? (
           <div className="cvCard">
@@ -2412,8 +2609,10 @@ export default function App() {
             continuar.
           </p>
         )}
-      </section>
-      <section className="panel selectedPanel">
+        </section>
+      ) : null}
+      {showProfilePage ? (
+        <section className="panel selectedPanel">
         <h2>CV activo</h2>
         <form className="cvForm" onSubmit={handleUploadCv}>
           <input
@@ -2461,8 +2660,10 @@ export default function App() {
             No hay CV activo para esta persona. Puedes operar sin CV y cargarlo despues.
           </p>
         )}
-      </section>
-      <section className="panel selectedPanel">
+        </section>
+      ) : null}
+      {showConversationSection ? (
+        <section className="panel selectedPanel">
         <h2>Conversacion</h2>
         {isConversationLoading ? (
           <p className="metaText">Cargando conversacion...</p>
@@ -2510,8 +2711,10 @@ export default function App() {
             {isSendingMessage ? "Enviando..." : "Enviar"}
           </button>
         </form>
-      </section>
-      <section className="panel selectedPanel">
+        </section>
+      ) : null}
+      {showOpportunitiesPage ? (
+        <section className="panel selectedPanel">
         <h2>Busqueda y oportunidades</h2>
         <form className="chatForm" onSubmit={handleSearch}>
           <input
@@ -2805,8 +3008,10 @@ export default function App() {
             ))}
           </div>
         )}
-      </section>
-      <section className="panel selectedPanel">
+        </section>
+      ) : null}
+      {showAnalysisPage ? (
+        <section className="panel selectedPanel">
         <h2>Analisis y artefactos</h2>
         {selectedOpportunity ? (
           <div className="cvCard">
@@ -3060,8 +3265,10 @@ export default function App() {
             )}
           </article>
         ) : null}
-      </section>
-      <section className="panel selectedPanel">
+        </section>
+      ) : null}
+      {showAnalysisPage ? (
+        <section className="panel selectedPanel">
         <header className="panelHeader">
           <div>
             <h2>Trazas de requests IA/API</h2>
@@ -3228,7 +3435,8 @@ export default function App() {
             )}
           </>
         )}
-      </section>
+        </section>
+      ) : null}
       {errorMessage ? <p className="errorText">{errorMessage}</p> : null}
     </main>
   );

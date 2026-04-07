@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `diagnostico de proveedores endurecido end-to-end (UI + contrato backend con reason_detail/http_status/error_class) + contratos HTTP reforzados + streaming visible en prepare`
+- checkpoint_actual: `Lote 1 refactor UI completado: router multipagina + guards + navegacion global/contextual`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
 - ultima_actualizacion: `2026-04-07`
 
@@ -65,6 +65,24 @@
 - frontend de busqueda muestra motivo amigable, `HTTP status` (si aplica), detalle tecnico y boton de copia por proveedor para depuracion rapida
 - backend endurece `provider_status` para errores de proveedor con `reason` estable + `reason_detail` + `http_status` + `error_class`
 - API `search` valida `provider_status` con esquema tipado y serializa salida estable para frontend (`dict`), evitando respuestas ambiguas
+- insumo de refactor UI multipagina registrado en memoria para aclaraciones y posterior implementacion incremental
+- aclaracion cerrada del refactor UI: `Administracion de prompts` se mantiene global y disponible sin candidato activo
+- aclaracion cerrada del refactor UI: sidebar contextual solo con candidato activo; accesos globales en header/menu global
+- aclaracion cerrada del refactor UI: dark mode fijo en V1 (sin toggle), con CSS preparado por tema/tokens para evolucion futura
+- aclaracion cerrada del refactor UI: navegacion multipagina con URLs explicitas por vista
+- input ampliado de UI (`Speech Brand DNA` + componentes visuales) registrado en memoria para aterrizar mapa de navegacion y backlog de ajuste
+- aclaracion cerrada del refactor UI: indicador radial de match porcentual oculto en V1 hasta tener scoring numerico formal
+- aclaracion cerrada del refactor UI: `guidance_text` se mostrara como `Guia de perfil` en UI, sin target/artefacto nuevo en backend V1
+- correccion del refactor UI: `Contacto` queda fuera de V1 y se difiere para una version posterior
+- aclaracion cerrada del refactor UI: `AI_CHAT_DRAWER` disponible en todas las vistas contextuales, manteniendo contexto estable del candidato activo
+- aclaracion cerrada del refactor UI: historial de chat unico por candidato, compartido entre todas las paginas contextuales
+- aclaracion cerrada del refactor UI: carrusel de candidatos manual (sin auto-rotacion), responsive movil con swipe/scroll horizontal
+- mapa de navegacion UI aprobado y aterrizado a shells/componentes/lotes de implementacion en memoria operativa
+- frontend implementa rutas multipagina de workspace (`/candidates`, `/admin/prompts`, `/c/:person_id/profile`, `/c/:person_id/opportunities`, `/c/:person_id/analysis`) con sincronizacion `history/popstate`
+- frontend aplica guards de ruta por sesion/persona y sincroniza `selectedPersonId` con URL contextual
+- frontend incorpora navegacion global (candidatos/admin) y navegacion contextual por candidato (perfil/oportunidades/analisis)
+- secciones principales quedan segmentadas por pagina: seleccion de candidatos, administracion global, perfil+CV, explorador de oportunidades, analisis+trazas
+- build frontend revalidado tras lote de navegacion multipagina: `npm run build` en `OK`
 - contratos API de `search` reforzados para validar `provider_status` (fallo total, degradacion parcial y config faltante)
 - contratos API/admin de `search-providers` reforzados para `GET`/`PATCH` y manejo `404` en proveedor desconocido
 - `prepare/stream` en frontend muestra deltas no solo de `guidance_text`, tambien de `cover_letter` y `experience_summary`
@@ -167,6 +185,9 @@
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada de CV a Markdown (PyMuPDF/LlamaIndex) para mejorar jerarquia semantica
 - vector `profile_summary` por persona (`type=profile_summary`) para match ejecutivo de alto nivel
+- indicador radial de match porcentual en cards de oportunidad, condicionado a implementacion de scoring numerico formal
+- `Profile diff` por vacante para evidenciar brechas del perfil del candidato frente a requisitos de la oportunidad
+- datos de contacto en panel de perfil (diferido fuera de alcance V1)
 
 ## Bloqueadores
 - no hay bloqueadores funcionales de alcance V1
@@ -174,5 +195,5 @@
 - riesgo operativo local: entorno de desarrollo modificado para diagnostico (`anyio` downgraded en `.venv`) sin solucion aun para el bloqueo ASGI
 
 ## Siguiente Actividad
-- investigar y cerrar el bloqueo del harness ASGI para reactivar el test HTTP hoy marcado `skip`
-- reforzar cobertura de contratos HTTP para endpoints nuevos de versionado/rollback en entorno API real
+- iniciar `Lote 2` del refactor UI: aplicar design system dark (`Speech Brand DNA`) en `styles.css` y ajustar layout responsive para navegacion multipagina
+- iniciar `Lote 3` del refactor UI: desacoplar la vista de analisis para que la lista de oportunidades guardadas con acciones viva en pagina `analysis` sin depender de `opportunities`
