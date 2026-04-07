@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `admin de proveedores + estado por proveedor en cada busqueda + guard de query Tavily (400 chars)`
+- checkpoint_actual: `contratos HTTP reforzados para search-provider admin + provider_status en search + streaming visible en prepare`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
 - ultima_actualizacion: `2026-04-07`
 
@@ -62,6 +62,9 @@
 - frontend de admin prompts permite consultar versiones por flow y restaurar una version previa (rollback)
 - frontend incorpora seccion de administracion de proveedores de busqueda con checkboxes para habilitar/deshabilitar ejecucion por proveedor
 - frontend de busqueda muestra panel de diagnostico por proveedor usando `provider_status` de la ultima ejecucion
+- contratos API de `search` reforzados para validar `provider_status` (fallo total, degradacion parcial y config faltante)
+- contratos API/admin de `search-providers` reforzados para `GET`/`PATCH` y manejo `404` en proveedor desconocido
+- `prepare/stream` en frontend muestra deltas no solo de `guidance_text`, tambien de `cover_letter` y `experience_summary`
 - build frontend verificado localmente tras integracion UI admin: `npm run build` en `OK`
 - prompt configs ampliados para V1 con capas editables: `guardrails_core` (global), `system_identity` (global) y `task_*` por accion (`chat`, `analyze`, `prepare`)
 - arquitectura normativa actualizada con matriz operativa de prompts/parametros V1 (destino, objetivo, placeholders, alcance, riesgo y control de consumo)
@@ -156,6 +159,7 @@
 - suite backend actualizada con contratos de enlace `run_id` en request traces: `63 tests` en `OK` (`skipped=1`)
 - suite backend revalidada con hardening de trazas y versionado/rollback de prompts: `67 tests` en `OK` (`skipped=1`)
 - suite backend revalidada con admin de proveedores y guard de longitud Tavily: `72 tests` en `OK` (`skipped=1`)
+- contratos focalizados revalidados: `test_search_provider_admin` + `test_api_error_and_fallbacks` en `OK` (`27 tests`)
 
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada de CV a Markdown (PyMuPDF/LlamaIndex) para mejorar jerarquia semantica
