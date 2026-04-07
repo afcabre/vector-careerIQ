@@ -11,8 +11,15 @@ from app.core.settings import Settings
 from app.services.person_store import PersonRecord
 from app.services.prompt_config_store import FLOW_SEARCH_JOBS_TAVILY, build_prompt_query
 from app.services.request_trace_store import add_request_trace
+from app.services.search_provider_store import (
+    PROVIDER_ADZUNA,
+    PROVIDER_REMOTIVE,
+    PROVIDER_TAVILY,
+    is_search_provider_enabled,
+)
 
 logger = logging.getLogger(__name__)
+TAVILY_MAX_QUERY_CHARS = 400
 
 
 class SearchResult(TypedDict):
@@ -67,7 +74,7 @@ def _fallback_results(person: PersonRecord, query: str) -> list[SearchResult]:
     title = f"Resultado local para {role}"
     snippet = (
         f"No hubo resultados en proveedor externo para '{query}'. "
-        "Verifica API key de Tavily o conectividad de red."
+        "Revisa configuracion/habilitacion de proveedores o conectividad."
     )
     url = ""
     return [
@@ -83,6 +90,14 @@ def _fallback_results(person: PersonRecord, query: str) -> list[SearchResult]:
             "normalized_payload": {"query": query, "fallback": True},
         }
     ]
+
+
+def _cap_tavily_query(query: str) -> tuple[str, bool]:
+    cleaned = query.strip()
+    if len(cleaned) <= TAVILY_MAX_QUERY_CHARS:
+        return cleaned, False
+    truncated = cleaned[:TAVILY_MAX_QUERY_CHARS].rstrip()
+    return truncated, True
 
 
 def _request_json(request: Request, timeout: int = 20) -> dict[str, Any]:
@@ -281,7 +296,10 @@ def search_opportunities(
     items: list[SearchResult] = []
     provider_max_results = max(3, max_results)
 
-    if not settings.rapidapi_key or not settings.rapidapi_adzuna_host:
+    if not is_search_provider_enabled(PROVIDER_ADZUNA):
+        warnings.append("Adzuna provider disabled from admin config")
+        logger.warning("adzuna provider disabled from admin config")
+    elif not settings.rapidapi_key or not settings.rapidapi_adzuna_host:
         warnings.append("Adzuna via RapidAPI is not configured")
         logger.warning("adzuna provider disabled due to missing RapidAPI config")
     else:
@@ -308,27 +326,34 @@ def search_opportunities(
             warnings.append("Adzuna provider unexpected error, continuing")
             logger.exception("adzuna provider unexpected error")
 
-    try:
-        add_request_trace(
-            person_id=person["person_id"],
-            destination="remotive",
-            flow_key="search_jobs_remotive",
-            request_payload={
-                "method": "GET",
-                "url": f"https://remotive.com/api/remote-jobs?search={quote_plus(query)}",
-                "query": query,
-                "max_results": provider_max_results,
-            },
-        )
-        items.extend(_remotive_search(query, provider_max_results, settings))
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
-        warnings.append("Remotive provider failed, continuing with partial results")
-        logger.warning("remotive provider failed: %s", exc)
-    except Exception:
-        warnings.append("Remotive provider unexpected error, continuing")
-        logger.exception("remotive provider unexpected error")
+    if not is_search_provider_enabled(PROVIDER_REMOTIVE):
+        warnings.append("Remotive provider disabled from admin config")
+        logger.warning("remotive provider disabled from admin config")
+    else:
+        try:
+            add_request_trace(
+                person_id=person["person_id"],
+                destination="remotive",
+                flow_key="search_jobs_remotive",
+                request_payload={
+                    "method": "GET",
+                    "url": f"https://remotive.com/api/remote-jobs?search={quote_plus(query)}",
+                    "query": query,
+                    "max_results": provider_max_results,
+                },
+            )
+            items.extend(_remotive_search(query, provider_max_results, settings))
+        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
+            warnings.append("Remotive provider failed, continuing with partial results")
+            logger.warning("remotive provider failed: %s", exc)
+        except Exception:
+            warnings.append("Remotive provider unexpected error, continuing")
+            logger.exception("remotive provider unexpected error")
 
-    if settings.tavily_api_key:
+    if not is_search_provider_enabled(PROVIDER_TAVILY):
+        warnings.append("Tavily provider disabled from admin config")
+        logger.warning("tavily provider disabled from admin config")
+    elif settings.tavily_api_key:
         try:
             tavily_query = build_prompt_query(
                 flow_key=FLOW_SEARCH_JOBS_TAVILY,
@@ -341,6 +366,13 @@ def search_opportunities(
                 },
                 fallback=query,
             )
+            tavily_query, was_truncated = _cap_tavily_query(tavily_query)
+            if was_truncated:
+                warnings.append("Tavily query exceeded 400 chars and was truncated")
+                logger.warning(
+                    "tavily query truncated to max chars person_id=%s",
+                    person["person_id"],
+                )
             add_request_trace(
                 person_id=person["person_id"],
                 destination="tavily",

@@ -5,6 +5,7 @@ from app.api.routes import router as api_router
 from app.services.operator_store import seed_operator
 from app.services.person_store import seed_persons
 from app.services.prompt_config_store import seed_prompt_configs
+from app.services.search_provider_store import seed_search_provider_configs
 
 
 app = FastAPI(
@@ -29,6 +30,7 @@ def startup() -> None:
     seed_operator()
     seed_persons()
     seed_prompt_configs()
+    seed_search_provider_configs()
 
 
 @app.get("/health")

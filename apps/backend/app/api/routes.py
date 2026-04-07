@@ -1,6 +1,16 @@
 from fastapi import APIRouter
 
-from app.api import auth, chat, cv, opportunities, persons, prompt_admin, request_traces, search
+from app.api import (
+    auth,
+    chat,
+    cv,
+    opportunities,
+    persons,
+    prompt_admin,
+    request_traces,
+    search,
+    search_provider_admin,
+)
 
 
 router = APIRouter()
@@ -15,6 +25,11 @@ router.include_router(
     tags=["request-traces"],
 )
 router.include_router(prompt_admin.router, prefix="/admin/prompt-configs", tags=["prompt-admin"])
+router.include_router(
+    search_provider_admin.router,
+    prefix="/admin/search-providers",
+    tags=["search-provider-admin"],
+)
 router.include_router(
     opportunities.router,
     prefix="/persons/{person_id}/opportunities",
