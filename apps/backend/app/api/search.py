@@ -1,3 +1,5 @@
+from typing import Any, Literal
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
@@ -27,10 +29,23 @@ class SearchResultResponse(BaseModel):
     normalized_payload: dict
 
 
+class SearchProviderStatusResponse(BaseModel):
+    provider_key: Literal["adzuna", "remotive", "tavily"]
+    enabled: bool
+    attempted: bool
+    status: Literal["ok", "error", "skipped"]
+    reason: str
+    reason_detail: str = ""
+    http_status: int | None = None
+    error_class: str = "not_applicable"
+    results_count: int
+    query_truncated: bool = False
+
+
 class SearchResponse(BaseModel):
     items: list[SearchResultResponse]
     warnings: list[str]
-    provider_status: list[dict]
+    provider_status: list[dict[str, Any]]
 
 
 @router.post("")
@@ -56,5 +71,8 @@ def search(
     return SearchResponse(
         items=[SearchResultResponse(**item) for item in result["items"]],
         warnings=result["warnings"],
-        provider_status=result.get("provider_status", []),
+        provider_status=[
+            SearchProviderStatusResponse(**item).model_dump()
+            for item in result.get("provider_status", [])
+        ],
     )

@@ -296,6 +296,9 @@ class ApiContractsAndIsolationTests(unittest.TestCase):
                         "attempted": True,
                         "status": "ok",
                         "reason": "results_found",
+                        "reason_detail": "",
+                        "http_status": None,
+                        "error_class": "not_applicable",
                         "results_count": 1,
                     }
                 ],
@@ -564,6 +567,7 @@ class FallbackBehaviorTests(unittest.TestCase):
         self.assertTrue(all(item["error_class"] == "network_error" for item in response.provider_status))
         self.assertTrue(all(item["http_status"] is None for item in response.provider_status))
         self.assertTrue(all(bool(item["reason_detail"]) for item in response.provider_status))
+        self.assertTrue(all("query_truncated" in item for item in response.provider_status))
 
     def test_search_degrades_partially_when_adzuna_fails(self) -> None:
         person = get_person("p-001")
@@ -741,6 +745,9 @@ class FallbackBehaviorTests(unittest.TestCase):
         self.assertEqual(tavily_status["status"], "skipped")
         self.assertEqual(tavily_status["reason"], "missing_api_key")
         self.assertFalse(tavily_status["attempted"])
+        self.assertEqual(tavily_status["reason_detail"], "")
+        self.assertEqual(tavily_status["error_class"], "not_applicable")
+        self.assertIsNone(tavily_status["http_status"])
 
     def test_search_provider_status_exposes_http_error_metadata(self) -> None:
         person = get_person("p-001")
