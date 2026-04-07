@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `Lote 1 refactor UI completado: router multipagina + guards + navegacion global/contextual`
+- checkpoint_actual: `Lote 3 UI completado: analysis desacoplado con lista propia de oportunidades y acciones IA por fila`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
 - ultima_actualizacion: `2026-04-07`
 
@@ -86,6 +86,10 @@
 - frontend aplica tema oscuro base `Speech Brand DNA` en `styles.css` (tokens de color, superficies, tipografia y estados interactivos)
 - frontend refuerza componentes visuales de V1: avatar en tarjetas de candidatos + chips de metadatos en tarjetas de oportunidades
 - build frontend revalidado tras ajustes dark mode: `npm run build` en `OK`
+- pagina `analysis` ahora contiene su propia lista de oportunidades guardadas con acciones IA por fila (`Analyze perfil`, `Analyze cultura`, `Prepare`, `Artifacts`)
+- pagina `opportunities` mantiene foco de exploracion y guardado; sus guardadas ahora priorizan apertura y derivacion a `analysis`
+- al entrar a `analysis` sin oportunidad activa, se selecciona automaticamente la primera oportunidad guardada para reducir friccion
+- build frontend revalidado tras desacople de `analysis`: `npm run build` en `OK`
 - contratos API de `search` reforzados para validar `provider_status` (fallo total, degradacion parcial y config faltante)
 - contratos API/admin de `search-providers` reforzados para `GET`/`PATCH` y manejo `404` en proveedor desconocido
 - `prepare/stream` en frontend muestra deltas no solo de `guidance_text`, tambien de `cover_letter` y `experience_summary`
@@ -198,5 +202,5 @@
 - riesgo operativo local: entorno de desarrollo modificado para diagnostico (`anyio` downgraded en `.venv`) sin solucion aun para el bloqueo ASGI
 
 ## Siguiente Actividad
-- iniciar `Lote 2` del refactor UI: aplicar design system dark (`Speech Brand DNA`) en `styles.css` y ajustar layout responsive para navegacion multipagina
-- iniciar `Lote 3` del refactor UI: desacoplar la vista de analisis para que la lista de oportunidades guardadas con acciones viva en pagina `analysis` sin depender de `opportunities`
+- iniciar `Lote 4` del refactor UI: implementar `AI_CHAT_DRAWER` contextual (right drawer) en vistas de candidato, manteniendo historial unico por persona
+- ajustar microcopy y labels finales para coherencia en espanol (`Guia de perfil`, acciones de prepare y titulos de panel)

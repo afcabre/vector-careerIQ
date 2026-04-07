@@ -872,6 +872,13 @@ export default function App() {
     void loadActiveCv();
   }, [selectedPersonId, view]);
 
+  useEffect(() => {
+    if (!showAnalysisPage || selectedOpportunityId || savedOpportunities.length === 0) {
+      return;
+    }
+    setSelectedOpportunityId(savedOpportunities[0].opportunity_id);
+  }, [showAnalysisPage, savedOpportunities, selectedOpportunityId]);
+
   const selectedOpportunity =
     savedOpportunities.find((item) => item.opportunity_id === selectedOpportunityId) ?? null;
   const aiRunsById = new Map(aiRuns.map((item) => [item.run_id, item] as const));
@@ -2984,6 +2991,53 @@ export default function App() {
                     {selectedOpportunityId === item.opportunity_id ? "Activa" : "Abrir"}
                   </button>
                   <button
+                    onClick={() => {
+                      setSelectedOpportunityId(item.opportunity_id);
+                      if (selectedPersonId) {
+                        navigateTo(buildContextPath(selectedPersonId, "analysis"));
+                      }
+                    }}
+                    type="button"
+                  >
+                    Ir a analisis
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+        </section>
+      ) : null}
+      {showAnalysisPage ? (
+        <section className="panel selectedPanel">
+        <h2>Analisis y artefactos</h2>
+        <h3 className="subheading">Oportunidades guardadas (acciones IA)</h3>
+        {isLoadingOpportunities ? (
+          <p className="metaText">Cargando oportunidades...</p>
+        ) : savedOpportunities.length === 0 ? (
+          <p className="metaText">No hay oportunidades guardadas para este perfil.</p>
+        ) : (
+          <div className="chatList">
+            {savedOpportunities.map((item) => (
+              <article className="chatBubble chatBubbleUser" key={`analysis-${item.opportunity_id}`}>
+                <p className="chatRole">{item.status}</p>
+                <p className="chatContent">{item.title}</p>
+                <div className="metaChips">
+                  <span className="metaChip">{item.company || "Empresa no identificada"}</span>
+                  <span className="metaChip">{item.location || "Ubicacion no especificada"}</span>
+                </div>
+                <p className="metaText">{item.source_url || "URL no disponible"}</p>
+                <div className="cardActions">
+                  <button
+                    className={
+                      selectedOpportunityId === item.opportunity_id ? "activeButton" : ""
+                    }
+                    onClick={() => setSelectedOpportunityId(item.opportunity_id)}
+                    type="button"
+                  >
+                    {selectedOpportunityId === item.opportunity_id ? "Activa" : "Abrir"}
+                  </button>
+                  <button
                     disabled={isAnalyzingProfile}
                     onClick={() => void handleAnalyzeProfileMatch(item.opportunity_id)}
                     type="button"
@@ -3024,11 +3078,6 @@ export default function App() {
             ))}
           </div>
         )}
-        </section>
-      ) : null}
-      {showAnalysisPage ? (
-        <section className="panel selectedPanel">
-        <h2>Analisis y artefactos</h2>
         {selectedOpportunity ? (
           <div className="cvCard">
             <p className="metaText">
