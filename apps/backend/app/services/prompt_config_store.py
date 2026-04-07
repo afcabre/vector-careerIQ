@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 from threading import Lock
 from typing import Any, TypedDict
+import uuid
 
 from app.core.settings import get_settings
 from app.services.firestore_client import get_firestore_client
@@ -30,6 +31,19 @@ class PromptConfigRecord(TypedDict):
     updated_at: str
 
 
+class PromptConfigVersionRecord(TypedDict):
+    version_id: str
+    flow_key: str
+    template_text: str
+    target_sources: list[str]
+    is_active: bool
+    source_updated_by: str
+    source_updated_at: str
+    reason: str
+    created_by: str
+    created_at: str
+
+
 class _SafeDict(dict[str, str]):
     def __missing__(self, key: str) -> str:
         return ""
@@ -37,10 +51,15 @@ class _SafeDict(dict[str, str]):
 
 _store_lock = Lock()
 _prompt_configs: dict[str, PromptConfigRecord] = {}
+_prompt_config_versions: dict[str, list[PromptConfigVersionRecord]] = {}
 
 
 def _now_iso() -> str:
     return datetime.now(tz=UTC).isoformat()
+
+
+def _new_id(prefix: str) -> str:
+    return f"{prefix}-{uuid.uuid4().hex[:10]}"
 
 
 def _is_firestore_backend() -> bool:
@@ -314,6 +333,27 @@ def _normalize_firestore_record(flow_key: str, payload: dict[str, Any] | None) -
     )
 
 
+def _normalize_version_firestore_record(
+    flow_key: str,
+    payload: dict[str, Any] | None,
+) -> PromptConfigVersionRecord:
+    source = payload or {}
+    raw_sources = source.get("target_sources", [])
+    target_sources = _sanitize_sources(raw_sources if isinstance(raw_sources, list) else [])
+    return PromptConfigVersionRecord(
+        version_id=str(source.get("version_id", "")).strip(),
+        flow_key=flow_key,
+        template_text=str(source.get("template_text", "")).strip(),
+        target_sources=target_sources,
+        is_active=bool(source.get("is_active", True)),
+        source_updated_by=str(source.get("source_updated_by", "")).strip() or "system",
+        source_updated_at=str(source.get("source_updated_at", "")).strip(),
+        reason=str(source.get("reason", "update")).strip() or "update",
+        created_by=str(source.get("created_by", "system")).strip() or "system",
+        created_at=str(source.get("created_at", "")).strip() or _now_iso(),
+    )
+
+
 def _validate_update(
     flow_key: str,
     template_text: str | None,
@@ -343,9 +383,81 @@ def _validate_update(
     return cleaned_template, cleaned_sources
 
 
+def _save_version(record: PromptConfigVersionRecord) -> PromptConfigVersionRecord:
+    if _is_firestore_backend():
+        settings = get_settings()
+        client = get_firestore_client(settings)
+        client.collection("prompt_config_versions").document(record["version_id"]).set(record)
+        return record
+
+    with _store_lock:
+        bucket = _prompt_config_versions.setdefault(record["flow_key"], [])
+        bucket.append(record)
+    return record
+
+
+def _new_version_record(
+    *,
+    flow_key: str,
+    source: PromptConfigRecord,
+    created_by: str,
+    reason: str,
+) -> PromptConfigVersionRecord:
+    now = _now_iso()
+    return PromptConfigVersionRecord(
+        version_id=_new_id("pcv"),
+        flow_key=flow_key,
+        template_text=source["template_text"],
+        target_sources=list(source["target_sources"]),
+        is_active=bool(source["is_active"]),
+        source_updated_by=source["updated_by"],
+        source_updated_at=source["updated_at"],
+        reason=reason.strip() or "update",
+        created_by=created_by.strip() or "tutor",
+        created_at=now,
+    )
+
+
+def _capture_version(
+    *,
+    flow_key: str,
+    source: PromptConfigRecord,
+    created_by: str,
+    reason: str,
+) -> PromptConfigVersionRecord:
+    return _save_version(
+        _new_version_record(
+            flow_key=flow_key,
+            source=source,
+            created_by=created_by,
+            reason=reason,
+        )
+    )
+
+
+def _list_versions_for_flow(flow_key: str) -> list[PromptConfigVersionRecord]:
+    defaults = _default_configs()
+    if flow_key not in defaults:
+        raise KeyError(flow_key)
+
+    if _is_firestore_backend():
+        settings = get_settings()
+        client = get_firestore_client(settings)
+        items = [
+            _normalize_version_firestore_record(flow_key, doc.to_dict())
+            for doc in client.collection("prompt_config_versions").where("flow_key", "==", flow_key).stream()
+        ]
+    else:
+        with _store_lock:
+            items = [item.copy() for item in _prompt_config_versions.get(flow_key, [])]
+
+    return sorted(items, key=lambda item: item["created_at"], reverse=True)
+
+
 def reset_prompt_configs() -> None:
     with _store_lock:
         _prompt_configs.clear()
+        _prompt_config_versions.clear()
 
 
 def seed_prompt_configs() -> None:
@@ -407,6 +519,28 @@ def get_prompt_config(flow_key: str) -> PromptConfigRecord:
     return defaults[flow_key].copy()
 
 
+def list_prompt_config_versions(
+    flow_key: str,
+    *,
+    limit: int = 20,
+) -> list[PromptConfigVersionRecord]:
+    items = _list_versions_for_flow(flow_key)
+    return items[: max(1, limit)]
+
+
+def get_prompt_config_version(
+    flow_key: str,
+    version_id: str,
+) -> PromptConfigVersionRecord:
+    target_id = version_id.strip()
+    if not target_id:
+        raise KeyError(version_id)
+    for item in _list_versions_for_flow(flow_key):
+        if item["version_id"] == target_id:
+            return item
+    raise KeyError(version_id)
+
+
 def update_prompt_config(
     flow_key: str,
     updated_by: str,
@@ -422,13 +556,70 @@ def update_prompt_config(
     current = get_prompt_config(flow_key)
     now = _now_iso()
 
-    if cleaned_template is not None:
-        current["template_text"] = cleaned_template
-    if cleaned_sources is not None:
-        current["target_sources"] = cleaned_sources
-    if is_active is not None:
-        current["is_active"] = bool(is_active)
+    next_template = current["template_text"] if cleaned_template is None else cleaned_template
+    next_sources = current["target_sources"] if cleaned_sources is None else cleaned_sources
+    next_is_active = current["is_active"] if is_active is None else bool(is_active)
 
+    changed = (
+        next_template != current["template_text"]
+        or next_sources != current["target_sources"]
+        or next_is_active != current["is_active"]
+    )
+    if not changed:
+        return current
+
+    _capture_version(
+        flow_key=flow_key,
+        source=current,
+        created_by=updated_by,
+        reason="update",
+    )
+
+    current["template_text"] = next_template
+    current["target_sources"] = list(next_sources)
+    current["is_active"] = next_is_active
+
+    current["updated_by"] = updated_by.strip() or "tutor"
+    current["updated_at"] = now
+
+    if _is_firestore_backend():
+        settings = get_settings()
+        client = get_firestore_client(settings)
+        client.collection("prompt_configs").document(flow_key).set(current)
+        return current
+
+    with _store_lock:
+        _prompt_configs[flow_key] = current
+    return current
+
+
+def rollback_prompt_config(
+    flow_key: str,
+    version_id: str,
+    updated_by: str,
+) -> PromptConfigRecord:
+    target = get_prompt_config_version(flow_key, version_id)
+    current = get_prompt_config(flow_key)
+
+    unchanged = (
+        current["template_text"] == target["template_text"]
+        and current["target_sources"] == target["target_sources"]
+        and current["is_active"] == target["is_active"]
+    )
+    if unchanged:
+        return current
+
+    _capture_version(
+        flow_key=flow_key,
+        source=current,
+        created_by=updated_by,
+        reason=f"rollback_to:{target['version_id']}",
+    )
+
+    now = _now_iso()
+    current["template_text"] = target["template_text"]
+    current["target_sources"] = list(target["target_sources"])
+    current["is_active"] = bool(target["is_active"])
     current["updated_by"] = updated_by.strip() or "tutor"
     current["updated_at"] = now
 

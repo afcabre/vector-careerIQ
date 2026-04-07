@@ -91,6 +91,69 @@ class PromptConfigAdminTests(unittest.TestCase):
         self.assertEqual(invalid_template.exception.status_code, 422)
         self.assertIn("{query}", str(invalid_template.exception.detail))
 
+    def test_prompt_config_versions_endpoint_returns_previous_snapshots(self) -> None:
+        prompt_admin_api.patch_config(
+            flow_key=FLOW_SEARCH_JOBS_TAVILY,
+            payload=prompt_admin_api.UpdatePromptConfigRequest(
+                template_text="Busqueda actualizada: {query} en {target_sources}"
+            ),
+            session=self.session,
+        )
+
+        versions_payload = prompt_admin_api.list_versions(
+            flow_key=FLOW_SEARCH_JOBS_TAVILY,
+            limit=20,
+            _=self.session,
+        )
+        self.assertGreaterEqual(len(versions_payload.items), 1)
+        latest = versions_payload.items[0]
+        self.assertEqual(latest.flow_key, FLOW_SEARCH_JOBS_TAVILY)
+        self.assertEqual(latest.reason, "update")
+        self.assertEqual(latest.created_by, "tutor")
+
+    def test_prompt_config_rollback_restores_selected_version(self) -> None:
+        first = prompt_admin_api.patch_config(
+            flow_key=FLOW_SEARCH_JOBS_TAVILY,
+            payload=prompt_admin_api.UpdatePromptConfigRequest(
+                template_text="Plantilla A: {query} {target_sources}"
+            ),
+            session=self.session,
+        )
+        second = prompt_admin_api.patch_config(
+            flow_key=FLOW_SEARCH_JOBS_TAVILY,
+            payload=prompt_admin_api.UpdatePromptConfigRequest(
+                template_text="Plantilla B: {query} {target_sources}"
+            ),
+            session=self.session,
+        )
+        self.assertNotEqual(first.template_text, second.template_text)
+
+        versions_payload = prompt_admin_api.list_versions(
+            flow_key=FLOW_SEARCH_JOBS_TAVILY,
+            limit=20,
+            _=self.session,
+        )
+        template_a_version = next(
+            (item for item in versions_payload.items if item.template_text == first.template_text),
+            None,
+        )
+        self.assertIsNotNone(template_a_version)
+
+        rolled = prompt_admin_api.rollback_config(
+            flow_key=FLOW_SEARCH_JOBS_TAVILY,
+            payload=prompt_admin_api.RollbackPromptConfigRequest(
+                version_id=str(template_a_version.version_id),
+            ),
+            session=self.session,
+        )
+        self.assertEqual(rolled.template_text, first.template_text)
+
+        refreshed = prompt_admin_api.get_config(
+            flow_key=FLOW_SEARCH_JOBS_TAVILY,
+            _=self.session,
+        )
+        self.assertEqual(refreshed.template_text, first.template_text)
+
     def test_search_uses_custom_jobs_prompt_config(self) -> None:
         person = get_person("p-001")
         assert person is not None

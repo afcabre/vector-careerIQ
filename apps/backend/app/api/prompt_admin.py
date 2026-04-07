@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.core.security import SessionData, require_operator_session
 from app.services.prompt_config_store import (
     get_prompt_config,
+    list_prompt_config_versions,
     list_prompt_configs,
+    rollback_prompt_config,
     update_prompt_config,
 )
 
@@ -28,10 +30,31 @@ class PromptConfigListResponse(BaseModel):
     items: list[PromptConfigResponse]
 
 
+class PromptConfigVersionResponse(BaseModel):
+    version_id: str
+    flow_key: str
+    template_text: str
+    target_sources: list[str]
+    is_active: bool
+    source_updated_by: str
+    source_updated_at: str
+    reason: str
+    created_by: str
+    created_at: str
+
+
+class PromptConfigVersionListResponse(BaseModel):
+    items: list[PromptConfigVersionResponse]
+
+
 class UpdatePromptConfigRequest(BaseModel):
     template_text: str | None = Field(default=None, min_length=1)
     target_sources: list[str] | None = None
     is_active: bool | None = None
+
+
+class RollbackPromptConfigRequest(BaseModel):
+    version_id: str = Field(min_length=1)
 
 
 @router.get("")
@@ -55,6 +78,24 @@ def get_config(
             detail="Prompt flow not found",
         ) from exc
     return PromptConfigResponse(**item)
+
+
+@router.get("/{flow_key}/versions")
+def list_versions(
+    flow_key: str,
+    limit: int = Query(default=20, ge=1, le=100),
+    _: SessionData = Depends(require_operator_session),
+) -> PromptConfigVersionListResponse:
+    try:
+        items = list_prompt_config_versions(flow_key, limit=limit)
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Prompt flow not found",
+        ) from exc
+    return PromptConfigVersionListResponse(
+        items=[PromptConfigVersionResponse(**item) for item in items]
+    )
 
 
 @router.patch("/{flow_key}")
@@ -85,6 +126,32 @@ def patch_config(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Prompt flow not found",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+    return PromptConfigResponse(**item)
+
+
+@router.post("/{flow_key}/rollback")
+def rollback_config(
+    flow_key: str,
+    payload: RollbackPromptConfigRequest,
+    session: SessionData = Depends(require_operator_session),
+) -> PromptConfigResponse:
+    try:
+        item = rollback_prompt_config(
+            flow_key=flow_key,
+            version_id=payload.version_id,
+            updated_by=session.username,
+        )
+    except KeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Prompt flow/version not found",
         ) from exc
     except ValueError as exc:
         raise HTTPException(
