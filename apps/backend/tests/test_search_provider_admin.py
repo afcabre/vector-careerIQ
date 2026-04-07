@@ -91,6 +91,14 @@ class SearchProviderAdminTests(unittest.TestCase):
         self.assertTrue(
             any("Tavily provider disabled from admin config" in warning for warning in payload["warnings"])
         )
+        tavily_status = next(
+            (item for item in payload["provider_status"] if item["provider_key"] == "tavily"),
+            None,
+        )
+        self.assertIsNotNone(tavily_status)
+        self.assertEqual(tavily_status["status"], "skipped")
+        self.assertEqual(tavily_status["reason"], "disabled_from_admin")
+        self.assertFalse(tavily_status["attempted"])
 
     def test_search_truncates_tavily_query_to_400_chars(self) -> None:
         person = get_person("p-001")
@@ -120,6 +128,14 @@ class SearchProviderAdminTests(unittest.TestCase):
         self.assertTrue(
             any("Tavily query exceeded 400 chars and was truncated" in warning for warning in payload["warnings"])
         )
+        tavily_status = next(
+            (item for item in payload["provider_status"] if item["provider_key"] == "tavily"),
+            None,
+        )
+        self.assertIsNotNone(tavily_status)
+        self.assertEqual(tavily_status["status"], "ok")
+        self.assertTrue(tavily_status["attempted"])
+        self.assertTrue(tavily_status.get("query_truncated"))
 
 
 if __name__ == "__main__":

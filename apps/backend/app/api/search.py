@@ -30,6 +30,7 @@ class SearchResultResponse(BaseModel):
 class SearchResponse(BaseModel):
     items: list[SearchResultResponse]
     warnings: list[str]
+    provider_status: list[dict]
 
 
 @router.post("")
@@ -55,4 +56,5 @@ def search(
     return SearchResponse(
         items=[SearchResultResponse(**item) for item in result["items"]],
         warnings=result["warnings"],
+        provider_status=result.get("provider_status", []),
     )

@@ -37,6 +37,7 @@ class SearchResult(TypedDict):
 class SearchResponse(TypedDict):
     items: list[SearchResult]
     warnings: list[str]
+    provider_status: list[dict[str, Any]]
 
 
 def _now_iso() -> str:
@@ -98,6 +99,21 @@ def _cap_tavily_query(query: str) -> tuple[str, bool]:
         return cleaned, False
     truncated = cleaned[:TAVILY_MAX_QUERY_CHARS].rstrip()
     return truncated, True
+
+
+def _provider_status_entry(
+    provider_key: str,
+    *,
+    enabled: bool,
+) -> dict[str, Any]:
+    return {
+        "provider_key": provider_key,
+        "enabled": enabled,
+        "attempted": False,
+        "status": "skipped",
+        "reason": "not_executed",
+        "results_count": 0,
+    }
 
 
 def _request_json(request: Request, timeout: int = 20) -> dict[str, Any]:
@@ -291,19 +307,38 @@ def search_opportunities(
     query = query.strip()
     if not query:
         logger.warning("search skipped due to empty query")
-        return {"items": [], "warnings": ["Empty query"]}
+        return {
+            "items": [],
+            "warnings": ["Empty query"],
+            "provider_status": [
+                _provider_status_entry(PROVIDER_ADZUNA, enabled=is_search_provider_enabled(PROVIDER_ADZUNA)),
+                _provider_status_entry(PROVIDER_REMOTIVE, enabled=is_search_provider_enabled(PROVIDER_REMOTIVE)),
+                _provider_status_entry(PROVIDER_TAVILY, enabled=is_search_provider_enabled(PROVIDER_TAVILY)),
+            ],
+        }
 
     items: list[SearchResult] = []
     provider_max_results = max(3, max_results)
+    adzuna_enabled = is_search_provider_enabled(PROVIDER_ADZUNA)
+    remotive_enabled = is_search_provider_enabled(PROVIDER_REMOTIVE)
+    tavily_enabled = is_search_provider_enabled(PROVIDER_TAVILY)
+    provider_status: dict[str, dict[str, Any]] = {
+        PROVIDER_ADZUNA: _provider_status_entry(PROVIDER_ADZUNA, enabled=adzuna_enabled),
+        PROVIDER_REMOTIVE: _provider_status_entry(PROVIDER_REMOTIVE, enabled=remotive_enabled),
+        PROVIDER_TAVILY: _provider_status_entry(PROVIDER_TAVILY, enabled=tavily_enabled),
+    }
 
-    if not is_search_provider_enabled(PROVIDER_ADZUNA):
+    if not adzuna_enabled:
         warnings.append("Adzuna provider disabled from admin config")
         logger.warning("adzuna provider disabled from admin config")
+        provider_status[PROVIDER_ADZUNA]["reason"] = "disabled_from_admin"
     elif not settings.rapidapi_key or not settings.rapidapi_adzuna_host:
         warnings.append("Adzuna via RapidAPI is not configured")
         logger.warning("adzuna provider disabled due to missing RapidAPI config")
+        provider_status[PROVIDER_ADZUNA]["reason"] = "missing_rapidapi_config"
     else:
         try:
+            provider_status[PROVIDER_ADZUNA]["attempted"] = True
             add_request_trace(
                 person_id=person["person_id"],
                 destination="adzuna",
@@ -318,19 +353,31 @@ def search_opportunities(
                     "max_results": provider_max_results,
                 },
             )
-            items.extend(_adzuna_search_via_rapidapi(query, provider_max_results, settings))
+            adzuna_items = _adzuna_search_via_rapidapi(query, provider_max_results, settings)
+            provider_status[PROVIDER_ADZUNA]["status"] = "ok"
+            provider_status[PROVIDER_ADZUNA]["reason"] = (
+                "results_found" if adzuna_items else "no_results"
+            )
+            provider_status[PROVIDER_ADZUNA]["results_count"] = len(adzuna_items)
+            items.extend(adzuna_items)
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
             warnings.append("Adzuna provider failed, continuing with partial results")
             logger.warning("adzuna provider failed: %s", exc)
+            provider_status[PROVIDER_ADZUNA]["status"] = "error"
+            provider_status[PROVIDER_ADZUNA]["reason"] = str(exc) or "provider_error"
         except Exception:
             warnings.append("Adzuna provider unexpected error, continuing")
             logger.exception("adzuna provider unexpected error")
+            provider_status[PROVIDER_ADZUNA]["status"] = "error"
+            provider_status[PROVIDER_ADZUNA]["reason"] = "unexpected_error"
 
-    if not is_search_provider_enabled(PROVIDER_REMOTIVE):
+    if not remotive_enabled:
         warnings.append("Remotive provider disabled from admin config")
         logger.warning("remotive provider disabled from admin config")
+        provider_status[PROVIDER_REMOTIVE]["reason"] = "disabled_from_admin"
     else:
         try:
+            provider_status[PROVIDER_REMOTIVE]["attempted"] = True
             add_request_trace(
                 person_id=person["person_id"],
                 destination="remotive",
@@ -342,19 +389,31 @@ def search_opportunities(
                     "max_results": provider_max_results,
                 },
             )
-            items.extend(_remotive_search(query, provider_max_results, settings))
+            remotive_items = _remotive_search(query, provider_max_results, settings)
+            provider_status[PROVIDER_REMOTIVE]["status"] = "ok"
+            provider_status[PROVIDER_REMOTIVE]["reason"] = (
+                "results_found" if remotive_items else "no_results"
+            )
+            provider_status[PROVIDER_REMOTIVE]["results_count"] = len(remotive_items)
+            items.extend(remotive_items)
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
             warnings.append("Remotive provider failed, continuing with partial results")
             logger.warning("remotive provider failed: %s", exc)
+            provider_status[PROVIDER_REMOTIVE]["status"] = "error"
+            provider_status[PROVIDER_REMOTIVE]["reason"] = str(exc) or "provider_error"
         except Exception:
             warnings.append("Remotive provider unexpected error, continuing")
             logger.exception("remotive provider unexpected error")
+            provider_status[PROVIDER_REMOTIVE]["status"] = "error"
+            provider_status[PROVIDER_REMOTIVE]["reason"] = "unexpected_error"
 
-    if not is_search_provider_enabled(PROVIDER_TAVILY):
+    if not tavily_enabled:
         warnings.append("Tavily provider disabled from admin config")
         logger.warning("tavily provider disabled from admin config")
+        provider_status[PROVIDER_TAVILY]["reason"] = "disabled_from_admin"
     elif settings.tavily_api_key:
         try:
+            provider_status[PROVIDER_TAVILY]["attempted"] = True
             tavily_query = build_prompt_query(
                 flow_key=FLOW_SEARCH_JOBS_TAVILY,
                 context={
@@ -373,6 +432,7 @@ def search_opportunities(
                     "tavily query truncated to max chars person_id=%s",
                     person["person_id"],
                 )
+                provider_status[PROVIDER_TAVILY]["query_truncated"] = True
             add_request_trace(
                 person_id=person["person_id"],
                 destination="tavily",
@@ -389,6 +449,11 @@ def search_opportunities(
                 },
             )
             tavily_items = _tavily_search(tavily_query, provider_max_results, settings)
+            provider_status[PROVIDER_TAVILY]["status"] = "ok"
+            provider_status[PROVIDER_TAVILY]["reason"] = (
+                "results_found" if tavily_items else "no_results"
+            )
+            provider_status[PROVIDER_TAVILY]["results_count"] = len(tavily_items)
             for item in tavily_items:
                 item["location"] = item["location"] or person["location"]
                 item["normalized_payload"]["query_used"] = tavily_query
@@ -396,12 +461,17 @@ def search_opportunities(
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
             warnings.append("Tavily provider failed, continuing with partial results")
             logger.warning("tavily provider failed: %s", exc)
+            provider_status[PROVIDER_TAVILY]["status"] = "error"
+            provider_status[PROVIDER_TAVILY]["reason"] = str(exc) or "provider_error"
         except Exception:
             warnings.append("Tavily provider unexpected error, continuing")
             logger.exception("tavily provider unexpected error")
+            provider_status[PROVIDER_TAVILY]["status"] = "error"
+            provider_status[PROVIDER_TAVILY]["reason"] = "unexpected_error"
     else:
         warnings.append("Tavily API key is missing")
         logger.warning("tavily provider disabled due to missing API key")
+        provider_status[PROVIDER_TAVILY]["reason"] = "missing_api_key"
 
     deduped = _dedupe(items)
     if not deduped:
@@ -415,4 +485,12 @@ def search_opportunities(
     else:
         items = deduped[:max_results]
 
-    return {"items": items, "warnings": warnings}
+    return {
+        "items": items,
+        "warnings": warnings,
+        "provider_status": [
+            provider_status[PROVIDER_TAVILY],
+            provider_status[PROVIDER_ADZUNA],
+            provider_status[PROVIDER_REMOTIVE],
+        ],
+    }
