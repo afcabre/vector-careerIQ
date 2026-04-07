@@ -4,7 +4,7 @@
 - fase_actual: `Implementacion`
 - checkpoint_actual: `trazas exactas de request + SSE separado por accion en analyze (perfil/cultura)`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
-- ultima_actualizacion: `2026-04-06`
+- ultima_actualizacion: `2026-04-07`
 
 ## Progreso Por Fase
 - `Fase 0`: completada
@@ -62,8 +62,10 @@
 - backend expone consulta de historico por accion IA: `GET /api/persons/{person_id}/opportunities/{opportunity_id}/ai-runs` con filtro opcional `action_key`
 - frontend incorpora consulta explicita de historico IA persistido por oportunidad con filtro opcional por accion y refresco manual
 - backend persiste request payload exacto enviado a proveedores IA/busqueda en `request_traces` (sin API keys/secretos)
-- backend expone trazas por persona con filtros: `GET /api/persons/{person_id}/request-traces` (`destination`, `opportunity_id`, `limit`)
+- backend expone trazas por persona con filtros: `GET /api/persons/{person_id}/request-traces` (`destination`, `opportunity_id`, `run_id`, `limit`)
 - frontend incorpora panel de trazas para visualizar request exacto por destino y filtrar por oportunidad activa
+- trazas `request_traces` ahora soportan `run_id` para vinculo 1:1 con ejecuciones persistidas (`ai_action_runs`)
+- backend permite filtrar trazas por `run_id` y frontend habilita foco desde `Historico IA` con boton `Ver request exacto`
 - API agrega acciones separadas de analisis: `POST .../analyze/profile-match` y `POST .../analyze/cultural-fit`
 - API `prepare` permite `targets` seleccionables (`guidance_text`, `cover_letter`, `experience_summary`) y `force_recompute`
 - comportamiento por defecto de acciones IA: leer ultimo resultado persistido; regenerar solo con `force_recompute=true`
@@ -139,7 +141,7 @@
 - intento de mitigacion local ejecutado: downgrade de `anyio` de `4.13.0` a `4.4.0` en `.venv`; el bloqueo de `TestClient` persiste
 - suite backend revalidada tras hardening SSE: `51 tests` en `OK` (`skipped=1`)
 - suite backend revalidada tras refuerzo de contratos HTTP fallback/degradacion: `55 tests` en `OK` (`skipped=1`)
-- suite backend actualizada con contratos SSE separados para analyze + `request-traces`: `62 tests` en `OK` (`skipped=1`)
+- suite backend actualizada con contratos de enlace `run_id` en request traces: `63 tests` en `OK` (`skipped=1`)
 
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada de CV a Markdown (PyMuPDF/LlamaIndex) para mejorar jerarquia semantica

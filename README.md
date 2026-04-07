@@ -153,7 +153,7 @@ Mapa rapido endpoint -> flow:
 - `POST /api/persons/{person_id}/opportunities/{opportunity_id}/prepare`: `guardrails_core + system_identity + task_prepare_*` segun `targets`
 - `POST /api/persons/{person_id}/opportunities/{opportunity_id}/prepare/stream`: misma composicion de `prepare` con SSE por canal y soporte de `targets` + `force_recompute`
 - `GET /api/persons/{person_id}/opportunities/{opportunity_id}/ai-runs`: historico backend por accion IA (`action_key` opcional)
-- `GET /api/persons/{person_id}/request-traces`: historial de request payload exacto por destino (`destination`, `opportunity_id`, `limit` opcionales)
+- `GET /api/persons/{person_id}/request-traces`: historial de request payload exacto por destino (`destination`, `opportunity_id`, `run_id`, `limit` opcionales)
 - `POST /api/persons/{person_id}/search`: `search_jobs_tavily`
 - senales culturales en `analyze_cultural_fit`: `search_culture_tavily`
 
