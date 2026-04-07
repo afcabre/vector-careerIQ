@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `Lote 6 UI completado: analisis reorganizado con resultados agrupados y secciones secundarias colapsables`
+- checkpoint_actual: `Ajuste UX perfil+cultura aplicado: titulo instruccional en perfil y evaluacion cultural simplificada por coincidencias/diferencias/indeterminado`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
 - ultima_actualizacion: `2026-04-07`
 
@@ -107,9 +107,28 @@
 - UX de analisis refinada para reducir carga cognitiva: `Senales culturales` y `Evidencia semantica CV` ahora se muestran colapsadas por defecto
 - UX de navegacion externa mejorada: URLs de resultados, oportunidades y senales culturales ahora son enlaces clicables (`target=_blank`) con estilo visual consistente
 - topbar de workspace replanteado para operacion diaria: marca a la izquierda, selector central de candidato con menu (incluye `Cambiar candidato` hacia `/candidates`), navegacion contextual (`Perfil`, `Oportunidades`, `Analisis`) y acciones globales por icono (`Administracion`, `Cerrar sesion`) a la derecha
-- nomenclatura de tabs contextuales ajustada para flujo real V1: `Perfil | Busqueda | Alineacion`
+- nomenclatura de tabs contextuales ajustada para flujo real V1: `Perfil | Busqueda | Alineación`
 - regla UX explicita aplicada: sin candidato activo se ocultan tabs contextuales; con candidato activo se muestran tabs de contexto
 - pasada fina UX en header desktop/movil: legibilidad de tab largo, `nowrap`, scroll horizontal de tabs en pantallas pequenas y refinamiento visual del estado activo
+- vista de candidatos refinada: `Agregar perfil` ahora abre/cierra el formulario de alta bajo demanda; cuando no hay registros el formulario se abre automaticamente
+- copy UX ajustado en candidatos para foco en `perfil` (labels de alto nivel) manteniendo el modelo de datos por `person_id`
+- preferencias culturales simplificadas: seleccion directa de opciones por campo; se elimina criticidad explicita en UI V1
+- bloque `CV activo` compactado: resumen en chips de estado, boton `Subir CV` mas compacto y vista previa en seccion colapsable
+- estilo global de botones compactado (menos redondeo, menor alto/padding) para reducir peso visual
+- pagina `Perfil` remaquetada en dos columnas en desktop (`Perfil base editable` a la izquierda y `Preferencias culturales` a la derecha), con degradacion responsiva a una sola columna en movil
+- microcopy de perfil depurado: se eliminan textos redundantes (`Perfil activo`, `Skills base`, `Contexto activo`) y se mantiene foco en acciones
+- jerarquia de secciones en pagina de perfil ajustada: segmentos separados `Perfil` y `CV` (sin encabezados redundantes tipo `Contexto activo`/`CV activo`)
+- hero de pagina de perfil compactado: `Perfil` + titulo corto y sin parrafo secundario para reducir altura vertical
+- flujo de carga de CV ajustado: selector de archivo custom en espanol (`Seleccionar archivo`) para evitar texto nativo en ingles (`No file chosen`)
+- copy de experiencia normalizado a `Años de experiencia` en formularios y validaciones
+- flujo de CV reorganizado segun uso real: si ya existe CV activo se prioriza resumen + vista previa breve (8 lineas) con `Ver mas`; la carga/reemplazo queda como accion secundaria (`Reemplazar CV`)
+- API de CV ampliada: nuevo endpoint `GET /api/persons/{person_id}/cv/active/text` para recuperar texto extraido completo del CV activo
+- `Ver mas` en UI de CV ahora carga y muestra texto extraido completo (no solo preview truncado), permitiendo verificar perdida de informacion en extraccion PDF
+- seccion de perfil simplificada en microcopy: eliminacion de redundancia de titulos y textos para reducir ruido visual y espacio vertical
+- nomenclatura de vista contextual refinada para reducir repeticion local: se mantiene `Perfil` en navegacion y se usa `Candidato` solo en el encabezado interno de la seccion principal
+- hero de la vista de perfil compactado (titulo con menor peso y menor separacion respecto al topbar/panel)
+- hero de perfil ajustado a texto instruccional (no nombre propio), para mantener consistencia operacional en la vista
+- analisis cultural alineado para V1 via plantillas de prompt configurables: enfoque en `coincide/no coincide/indeterminado`, sin descarte automatico por vacios de evidencia y con conclusion abierta
 - build frontend revalidado tras hardening visual de contraste: `npm run build` en `OK`
 - contratos API de `search` reforzados para validar `provider_status` (fallo total, degradacion parcial y config faltante)
 - contratos API/admin de `search-providers` reforzados para `GET`/`PATCH` y manejo `404` en proveedor desconocido
@@ -217,6 +236,7 @@
 - `Profile diff` por vacante para evidenciar brechas del perfil del candidato frente a requisitos de la oportunidad
 - datos de contacto en panel de perfil (diferido fuera de alcance V1)
 - `ARTEFACT_EDITOR_PANEL` avanzado (toolbar de formato, exportacion PDF y vista split con insights) diferido para versiones posteriores
+- rango salarial esperado en perfil (inicio/fin) con control de rango en UI, para iteracion corta de V1
 
 ## Bloqueadores
 - no hay bloqueadores funcionales de alcance V1
