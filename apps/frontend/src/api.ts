@@ -168,6 +168,14 @@ export type ActiveCV = {
   updated_at: string;
 };
 
+export type ActiveCVText = {
+  cv_id: string;
+  person_id: string;
+  text_length: number;
+  text_truncated: boolean;
+  extracted_text: string;
+};
+
 export type PromptConfig = {
   config_id: string;
   scope: string;
@@ -429,6 +437,14 @@ export async function uploadCV(personId: string, file: File): Promise<ActiveCV> 
     body: form
   });
   return parseResponse<ActiveCV>(response);
+}
+
+export async function getActiveCVText(personId: string): Promise<ActiveCVText> {
+  const response = await fetch(`${API_BASE}/persons/${personId}/cv/active/text`, {
+    method: "GET",
+    credentials: "include"
+  });
+  return parseResponse<ActiveCVText>(response);
 }
 
 export async function getConversation(personId: string): Promise<Conversation> {

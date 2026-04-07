@@ -23,6 +23,7 @@ import {
   createPerson,
   getConversation,
   getActiveCV,
+  getActiveCVText,
   getSession,
   importOpportunityByText,
   importOpportunityByUrl,
@@ -602,6 +603,7 @@ export default function App() {
   const [newPersonLocation, setNewPersonLocation] = useState("");
   const [newPersonYearsExperienceInput, setNewPersonYearsExperienceInput] = useState("");
   const [newPersonSkillsInput, setNewPersonSkillsInput] = useState("");
+  const [isCreateProfileFormOpen, setIsCreateProfileFormOpen] = useState(false);
   const [isCreatingPerson, setIsCreatingPerson] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -630,9 +632,13 @@ export default function App() {
   const [isImportingText, setIsImportingText] = useState(false);
   const [savedOpportunities, setSavedOpportunities] = useState<Opportunity[]>([]);
   const [activeCv, setActiveCv] = useState<ActiveCV | null>(null);
+  const [activeCvFullText, setActiveCvFullText] = useState("");
   const [selectedCvFile, setSelectedCvFile] = useState<File | null>(null);
   const [isLoadingCv, setIsLoadingCv] = useState(false);
   const [isUploadingCv, setIsUploadingCv] = useState(false);
+  const [isLoadingCvFullText, setIsLoadingCvFullText] = useState(false);
+  const [isCvUploadFormOpen, setIsCvUploadFormOpen] = useState(false);
+  const [isCvPreviewExpanded, setIsCvPreviewExpanded] = useState(false);
   const [isLoadingOpportunities, setIsLoadingOpportunities] = useState(false);
   const [savingResultId, setSavingResultId] = useState<string | null>(null);
   const [selectedOpportunityId, setSelectedOpportunityId] = useState<string | null>(null);
@@ -808,19 +814,24 @@ export default function App() {
     : showAdminPromptsPage
       ? "Administracion global"
       : showProfilePage
-        ? "Perfil y ADN"
+        ? "Perfil"
         : showOpportunitiesPage
           ? "Busqueda de oportunidades"
-          : "Alineacion";
+          : "Alineación";
   const currentPageTitle = showCandidatesPage
-    ? "Selecciona una persona consultada para abrir su contexto."
+    ? "Selecciona un perfil para abrir su contexto."
     : showAdminPromptsPage
       ? "Ajusta prompts globales y proveedores de busqueda."
       : showProfilePage
-        ? "Edita perfil y preferencias del candidato activo."
+        ? "Gestiona perfil y CV del perfil activo."
         : showOpportunitiesPage
           ? "Busca, revisa e importa oportunidades para el contexto activo."
-          : "Evalua alineacion del perfil y prepara entregables por oportunidad.";
+          : "Evalua alineación del perfil y prepara entregables por oportunidad.";
+  const currentPageLede = showContextualSidebar
+    ? showProfilePage
+      ? null
+      : "Usa las pestañas para gestionar perfil, busqueda y alineación."
+    : "Este flujo separa acceso del tutor y contexto del perfil consultado.";
   const chatQuickStarts = selectedPerson
     ? [
         `Cual es el foco de posicionamiento para ${selectedPerson.full_name} hoy?`,
@@ -828,10 +839,39 @@ export default function App() {
         "Que mejoras de perfil recomiendas antes de postular?"
       ]
     : CHAT_QUICK_STARTS;
+  const cvPreviewLineLimit = 8;
+  const cvPreviewText = (activeCv?.extracted_text_preview ?? "").trim();
+  const cvExpandedText = (activeCvFullText || cvPreviewText).trim();
+  const cvPreviewLines = cvPreviewText ? cvPreviewText.split(/\r?\n/) : [];
+  const cvPreviewShortText = cvPreviewLines
+    .slice(0, cvPreviewLineLimit)
+    .join("\n")
+    .trim();
+  const hasMoreCvPreview =
+    cvPreviewLines.length > cvPreviewLineLimit ||
+    cvPreviewText.length > cvPreviewShortText.length ||
+    (activeCv?.text_length ?? 0) > cvPreviewText.length;
 
   useEffect(() => {
     setIsPersonContextMenuOpen(false);
   }, [currentPath, selectedPersonId]);
+
+  useEffect(() => {
+    if (showCandidatesPage && people.length === 0) {
+      setIsCreateProfileFormOpen(true);
+    }
+  }, [showCandidatesPage, people.length]);
+
+  useEffect(() => {
+    setActiveCvFullText("");
+    if (!activeCv) {
+      setIsCvUploadFormOpen(true);
+      setIsCvPreviewExpanded(false);
+      return;
+    }
+    setIsCvUploadFormOpen(false);
+    setIsCvPreviewExpanded(false);
+  }, [activeCv?.cv_id]);
 
   function navigateTo(path: string, options?: { replace?: boolean }) {
     if (typeof window === "undefined") {
@@ -917,6 +957,7 @@ export default function App() {
     const loadActiveCv = async () => {
       if (!selectedPersonId || view !== "workspace") {
         setActiveCv(null);
+        setActiveCvFullText("");
         setSelectedCvFile(null);
         return;
       }
@@ -925,6 +966,7 @@ export default function App() {
       try {
         const item = await getActiveCV(selectedPersonId);
         setActiveCv(item);
+        setActiveCvFullText("");
       } catch (error) {
         const message = error instanceof Error ? error.message : "No se pudo cargar el CV activo";
         setErrorMessage(message);
@@ -1049,7 +1091,7 @@ export default function App() {
         allowedOptions.has(item)
       );
       nextState[field.id] = {
-        enabled: Boolean(raw.enabled),
+        enabled: selectedValues.length > 0,
         selected_values: selectedValues,
         criticality:
           raw.criticality === "high_penalty" || raw.criticality === "non_negotiable"
@@ -1141,6 +1183,7 @@ export default function App() {
     setTraceRunIdFilter("");
     setFocusedRunId("");
     setActiveCv(null);
+    setActiveCvFullText("");
     setSelectedCvFile(null);
   }
 
@@ -1164,12 +1207,12 @@ export default function App() {
 
     if (!fullName || !location || targetRoles.length === 0 || skills.length === 0) {
       setErrorMessage(
-        "Nueva persona incompleta: nombre, ubicacion, roles y skills son obligatorios."
+        "Nuevo perfil incompleto: nombre, ubicacion, roles y skills son obligatorios."
       );
       return;
     }
     if (!Number.isFinite(yearsExperience) || yearsExperience < 0 || yearsExperience > 80) {
-      setErrorMessage("Anos de experiencia debe estar entre 0 y 80.");
+      setErrorMessage("Años de experiencia debe estar entre 0 y 80.");
       return;
     }
 
@@ -1192,9 +1235,10 @@ export default function App() {
       setNewPersonLocation("");
       setNewPersonYearsExperienceInput("");
       setNewPersonSkillsInput("");
+      setIsCreateProfileFormOpen(false);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "No se pudo crear la nueva persona";
+        error instanceof Error ? error.message : "No se pudo crear el nuevo perfil";
       setErrorMessage(message);
     } finally {
       setIsCreatingPerson(false);
@@ -1520,6 +1564,32 @@ export default function App() {
         error instanceof Error ? error.message : "No se pudo copiar el artefacto";
       setErrorMessage(message);
     }
+  }
+
+  async function handleToggleCvPreview() {
+    if (!activeCv) {
+      return;
+    }
+    if (isCvPreviewExpanded) {
+      setIsCvPreviewExpanded(false);
+      return;
+    }
+    if (!activeCvFullText && !isLoadingCvFullText) {
+      setIsLoadingCvFullText(true);
+      try {
+        const payload = await getActiveCVText(activeCv.person_id);
+        setActiveCvFullText(payload.extracted_text);
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "No se pudo cargar el texto completo del CV";
+        setErrorMessage(message);
+      } finally {
+        setIsLoadingCvFullText(false);
+      }
+    }
+    setIsCvPreviewExpanded(true);
   }
 
   async function handleUploadCv(event: FormEvent<HTMLFormElement>) {
@@ -2028,7 +2098,7 @@ export default function App() {
       return;
     }
     if (!Number.isFinite(yearsExperience) || yearsExperience < 0 || yearsExperience > 80) {
-      setErrorMessage("Anos de experiencia debe estar entre 0 y 80.");
+      setErrorMessage("Años de experiencia debe estar entre 0 y 80.");
       return;
     }
 
@@ -2053,20 +2123,6 @@ export default function App() {
     }
   }
 
-  function handleToggleCulturalField(fieldId: string, enabled: boolean) {
-    setCulturePreferencesState((current) => ({
-      ...current,
-      [fieldId]: {
-        ...(current[fieldId] ?? {
-          enabled: false,
-          selected_values: [],
-          criticality: "normal"
-        }),
-        enabled
-      }
-    }));
-  }
-
   function handleToggleCulturalOption(fieldId: string, optionValue: string, checked: boolean) {
     setCulturePreferencesState((current) => {
       const existing = current[fieldId] ?? {
@@ -2081,6 +2137,7 @@ export default function App() {
         ...current,
         [fieldId]: {
           ...existing,
+          enabled: selected.length > 0,
           selected_values: selected
         }
       };
@@ -2099,7 +2156,19 @@ export default function App() {
           selected_values: [],
           criticality: "normal"
         }),
+        enabled: (current[fieldId]?.selected_values.length ?? 0) > 0,
         criticality
+      }
+    }));
+  }
+
+  function handleClearCulturalField(fieldId: string) {
+    setCulturePreferencesState((current) => ({
+      ...current,
+      [fieldId]: {
+        enabled: false,
+        selected_values: [],
+        criticality: "normal"
       }
     }));
   }
@@ -2122,7 +2191,7 @@ export default function App() {
           <p className="eyebrow">Tutor Workspace</p>
           <h1>Acceso protegido del tutor.</h1>
           <p className="lede">
-            Inicia sesion para seleccionar una persona consultada y abrir su
+            Inicia sesion para seleccionar un perfil y abrir su
             contexto de trabajo.
           </p>
         </section>
@@ -2255,7 +2324,7 @@ export default function App() {
                 onClick={() => navigateTo(buildContextPath(selectedPerson.person_id, "analysis"))}
                 type="button"
               >
-                Alineacion
+                Alineación
               </button>
             </nav>
           ) : null}
@@ -2315,24 +2384,31 @@ export default function App() {
         </div>
       </section>
 
-      <section className="hero">
+      <section className={showProfilePage ? "hero heroCompact" : "hero"}>
         <p className="eyebrow">{currentPageLabel}</p>
-        <h1>{currentPageTitle}</h1>
-        <p className="lede">
-          {showContextualSidebar && selectedPerson
-            ? `Contexto activo: ${selectedPerson.full_name}.`
-            : "Este flujo separa acceso del tutor y contexto de la persona consultada."}
-        </p>
+        <h1 className={showProfilePage ? "heroTitleCompact" : undefined}>{currentPageTitle}</h1>
+        {currentPageLede ? <p className="lede">{currentPageLede}</p> : null}
       </section>
 
       {showCandidatesPage ? (
         <section className="panel">
         <header className="panelHeader">
           <div>
-            <h2>Personas consultadas</h2>
-            <p>Selecciona el perfil activo para continuar a chat y oportunidades.</p>
+            <h2>Perfiles consultados</h2>
+            <p>Selecciona el perfil activo para continuar a busqueda y alineacion.</p>
           </div>
-          <p className="metaText">{people.length} registradas</p>
+          <div className="cardActions">
+            <p className="metaText">{people.length} registrados</p>
+            <button
+              className={isCreateProfileFormOpen ? "activeButton" : ""}
+              onClick={() =>
+                setIsCreateProfileFormOpen((current) => !current)
+              }
+              type="button"
+            >
+              {isCreateProfileFormOpen ? "Ocultar alta" : "Agregar perfil"}
+            </button>
+          </div>
         </header>
 
         <div className="cards">
@@ -2347,7 +2423,7 @@ export default function App() {
               </div>
               <p>{person.target_roles[0] ?? "Sin rol objetivo"}</p>
               <p className="metaText">
-                {person.location} · {person.years_experience} anos
+                {person.location} · {person.years_experience} años
               </p>
               <div className="cardActions">
                 <button
@@ -2362,67 +2438,71 @@ export default function App() {
                 >
                   {person.person_id === selectedPersonId
                     ? "Contexto activo"
-                    : "Abrir contexto"}
+                    : "Abrir perfil"}
                 </button>
               </div>
             </article>
           ))}
         </div>
-        <h3 className="subheading">Agregar persona consultada</h3>
-        <form className="manualCard" onSubmit={handleCreatePerson}>
-          <label className="field">
-            Nombre completo
-            <input
-              disabled={isCreatingPerson}
-              onChange={(event) => setNewPersonFullName(event.target.value)}
-              value={newPersonFullName}
-            />
-          </label>
-          <div className="manualRow">
-            <label className="field">
-              Ubicacion
-              <input
-                disabled={isCreatingPerson}
-                onChange={(event) => setNewPersonLocation(event.target.value)}
-                value={newPersonLocation}
-              />
-            </label>
-            <label className="field">
-              Anos de experiencia
-              <input
-                disabled={isCreatingPerson}
-                max={80}
-                min={0}
-                onChange={(event) => setNewPersonYearsExperienceInput(event.target.value)}
-                type="number"
-                value={newPersonYearsExperienceInput}
-              />
-            </label>
-          </div>
-          <label className="field">
-            Roles objetivo (coma o salto de linea)
-            <textarea
-              disabled={isCreatingPerson}
-              onChange={(event) => setNewPersonTargetRolesInput(event.target.value)}
-              rows={2}
-              value={newPersonTargetRolesInput}
-            />
-          </label>
-          <label className="field">
-            Skills (coma o salto de linea)
-            <textarea
-              disabled={isCreatingPerson}
-              onChange={(event) => setNewPersonSkillsInput(event.target.value)}
-              rows={2}
-              value={newPersonSkillsInput}
-            />
-          </label>
-          <div className="cardActions">
-            <button className="primaryButton" disabled={isCreatingPerson} type="submit">
-              {isCreatingPerson ? "Creando..." : "Crear persona"}
-            </button>
-          </div>
-        </form>
+        {isCreateProfileFormOpen ? (
+          <>
+            <h3 className="subheading">Agregar perfil</h3>
+            <form className="manualCard" onSubmit={handleCreatePerson}>
+              <label className="field">
+                Nombre completo
+                <input
+                  disabled={isCreatingPerson}
+                  onChange={(event) => setNewPersonFullName(event.target.value)}
+                  value={newPersonFullName}
+                />
+              </label>
+              <div className="manualRow">
+                <label className="field">
+                  Ubicacion
+                  <input
+                    disabled={isCreatingPerson}
+                    onChange={(event) => setNewPersonLocation(event.target.value)}
+                    value={newPersonLocation}
+                  />
+                </label>
+                <label className="field">
+                  Años de experiencia
+                  <input
+                    disabled={isCreatingPerson}
+                    max={80}
+                    min={0}
+                    onChange={(event) => setNewPersonYearsExperienceInput(event.target.value)}
+                    type="number"
+                    value={newPersonYearsExperienceInput}
+                  />
+                </label>
+              </div>
+              <label className="field">
+                Roles objetivo (coma o salto de linea)
+                <textarea
+                  disabled={isCreatingPerson}
+                  onChange={(event) => setNewPersonTargetRolesInput(event.target.value)}
+                  rows={2}
+                  value={newPersonTargetRolesInput}
+                />
+              </label>
+              <label className="field">
+                Skills (coma o salto de linea)
+                <textarea
+                  disabled={isCreatingPerson}
+                  onChange={(event) => setNewPersonSkillsInput(event.target.value)}
+                  rows={2}
+                  value={newPersonSkillsInput}
+                />
+              </label>
+              <div className="cardActions">
+                <button className="primaryButton" disabled={isCreatingPerson} type="submit">
+                  {isCreatingPerson ? "Creando..." : "Crear perfil"}
+                </button>
+              </div>
+            </form>
+          </>
+        ) : null}
         </section>
       ) : null}
 
@@ -2656,101 +2736,91 @@ export default function App() {
 
       {showProfilePage ? (
         <section className="panel selectedPanel">
-        <h2>Contexto activo</h2>
+        <h2>Candidato</h2>
         {selectedPerson ? (
           <div className="cvCard">
-            <p className="lede">
-              Perfil activo: <strong>{selectedPerson.full_name}</strong> (
-              {selectedPerson.person_id}).
-            </p>
-            <p className="metaText">
-              Skills base: {selectedPerson.skills.join(", ")}
-            </p>
-            <h3 className="subheading">Perfil base editable</h3>
-            <article className="manualCard">
-              <label className="field">
-                Nombre completo
-                <input
-                  disabled={isSavingProfile}
-                  onChange={(event) => setProfileFullName(event.target.value)}
-                  value={profileFullName}
-                />
-              </label>
-              <div className="manualRow">
+            <div className="profileSplitGrid">
+              <article className="manualCard profileSectionCard">
                 <label className="field">
-                  Ubicacion
+                  Nombre completo
                   <input
                     disabled={isSavingProfile}
-                    onChange={(event) => setProfileLocation(event.target.value)}
-                    value={profileLocation}
+                    onChange={(event) => setProfileFullName(event.target.value)}
+                    value={profileFullName}
+                  />
+                </label>
+                <div className="manualRow">
+                  <label className="field">
+                    Ubicacion
+                    <input
+                      disabled={isSavingProfile}
+                      onChange={(event) => setProfileLocation(event.target.value)}
+                      value={profileLocation}
+                    />
+                  </label>
+                  <label className="field">
+                    Años de experiencia
+                    <input
+                      disabled={isSavingProfile}
+                      max={80}
+                      min={0}
+                      onChange={(event) => setProfileYearsExperienceInput(event.target.value)}
+                      type="number"
+                      value={profileYearsExperienceInput}
+                    />
+                  </label>
+                </div>
+                <label className="field">
+                  Roles objetivo (coma o salto de linea)
+                  <textarea
+                    disabled={isSavingProfile}
+                    onChange={(event) => setProfileTargetRolesInput(event.target.value)}
+                    rows={2}
+                    value={profileTargetRolesInput}
                   />
                 </label>
                 <label className="field">
-                  Anos de experiencia
-                  <input
+                  Skills (coma o salto de linea)
+                  <textarea
                     disabled={isSavingProfile}
-                    max={80}
-                    min={0}
-                    onChange={(event) => setProfileYearsExperienceInput(event.target.value)}
-                    type="number"
-                    value={profileYearsExperienceInput}
+                    onChange={(event) => setProfileSkillsInput(event.target.value)}
+                    rows={2}
+                    value={profileSkillsInput}
                   />
                 </label>
-              </div>
-              <label className="field">
-                Roles objetivo (coma o salto de linea)
-                <textarea
-                  disabled={isSavingProfile}
-                  onChange={(event) => setProfileTargetRolesInput(event.target.value)}
-                  rows={2}
-                  value={profileTargetRolesInput}
-                />
-              </label>
-              <label className="field">
-                Skills (coma o salto de linea)
-                <textarea
-                  disabled={isSavingProfile}
-                  onChange={(event) => setProfileSkillsInput(event.target.value)}
-                  rows={2}
-                  value={profileSkillsInput}
-                />
-              </label>
-              <div className="cardActions">
-                <button
-                  disabled={isSavingProfile}
-                  onClick={() => void handleSaveProfile()}
-                  type="button"
-                >
-                  {isSavingProfile ? "Guardando perfil..." : "Guardar perfil"}
-                </button>
-              </div>
-            </article>
-            <h3 className="subheading">Preferencias culturales y condiciones de trabajo</h3>
-            <div className="cultureGrid">
-              {CULTURAL_FIELDS.map((field) => {
-                const value = culturePreferencesState[field.id] ?? {
-                  enabled: false,
-                  selected_values: [],
-                  criticality: "normal"
-                };
-                return (
-                  <article className="manualCard" key={field.id}>
-                    <label className="checkboxRow">
-                      <input
-                        checked={value.enabled}
-                        disabled={isSavingCulturePreferences}
-                        onChange={(event) =>
-                          handleToggleCulturalField(field.id, event.target.checked)
-                        }
-                        type="checkbox"
-                      />
-                      <span>{field.label}</span>
-                    </label>
-                    {value.enabled ? (
-                      <>
-                        <div className="optionList">
+                <div className="cardActions">
+                  <button
+                    className="primaryButton buttonCompact"
+                    disabled={isSavingProfile}
+                    onClick={() => void handleSaveProfile()}
+                    type="button"
+                  >
+                    {isSavingProfile ? "Guardando..." : "Guardar perfil"}
+                  </button>
+                </div>
+              </article>
+
+              <article className="manualCard profileSectionCard">
+                <h3 className="subheading subheadingCompact">
+                  Condiciones de trabajo y preferencias culturales
+                </h3>
+                <div className="cultureGrid cultureGridCompact">
+                  {CULTURAL_FIELDS.map((field) => {
+                    const value = culturePreferencesState[field.id] ?? {
+                      enabled: false,
+                      selected_values: [],
+                      criticality: "normal"
+                    };
+                    const selectedCount = value.selected_values.length;
+                    return (
+                      <article className="manualCard cultureFieldCard" key={field.id}>
+                        <p className="chatRole">{field.label}</p>
+                        <div className="optionList optionListCompact">
                           {field.options.map((option) => (
-                            <label className="checkboxRow" key={`${field.id}-${option.value}`}>
+                            <label
+                              className="checkboxRow checkboxRowCompact"
+                              key={`${field.id}-${option.value}`}
+                            >
                               <input
                                 checked={value.selected_values.includes(option.value)}
                                 disabled={isSavingCulturePreferences}
@@ -2767,111 +2837,189 @@ export default function App() {
                             </label>
                           ))}
                         </div>
-                        <label className="field">
-                          Criticidad
-                          <select
-                            disabled={isSavingCulturePreferences}
-                            onChange={(event) =>
-                              handleChangeCulturalCriticality(
-                                field.id,
-                                event.target.value as CulturalFieldPreference["criticality"]
-                              )
-                            }
-                            value={value.criticality}
-                          >
-                            {CRITICALITY_OPTIONS.map((option) => (
-                              <option key={`${field.id}-${option.value}`} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      </>
-                    ) : (
-                      <p className="metaText">Factor no relevante para esta persona.</p>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
-            <label className="field">
-              Notas abiertas sobre cultura y condiciones laborales
-              <textarea
-                disabled={isSavingCulturePreferences}
-                onChange={(event) => setCulturePreferencesNotes(event.target.value)}
-                rows={3}
-                value={culturePreferencesNotes}
-              />
-            </label>
-            <div className="cardActions">
-              <button
-                disabled={isSavingCulturePreferences}
-                onClick={() => void handleSaveCulturePreferences()}
-                type="button"
-              >
-                {isSavingCulturePreferences
-                  ? "Guardando preferencias..."
-                  : "Guardar preferencias"}
-              </button>
+                        <div className="cultureFieldFooter">
+                          {selectedCount > 0 ? (
+                            <p className="metaText">{selectedCount} opcion(es) seleccionada(s)</p>
+                          ) : (
+                            <p className="metaText">
+                              Opcional: no relevante si no seleccionas opciones.
+                            </p>
+                          )}
+                          {selectedCount > 0 ? (
+                            <>
+                              <label className="field fieldInline">
+                                Criticidad
+                                <select
+                                  disabled={isSavingCulturePreferences}
+                                  onChange={(event) =>
+                                    handleChangeCulturalCriticality(
+                                      field.id,
+                                      event.target.value as CulturalFieldPreference["criticality"]
+                                    )
+                                  }
+                                  value={value.criticality}
+                                >
+                                  {CRITICALITY_OPTIONS.map((option) => (
+                                    <option key={`${field.id}-${option.value}`} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
+                              <button
+                                className="ghostButton buttonCompact"
+                                disabled={isSavingCulturePreferences}
+                                onClick={() => handleClearCulturalField(field.id)}
+                                type="button"
+                              >
+                                No relevante
+                              </button>
+                            </>
+                          ) : null}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+                <label className="field">
+                  Notas abiertas sobre cultura y condiciones laborales
+                  <textarea
+                    disabled={isSavingCulturePreferences}
+                    onChange={(event) => setCulturePreferencesNotes(event.target.value)}
+                    rows={3}
+                    value={culturePreferencesNotes}
+                  />
+                </label>
+                <div className="cardActions">
+                  <button
+                    className="primaryButton buttonCompact"
+                    disabled={isSavingCulturePreferences}
+                    onClick={() => void handleSaveCulturePreferences()}
+                    type="button"
+                  >
+                    {isSavingCulturePreferences ? "Guardando..." : "Guardar preferencias"}
+                  </button>
+                </div>
+              </article>
             </div>
           </div>
         ) : (
           <p className="metaText">
-            No hay persona consultada seleccionada. Elige un perfil para
-            continuar.
+            No hay perfil seleccionado. Elige uno para continuar.
           </p>
         )}
         </section>
       ) : null}
       {showProfilePage ? (
         <section className="panel selectedPanel">
-        <h2>CV activo</h2>
-        <form className="cvForm" onSubmit={handleUploadCv}>
-          <input
-            accept=".pdf,.txt,.md"
-            disabled={!selectedPersonId || isUploadingCv}
-            onChange={(event) => {
-              const file = event.target.files?.[0] ?? null;
-              setSelectedCvFile(file);
-            }}
-            type="file"
-          />
-          <button
-            className="primaryButton"
-            disabled={!selectedPersonId || !selectedCvFile || isUploadingCv}
-            type="submit"
-          >
-            {isUploadingCv ? "Cargando..." : "Cargar CV"}
-          </button>
-        </form>
+        <header className="panelHeader">
+          <div>
+            <h2>CV</h2>
+            <p>
+              {activeCv
+                ? "Resumen y vista previa del CV activo."
+                : "Sube el CV para enriquecer el analisis y las respuestas."}
+            </p>
+          </div>
+          {activeCv ? (
+            <div className="cardActions">
+              <button
+                className={isCvUploadFormOpen ? "activeButton" : ""}
+                onClick={() =>
+                  setIsCvUploadFormOpen((current) => !current)
+                }
+                type="button"
+              >
+                {isCvUploadFormOpen ? "Ocultar carga" : "Reemplazar CV"}
+              </button>
+            </div>
+          ) : null}
+        </header>
         {isLoadingCv ? (
           <p className="metaText">Consultando CV activo...</p>
         ) : activeCv ? (
           <div className="cvCard">
-            <p className="metaText">
-              Archivo: <strong>{activeCv.source_filename}</strong> · estado extraccion:{" "}
-              {activeCv.extraction_status}
-            </p>
-            <p className="metaText">
-              Indexacion vectorial: {activeCv.vector_index_status} · chunks:{" "}
-              {activeCv.vector_chunks_indexed}
-            </p>
-            <p className="metaText">
-              Longitud detectada: {activeCv.text_length} caracteres
-              {activeCv.text_truncated ? " (truncado para V1)" : ""}
-            </p>
-            <article className="chatBubble chatBubbleAssistant">
-              <p className="chatRole">Vista previa</p>
-              <p className="chatContent">
-                {activeCv.extracted_text_preview || "No se obtuvo texto util del archivo."}
+            <article className="manualCard cvSummaryCard">
+              <p className="metaText">
+                Archivo: <strong>{activeCv.source_filename}</strong>
               </p>
+              <div className="metaChips">
+                <span className="metaChip">Extraccion: {activeCv.extraction_status}</span>
+                <span className="metaChip">
+                  Vector: {activeCv.vector_index_status} · chunks {activeCv.vector_chunks_indexed}
+                </span>
+                <span className="metaChip">
+                  Texto: {activeCv.text_length} caracteres
+                  {activeCv.text_truncated ? " (truncado)" : ""}
+                </span>
+              </div>
+              <article className="chatBubble chatBubbleAssistant cvPreviewSection">
+                <p className="chatRole">Vista previa extraida</p>
+                <p
+                  className={
+                    isCvPreviewExpanded
+                      ? "chatContent cvPreviewText"
+                      : "chatContent cvPreviewText cvPreviewTextCollapsed"
+                  }
+                >
+                  {isCvPreviewExpanded
+                    ? cvExpandedText || "No se obtuvo texto util del archivo."
+                    : cvPreviewShortText || "No se obtuvo texto util del archivo."}
+                </p>
+                {isCvPreviewExpanded && isLoadingCvFullText ? (
+                  <p className="metaText">Cargando texto completo...</p>
+                ) : null}
+                {hasMoreCvPreview ? (
+                  <div className="cardActions">
+                    <button
+                      className="ghostButton buttonCompact"
+                      disabled={isLoadingCvFullText}
+                      onClick={() => void handleToggleCvPreview()}
+                      type="button"
+                    >
+                      {isCvPreviewExpanded ? "Ver menos" : "Ver mas"}
+                    </button>
+                  </div>
+                ) : null}
+              </article>
             </article>
           </div>
         ) : (
           <p className="metaText">
-            No hay CV activo para esta persona. Puedes operar sin CV y cargarlo despues.
+            No hay CV activo para este perfil. Puedes operar sin CV y cargarlo despues.
           </p>
         )}
+        {isCvUploadFormOpen ? (
+          <>
+            <form className="cvForm cvFormCompact" onSubmit={handleUploadCv}>
+              <label className="ghostButton buttonCompact filePickerButton" htmlFor="cv-upload-input">
+                Seleccionar archivo
+              </label>
+              <input
+                className="filePickerInput"
+                accept=".pdf,.txt,.md"
+                disabled={!selectedPersonId || isUploadingCv}
+                id="cv-upload-input"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  setSelectedCvFile(file);
+                }}
+                type="file"
+              />
+              <button
+                className="primaryButton buttonCompact"
+                disabled={!selectedPersonId || !selectedCvFile || isUploadingCv}
+                type="submit"
+              >
+                {isUploadingCv ? "Cargando..." : activeCv ? "Reemplazar CV" : "Subir CV"}
+              </button>
+            </form>
+            <p className="metaText">
+              Archivo para subir:{" "}
+              <strong>{selectedCvFile ? selectedCvFile.name : "Ninguno seleccionado"}</strong>
+            </p>
+          </>
+        ) : null}
         </section>
       ) : null}
       {showConversationSection ? (

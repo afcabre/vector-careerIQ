@@ -29,6 +29,14 @@ class CVResponse(BaseModel):
     updated_at: str
 
 
+class CVTextResponse(BaseModel):
+    cv_id: str
+    person_id: str
+    text_length: int
+    text_truncated: bool
+    extracted_text: str
+
+
 def _require_person(person_id: str) -> None:
     if get_person(person_id):
         return
@@ -98,3 +106,24 @@ def get_active(
             detail="No active CV",
         )
     return _to_response(record)
+
+
+@router.get("/active/text")
+def get_active_text(
+    person_id: str,
+    _: SessionData = Depends(require_operator_session),
+) -> CVTextResponse:
+    _require_person(person_id)
+    record = get_active_cv(person_id)
+    if not record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active CV",
+        )
+    return CVTextResponse(
+        cv_id=str(record.get("cv_id", "")),
+        person_id=str(record.get("person_id", "")),
+        text_length=int(record.get("text_length", 0)),
+        text_truncated=bool(record.get("text_truncated", False)),
+        extracted_text=str(record.get("extracted_text", "")),
+    )
