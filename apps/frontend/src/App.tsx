@@ -185,15 +185,6 @@ type PromptConfigDraft = {
   is_active: boolean;
 };
 
-const CRITICALITY_OPTIONS: Array<{
-  value: CulturalFieldPreference["criticality"];
-  label: string;
-}> = [
-  { value: "normal", label: "Normal" },
-  { value: "high_penalty", label: "Penalizacion alta" },
-  { value: "non_negotiable", label: "No negociable" }
-];
-
 const CULTURAL_FIELDS: Array<{
   id: string;
   label: string;
@@ -2144,35 +2135,6 @@ export default function App() {
     });
   }
 
-  function handleChangeCulturalCriticality(
-    fieldId: string,
-    criticality: CulturalFieldPreference["criticality"]
-  ) {
-    setCulturePreferencesState((current) => ({
-      ...current,
-      [fieldId]: {
-        ...(current[fieldId] ?? {
-          enabled: false,
-          selected_values: [],
-          criticality: "normal"
-        }),
-        enabled: (current[fieldId]?.selected_values.length ?? 0) > 0,
-        criticality
-      }
-    }));
-  }
-
-  function handleClearCulturalField(fieldId: string) {
-    setCulturePreferencesState((current) => ({
-      ...current,
-      [fieldId]: {
-        enabled: false,
-        selected_values: [],
-        criticality: "normal"
-      }
-    }));
-  }
-
   if (view === "checking") {
     return (
       <main className="shell">
@@ -2840,41 +2802,6 @@ export default function App() {
                         <div className="cultureFieldFooter">
                           {selectedCount > 0 ? (
                             <p className="metaText">{selectedCount} opcion(es) seleccionada(s)</p>
-                          ) : (
-                            <p className="metaText">
-                              Opcional: no relevante si no seleccionas opciones.
-                            </p>
-                          )}
-                          {selectedCount > 0 ? (
-                            <>
-                              <label className="field fieldInline">
-                                Criticidad
-                                <select
-                                  disabled={isSavingCulturePreferences}
-                                  onChange={(event) =>
-                                    handleChangeCulturalCriticality(
-                                      field.id,
-                                      event.target.value as CulturalFieldPreference["criticality"]
-                                    )
-                                  }
-                                  value={value.criticality}
-                                >
-                                  {CRITICALITY_OPTIONS.map((option) => (
-                                    <option key={`${field.id}-${option.value}`} value={option.value}>
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                </select>
-                              </label>
-                              <button
-                                className="ghostButton buttonCompact"
-                                disabled={isSavingCulturePreferences}
-                                onClick={() => handleClearCulturalField(field.id)}
-                                type="button"
-                              >
-                                No relevante
-                              </button>
-                            </>
                           ) : null}
                         </div>
                       </article>

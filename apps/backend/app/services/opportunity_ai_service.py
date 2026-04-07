@@ -44,13 +44,6 @@ CULTURAL_FIELD_LABELS = {
     "cultural_formality": "Formalidad cultural",
 }
 
-CRITICALITY_LABELS = {
-    "normal": "normal",
-    "high_penalty": "penalizacion alta",
-    "non_negotiable": "no negociable",
-}
-
-
 class CulturalSignal(TypedDict):
     source_provider: str
     source_url: str
@@ -181,9 +174,7 @@ def _person_context(person: PersonRecord) -> str:
             options = ", ".join(
                 [str(item).strip() for item in selected_values if str(item).strip()]
             )
-            criticality_raw = str(raw.get("criticality", "normal")).strip()
-            criticality = CRITICALITY_LABELS.get(criticality_raw, "normal")
-            structured_lines.append(f"- {label}: {options} ({criticality})")
+            structured_lines.append(f"- {label}: {options}")
 
     legacy_preferences = person.get("culture_preferences", [])
     legacy_line = ""
@@ -198,7 +189,10 @@ def _person_context(person: PersonRecord) -> str:
     else:
         parts: list[str] = []
         if structured_lines:
-            parts.append("Preferencias estructuradas:\n" + "\n".join(structured_lines))
+            parts.append(
+                "Preferencias estructuradas (opciones aceptables declaradas):\n"
+                + "\n".join(structured_lines)
+            )
         if legacy_line:
             parts.append(f"Preferencias libres historicas: {legacy_line}")
         if notes:
@@ -507,8 +501,8 @@ def build_analyze_prompt_bundle(
         "1) Ajuste general\n"
         "2) Fortalezas\n"
         "3) Brechas\n"
-        "4) Fit cultural (incluye nivel de confianza y vacios)\n"
-        "5) Red flags por falta de evidencia en preferencias criticas\n"
+        "4) Fit cultural (incluye nivel de confianza)\n"
+        "5) Coincidencias, diferencias e indeterminados por falta de evidencia\n"
         "6) Recomendacion accionable\n\n"
         f"Persona:\n{_person_context(person)}\n\n"
         f"Vacante:\n{_opportunity_context(opportunity)}\n\n"
@@ -666,7 +660,8 @@ def stream_analyze_cultural_fit_text(
         },
         fallback=(
             "Analiza fit cultural/condiciones de trabajo de forma cualitativa.\n"
-            "Incluye coincidencias, brechas y red flags por evidencia insuficiente.\n\n"
+            "Incluye coincidencias, diferencias e indeterminados por evidencia insuficiente.\n"
+            "No descartes automaticamente por evidencia faltante.\n\n"
             f"Persona:\n{_person_context(person)}\n\n"
             f"Vacante:\n{_opportunity_context(opportunity)}\n\n"
             f"Senales culturales externas:\n{_cultural_evidence_context(signals)}\n\n"
@@ -799,7 +794,8 @@ def analyze_cultural_fit(
         },
         fallback=(
             "Analiza fit cultural/condiciones de trabajo de forma cualitativa.\n"
-            "Incluye coincidencias, brechas y red flags por evidencia insuficiente.\n\n"
+            "Incluye coincidencias, diferencias e indeterminados por evidencia insuficiente.\n"
+            "No descartes automaticamente por evidencia faltante.\n\n"
             f"Persona:\n{_person_context(person)}\n\n"
             f"Vacante:\n{_opportunity_context(opportunity)}\n\n"
             f"Senales culturales externas:\n{_cultural_evidence_context(signals)}\n\n"

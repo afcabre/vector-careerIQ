@@ -239,8 +239,10 @@ def _default_configs() -> dict[str, PromptConfigRecord]:
             "flow_key": FLOW_TASK_ANALYZE_CULTURAL_FIT,
             "template_text": (
                 "Analiza fit cultural/condiciones de trabajo de forma cualitativa.\n"
-                "Incluye: coincidencias, brechas, red flags por evidencia insuficiente "
-                "y recomendacion.\n\n"
+                "Incluye: coincidencias, diferencias e indeterminados por evidencia insuficiente.\n"
+                "No apliques ponderacion por criticidad en V1.\n"
+                "No descartes automaticamente por evidencia faltante.\n"
+                "Incluye recomendacion accionable y conclusion abierta en texto libre.\n\n"
                 "Persona:\n{person_context}\n\n"
                 "Vacante:\n{opportunity_context}\n\n"
                 "Senales culturales externas:\n{cultural_evidence_context}\n\n"
