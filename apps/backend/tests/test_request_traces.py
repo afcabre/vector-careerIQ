@@ -184,6 +184,52 @@ class RequestTracesTests(unittest.TestCase):
         self.assertEqual(kwargs.get("opportunity_id"), "o-001")
         self.assertEqual(kwargs.get("run_id"), "r-link-001")
 
+    def test_request_trace_store_redacts_sensitive_values(self) -> None:
+        add_request_trace(
+            person_id="p-001",
+            destination="openai",
+            flow_key="chat_stream",
+            request_payload={
+                "api_key": "sk-real-key",
+                "headers": {
+                    "Authorization": "Bearer topsecret",
+                    "x-rapidapi-key": "rapid-secret",
+                },
+                "url": "https://api.example.com?q=python&api_key=abc123&token=xyz789",
+                "nested": {"password": "pw-123", "safe": "visible"},
+                "messages": [{"role": "user", "content": "Hola"}],
+            },
+        )
+
+        items = list_request_traces(person_id="p-001", limit=10)
+        self.assertEqual(len(items), 1)
+        payload = items[0]["request_payload"]
+        self.assertEqual(payload.get("api_key"), "[REDACTED]")
+        headers = payload.get("headers", {})
+        self.assertEqual(headers.get("Authorization"), "[REDACTED]")
+        self.assertEqual(headers.get("x-rapidapi-key"), "[REDACTED]")
+        nested = payload.get("nested", {})
+        self.assertEqual(nested.get("password"), "[REDACTED]")
+        self.assertEqual(nested.get("safe"), "visible")
+        self.assertIn("api_key=[REDACTED]", str(payload.get("url", "")))
+        self.assertIn("token=[REDACTED]", str(payload.get("url", "")))
+
+    def test_request_trace_store_caps_oversized_payload(self) -> None:
+        huge_payload = {f"k{i}": "x" * 1800 for i in range(40)}
+        add_request_trace(
+            person_id="p-001",
+            destination="openai",
+            flow_key="chat_stream",
+            request_payload=huge_payload,
+        )
+
+        items = list_request_traces(person_id="p-001", limit=10)
+        self.assertEqual(len(items), 1)
+        payload = items[0]["request_payload"]
+        self.assertTrue(payload.get("__truncated_payload"))
+        self.assertGreater(int(payload.get("__original_chars", 0)), int(payload.get("__max_chars", 0)))
+        self.assertTrue(str(payload.get("__preview", "")).strip())
+
 
 if __name__ == "__main__":
     unittest.main()

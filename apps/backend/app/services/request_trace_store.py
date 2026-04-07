@@ -2,6 +2,8 @@ from datetime import UTC, datetime
 from threading import Lock
 from typing import Any, TypedDict
 import uuid
+import json
+import re
 
 from app.core.settings import get_settings
 from app.services.firestore_client import get_firestore_client
@@ -20,6 +22,31 @@ class RequestTraceRecord(TypedDict):
 
 _store_lock = Lock()
 _request_traces: dict[str, RequestTraceRecord] = {}
+
+_REDACTED = "[REDACTED]"
+_MAX_TRACE_PAYLOAD_CHARS = 16_000
+_MAX_TRACE_STRING_CHARS = 1_800
+_MAX_TRACE_LIST_ITEMS = 50
+_MAX_TRACE_OBJECT_KEYS = 80
+_MAX_TRACE_DEPTH = 6
+_SENSITIVE_KEY_TOKENS = (
+    "api_key",
+    "apikey",
+    "authorization",
+    "token",
+    "secret",
+    "password",
+    "private_key",
+    "client_secret",
+    "x-rapidapi-key",
+    "cookie",
+)
+_INLINE_SECRET_PATTERNS = [
+    re.compile(
+        r"(?i)((?:api[_-]?key|token|secret|password|client[_-]?secret|x-rapidapi-key)=)([^&\s]+)"
+    ),
+    re.compile(r"(?i)(bearer\s+)([A-Za-z0-9._\-]+)"),
+]
 
 
 def _now_iso() -> str:
@@ -52,6 +79,90 @@ def _normalize(payload: dict[str, Any] | None) -> RequestTraceRecord:
     }
 
 
+def _looks_sensitive_key(key: str) -> bool:
+    normalized = key.strip().lower().replace("-", "_")
+    return any(token in normalized for token in _SENSITIVE_KEY_TOKENS)
+
+
+def _truncate_text(value: str, max_chars: int = _MAX_TRACE_STRING_CHARS) -> str:
+    if len(value) <= max_chars:
+        return value
+    omitted = len(value) - max_chars
+    return f"{value[:max_chars]} ...[truncated {omitted} chars]"
+
+
+def _redact_inline_secrets(value: str) -> str:
+    redacted = value
+    for pattern in _INLINE_SECRET_PATTERNS:
+        redacted = pattern.sub(r"\1[REDACTED]", redacted)
+    return redacted
+
+
+def _sanitize_value(value: Any, *, depth: int) -> Any:
+    if depth > _MAX_TRACE_DEPTH:
+        return "[MAX_DEPTH_REACHED]"
+
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+
+    if isinstance(value, str):
+        return _truncate_text(_redact_inline_secrets(value))
+
+    if isinstance(value, dict):
+        sanitized: dict[str, Any] = {}
+        items = list(value.items())
+        for index, (raw_key, raw_value) in enumerate(items):
+            if index >= _MAX_TRACE_OBJECT_KEYS:
+                sanitized["__truncated_keys"] = len(items) - _MAX_TRACE_OBJECT_KEYS
+                break
+            key = str(raw_key)
+            if _looks_sensitive_key(key):
+                sanitized[key] = _REDACTED
+                continue
+            sanitized[key] = _sanitize_value(raw_value, depth=depth + 1)
+        return sanitized
+
+    if isinstance(value, list):
+        sanitized_items: list[Any] = []
+        for index, item in enumerate(value):
+            if index >= _MAX_TRACE_LIST_ITEMS:
+                sanitized_items.append(
+                    {
+                        "__truncated_items": len(value) - _MAX_TRACE_LIST_ITEMS,
+                    }
+                )
+                break
+            sanitized_items.append(_sanitize_value(item, depth=depth + 1))
+        return sanitized_items
+
+    if isinstance(value, tuple):
+        return _sanitize_value(list(value), depth=depth)
+
+    if isinstance(value, bytes):
+        return f"<bytes {len(value)}>"
+
+    return _truncate_text(_redact_inline_secrets(str(value)))
+
+
+def _sanitize_request_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    sanitized = _sanitize_value(payload, depth=0)
+    if not isinstance(sanitized, dict):
+        sanitized = {}
+
+    serialized = json.dumps(sanitized, ensure_ascii=False)
+    if len(serialized) <= _MAX_TRACE_PAYLOAD_CHARS:
+        return sanitized
+
+    preview_chars = max(400, _MAX_TRACE_PAYLOAD_CHARS - 400)
+    preview = serialized[:preview_chars]
+    return {
+        "__truncated_payload": True,
+        "__original_chars": len(serialized),
+        "__max_chars": _MAX_TRACE_PAYLOAD_CHARS,
+        "__preview": preview,
+    }
+
+
 def _save(record: RequestTraceRecord) -> RequestTraceRecord:
     if _is_firestore_backend():
         settings = get_settings()
@@ -73,6 +184,7 @@ def add_request_trace(
     opportunity_id: str = "",
     run_id: str = "",
 ) -> RequestTraceRecord:
+    safe_payload = _sanitize_request_payload(request_payload)
     record: RequestTraceRecord = {
         "trace_id": _new_id(),
         "person_id": person_id,
@@ -80,7 +192,7 @@ def add_request_trace(
         "run_id": run_id.strip(),
         "destination": destination.strip().lower(),
         "flow_key": flow_key.strip(),
-        "request_payload": request_payload,
+        "request_payload": safe_payload,
         "created_at": _now_iso(),
     }
     return _save(record)
