@@ -1066,7 +1066,7 @@ export async function importOpportunityByUrl(
     title?: string;
     company?: string;
     location?: string;
-    raw_text?: string;
+    raw_text: string;
   }
 ): Promise<{ item: Opportunity; created: boolean }> {
   const response = await fetch(

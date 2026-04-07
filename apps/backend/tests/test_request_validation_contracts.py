@@ -38,11 +38,16 @@ class RequestValidationContractsTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             ImportUrlRequest(source_url="bad")
         with self.assertRaises(ValidationError):
+            ImportUrlRequest(source_url="https://example.com/job/1", raw_text="corto")
+        with self.assertRaises(ValidationError):
             ImportTextRequest(title="", raw_text="texto largo suficiente")
         with self.assertRaises(ValidationError):
             ImportTextRequest(title="Rol", raw_text="corto")
 
-        ok_url = ImportUrlRequest(source_url="https://example.com/job/1")
+        ok_url = ImportUrlRequest(
+            source_url="https://example.com/job/1",
+            raw_text="descripcion suficiente de vacante",
+        )
         self.assertTrue(ok_url.source_url.startswith("https://"))
 
         ok_text = ImportTextRequest(title="Backend Engineer", raw_text="texto suficientemente largo")

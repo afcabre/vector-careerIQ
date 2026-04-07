@@ -94,7 +94,7 @@ class ImportUrlRequest(BaseModel):
     title: str = Field(default="")
     company: str = Field(default="")
     location: str = Field(default="")
-    raw_text: str = Field(default="")
+    raw_text: str = Field(min_length=8)
 
 
 class ImportTextRequest(BaseModel):
