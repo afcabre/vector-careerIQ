@@ -2,7 +2,7 @@ import asyncio
 import os
 import unittest
 from datetime import UTC, datetime, timedelta
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from unittest.mock import patch
 
 from fastapi import HTTPException
@@ -560,6 +560,10 @@ class FallbackBehaviorTests(unittest.TestCase):
         self.assertEqual(keys, {"tavily", "adzuna", "remotive"})
         self.assertTrue(all(item["status"] == "error" for item in response.provider_status))
         self.assertTrue(all(item["attempted"] for item in response.provider_status))
+        self.assertTrue(all(item["reason"] == "provider_error" for item in response.provider_status))
+        self.assertTrue(all(item["error_class"] == "network_error" for item in response.provider_status))
+        self.assertTrue(all(item["http_status"] is None for item in response.provider_status))
+        self.assertTrue(all(bool(item["reason_detail"]) for item in response.provider_status))
 
     def test_search_degrades_partially_when_adzuna_fails(self) -> None:
         person = get_person("p-001")
@@ -619,6 +623,10 @@ class FallbackBehaviorTests(unittest.TestCase):
         )
         self.assertEqual(adzuna_status["status"], "error")
         self.assertTrue(adzuna_status["attempted"])
+        self.assertEqual(adzuna_status["reason"], "provider_error")
+        self.assertEqual(adzuna_status["error_class"], "network_error")
+        self.assertIsNone(adzuna_status["http_status"])
+        self.assertTrue(bool(adzuna_status["reason_detail"]))
 
     def test_search_api_contract_degrades_partially_with_dedupe_and_limit(self) -> None:
         settings = get_settings()
@@ -733,6 +741,40 @@ class FallbackBehaviorTests(unittest.TestCase):
         self.assertEqual(tavily_status["status"], "skipped")
         self.assertEqual(tavily_status["reason"], "missing_api_key")
         self.assertFalse(tavily_status["attempted"])
+
+    def test_search_provider_status_exposes_http_error_metadata(self) -> None:
+        person = get_person("p-001")
+        assert person is not None
+        settings = get_settings()
+        settings.rapidapi_key = ""
+        settings.rapidapi_adzuna_host = ""
+        settings.tavily_api_key = "test-key"
+
+        tavily_http_error = HTTPError(
+            url="https://api.tavily.com/search",
+            code=400,
+            msg="Bad Request",
+            hdrs=None,
+            fp=None,
+        )
+
+        with patch.object(search_service, "_remotive_search", return_value=[]):
+            with patch.object(search_service, "_tavily_search", side_effect=tavily_http_error):
+                payload = search_service.search_opportunities(
+                    person=person,
+                    query="python backend",
+                    max_results=6,
+                    settings=settings,
+                )
+
+        tavily_status = next(
+            item for item in payload["provider_status"] if item["provider_key"] == "tavily"
+        )
+        self.assertEqual(tavily_status["status"], "error")
+        self.assertEqual(tavily_status["reason"], "provider_error")
+        self.assertEqual(tavily_status["error_class"], "http_error")
+        self.assertEqual(tavily_status["http_status"], 400)
+        self.assertIn("HTTP Error 400", tavily_status["reason_detail"])
 
     def test_llm_fallbacks_are_applied_in_analyze_and_prepare(self) -> None:
         person = get_person("p-001")

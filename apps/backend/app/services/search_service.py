@@ -112,8 +112,47 @@ def _provider_status_entry(
         "attempted": False,
         "status": "skipped",
         "reason": "not_executed",
+        "reason_detail": "",
+        "http_status": None,
+        "error_class": "not_applicable",
         "results_count": 0,
     }
+
+
+def _provider_error_metadata(exc: Exception) -> dict[str, Any]:
+    detail = str(exc).strip() or exc.__class__.__name__
+    metadata: dict[str, Any] = {
+        "reason": "provider_error",
+        "reason_detail": detail,
+        "http_status": None,
+        "error_class": "provider_error",
+    }
+    if isinstance(exc, HTTPError):
+        metadata["error_class"] = "http_error"
+        metadata["http_status"] = int(exc.code) if isinstance(exc.code, int) else None
+    elif isinstance(exc, URLError):
+        metadata["error_class"] = "network_error"
+    elif isinstance(exc, TimeoutError):
+        metadata["error_class"] = "timeout_error"
+    elif isinstance(exc, json.JSONDecodeError):
+        metadata["error_class"] = "decode_error"
+    return metadata
+
+
+def _apply_provider_error_status(
+    provider_entry: dict[str, Any],
+    exc: Exception,
+    *,
+    unexpected: bool = False,
+) -> None:
+    provider_entry["status"] = "error"
+    if unexpected:
+        provider_entry["reason"] = "unexpected_error"
+        provider_entry["reason_detail"] = str(exc).strip() or exc.__class__.__name__
+        provider_entry["http_status"] = None
+        provider_entry["error_class"] = "unexpected_error"
+        return
+    provider_entry.update(_provider_error_metadata(exc))
 
 
 def _request_json(request: Request, timeout: int = 20) -> dict[str, Any]:
@@ -363,13 +402,15 @@ def search_opportunities(
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
             warnings.append("Adzuna provider failed, continuing with partial results")
             logger.warning("adzuna provider failed: %s", exc)
-            provider_status[PROVIDER_ADZUNA]["status"] = "error"
-            provider_status[PROVIDER_ADZUNA]["reason"] = str(exc) or "provider_error"
-        except Exception:
+            _apply_provider_error_status(provider_status[PROVIDER_ADZUNA], exc)
+        except Exception as exc:
             warnings.append("Adzuna provider unexpected error, continuing")
             logger.exception("adzuna provider unexpected error")
-            provider_status[PROVIDER_ADZUNA]["status"] = "error"
-            provider_status[PROVIDER_ADZUNA]["reason"] = "unexpected_error"
+            _apply_provider_error_status(
+                provider_status[PROVIDER_ADZUNA],
+                exc,
+                unexpected=True,
+            )
 
     if not remotive_enabled:
         warnings.append("Remotive provider disabled from admin config")
@@ -399,13 +440,15 @@ def search_opportunities(
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
             warnings.append("Remotive provider failed, continuing with partial results")
             logger.warning("remotive provider failed: %s", exc)
-            provider_status[PROVIDER_REMOTIVE]["status"] = "error"
-            provider_status[PROVIDER_REMOTIVE]["reason"] = str(exc) or "provider_error"
-        except Exception:
+            _apply_provider_error_status(provider_status[PROVIDER_REMOTIVE], exc)
+        except Exception as exc:
             warnings.append("Remotive provider unexpected error, continuing")
             logger.exception("remotive provider unexpected error")
-            provider_status[PROVIDER_REMOTIVE]["status"] = "error"
-            provider_status[PROVIDER_REMOTIVE]["reason"] = "unexpected_error"
+            _apply_provider_error_status(
+                provider_status[PROVIDER_REMOTIVE],
+                exc,
+                unexpected=True,
+            )
 
     if not tavily_enabled:
         warnings.append("Tavily provider disabled from admin config")
@@ -461,13 +504,15 @@ def search_opportunities(
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
             warnings.append("Tavily provider failed, continuing with partial results")
             logger.warning("tavily provider failed: %s", exc)
-            provider_status[PROVIDER_TAVILY]["status"] = "error"
-            provider_status[PROVIDER_TAVILY]["reason"] = str(exc) or "provider_error"
-        except Exception:
+            _apply_provider_error_status(provider_status[PROVIDER_TAVILY], exc)
+        except Exception as exc:
             warnings.append("Tavily provider unexpected error, continuing")
             logger.exception("tavily provider unexpected error")
-            provider_status[PROVIDER_TAVILY]["status"] = "error"
-            provider_status[PROVIDER_TAVILY]["reason"] = "unexpected_error"
+            _apply_provider_error_status(
+                provider_status[PROVIDER_TAVILY],
+                exc,
+                unexpected=True,
+            )
     else:
         warnings.append("Tavily API key is missing")
         logger.warning("tavily provider disabled due to missing API key")
