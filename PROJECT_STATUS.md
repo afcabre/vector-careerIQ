@@ -104,6 +104,12 @@
 - hardening visual adicional aplicado en frontend: refinamiento de contraste (`text-secondary`/`text-muted`), mejora de legibilidad en bloques `pre`, placeholders y estados interactivos (`hover/active`) para controles y secciones colapsables
 - evidencia semantica CV en `analysis` ajustada con estilo dedicado (`semanticSnippetBubble`) para reducir protagonismo visual: texto deja de ser blanco y pasa a un tono legible de menor contraste
 - calibracion fina adicional en `semanticSnippetBubble`: menor contraste de borde/acento y texto de contenido para dar mas jerarquia al analisis principal
+- UX de analisis refinada para reducir carga cognitiva: `Senales culturales` y `Evidencia semantica CV` ahora se muestran colapsadas por defecto
+- UX de navegacion externa mejorada: URLs de resultados, oportunidades y senales culturales ahora son enlaces clicables (`target=_blank`) con estilo visual consistente
+- topbar de workspace replanteado para operacion diaria: marca a la izquierda, selector central de candidato con menu (incluye `Cambiar candidato` hacia `/candidates`), navegacion contextual (`Perfil`, `Oportunidades`, `Analisis`) y acciones globales por icono (`Administracion`, `Cerrar sesion`) a la derecha
+- nomenclatura de tabs contextuales ajustada para flujo real V1: `Perfil | Busqueda | Alineacion`
+- regla UX explicita aplicada: sin candidato activo se ocultan tabs contextuales; con candidato activo se muestran tabs de contexto
+- pasada fina UX en header desktop/movil: legibilidad de tab largo, `nowrap`, scroll horizontal de tabs en pantallas pequenas y refinamiento visual del estado activo
 - build frontend revalidado tras hardening visual de contraste: `npm run build` en `OK`
 - contratos API de `search` reforzados para validar `provider_status` (fallo total, degradacion parcial y config faltante)
 - contratos API/admin de `search-providers` reforzados para `GET`/`PATCH` y manejo `404` en proveedor desconocido

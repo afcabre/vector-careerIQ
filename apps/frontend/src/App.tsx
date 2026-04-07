@@ -57,6 +57,11 @@ type ParsedWorkspaceRoute = {
   personId: string | null;
 };
 
+type ExternalUrlTextProps = {
+  url: string | null | undefined;
+  noValueText?: string;
+};
+
 function parseWorkspacePath(pathname: string): ParsedWorkspaceRoute {
   const normalized = pathname.replace(/\/+$/, "") || "/";
   if (normalized === "/" || normalized === "/candidates") {
@@ -76,6 +81,30 @@ function parseWorkspacePath(pathname: string): ParsedWorkspaceRoute {
 
 function buildContextPath(personId: string, page: "profile" | "opportunities" | "analysis"): string {
   return `/c/${encodeURIComponent(personId)}/${page}`;
+}
+
+function toExternalUrl(url: string | null | undefined): string | null {
+  const raw = (url ?? "").trim();
+  if (!raw) {
+    return null;
+  }
+  if (/^https?:\/\//i.test(raw)) {
+    return raw;
+  }
+  return `https://${raw}`;
+}
+
+function ExternalUrlText({ url, noValueText = "URL no disponible" }: ExternalUrlTextProps) {
+  const normalizedUrl = toExternalUrl(url);
+  const raw = (url ?? "").trim();
+  if (!normalizedUrl || !raw) {
+    return <>{noValueText}</>;
+  }
+  return (
+    <a className="inlineLink" href={normalizedUrl} rel="noreferrer" target="_blank">
+      {raw}
+    </a>
+  );
 }
 
 const OPPORTUNITY_STATUSES = [
@@ -647,6 +676,7 @@ export default function App() {
   const [profileSkillsInput, setProfileSkillsInput] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isChatDrawerOpen, setIsChatDrawerOpen] = useState(false);
+  const [isPersonContextMenuOpen, setIsPersonContextMenuOpen] = useState(false);
   const [copiedArtifactKey, setCopiedArtifactKey] = useState<string | null>(null);
 
   useEffect(() => {
@@ -780,8 +810,8 @@ export default function App() {
       : showProfilePage
         ? "Perfil y ADN"
         : showOpportunitiesPage
-          ? "Explorador de oportunidades"
-          : "Analisis y preparacion";
+          ? "Busqueda de oportunidades"
+          : "Alineacion";
   const currentPageTitle = showCandidatesPage
     ? "Selecciona una persona consultada para abrir su contexto."
     : showAdminPromptsPage
@@ -790,7 +820,7 @@ export default function App() {
         ? "Edita perfil y preferencias del candidato activo."
         : showOpportunitiesPage
           ? "Busca, revisa e importa oportunidades para el contexto activo."
-          : "Ejecuta analisis y prepara entregables por oportunidad.";
+          : "Evalua alineacion del perfil y prepara entregables por oportunidad.";
   const chatQuickStarts = selectedPerson
     ? [
         `Cual es el foco de posicionamiento para ${selectedPerson.full_name} hoy?`,
@@ -798,6 +828,10 @@ export default function App() {
         "Que mejoras de perfil recomiendas antes de postular?"
       ]
     : CHAT_QUICK_STARTS;
+
+  useEffect(() => {
+    setIsPersonContextMenuOpen(false);
+  }, [currentPath, selectedPersonId]);
 
   function navigateTo(path: string, options?: { replace?: boolean }) {
     if (typeof window === "undefined") {
@@ -2127,70 +2161,159 @@ export default function App() {
   return (
     <main className={shellClassName}>
       <section className="panel workspaceTopbar">
-        <div>
+        <div className="workspaceBrand">
           <p className="eyebrow">CareerIQ</p>
-          <p className="metaText">
-            Operador autenticado: <strong>{operatorName}</strong>
-          </p>
         </div>
-        <div className="cardActions">
-          <button
-            className={showCandidatesPage ? "activeButton" : ""}
-            onClick={() => navigateTo("/candidates")}
-            type="button"
-          >
-            Candidatos
-          </button>
-          <button
-            className={showAdminPromptsPage ? "activeButton" : ""}
-            onClick={() => navigateTo("/admin/prompts")}
-            type="button"
-          >
-            Administracion
-          </button>
-          <button className="ghostButton" onClick={handleLogout} type="button">
-            Cerrar sesion
-          </button>
-        </div>
-      </section>
-
-      {showContextualSidebar && selectedPerson ? (
-        <section className="panel selectedPanel">
-          <header className="panelHeader">
-            <div>
-              <h2>{selectedPerson.full_name}</h2>
-              <p>
-                ID: {selectedPerson.person_id} · {selectedPerson.target_roles.join(", ")}
-              </p>
-            </div>
-            <div className="cardActions">
+        <div className="workspaceCenter">
+          {selectedPerson ? (
+            <div className="contextSelector">
               <button
-                className={showProfilePage ? "activeButton" : ""}
+                className="contextSelectorButton"
+                onClick={() =>
+                  setIsPersonContextMenuOpen((current) => !current)
+                }
+                type="button"
+              >
+                <span className="candidateAvatar contextSelectorAvatar">
+                  {getPersonInitials(selectedPerson.full_name)}
+                </span>
+                <span className="contextSelectorText">
+                  <strong>{selectedPerson.full_name}</strong>
+                  <span>{selectedPerson.target_roles[0] ?? "Sin rol objetivo"}</span>
+                </span>
+                <span className="contextSelectorChevron">
+                  {isPersonContextMenuOpen ? "▴" : "▾"}
+                </span>
+              </button>
+              {isPersonContextMenuOpen ? (
+                <article className="contextSelectorMenu">
+                  <p className="metaText">
+                    Operador: <strong>{operatorName}</strong>
+                  </p>
+                  <div className="contextSelectorMenuActions">
+                    <button
+                      onClick={() => {
+                        setIsPersonContextMenuOpen(false);
+                        navigateTo("/candidates");
+                      }}
+                      type="button"
+                    >
+                      Cambiar candidato
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsPersonContextMenuOpen(false);
+                        navigateTo(buildContextPath(selectedPerson.person_id, "profile"));
+                      }}
+                      type="button"
+                    >
+                      Ver perfil activo
+                    </button>
+                  </div>
+                </article>
+              ) : null}
+            </div>
+          ) : (
+            <button
+              className="contextSelectorButton contextSelectorButtonEmpty"
+              onClick={() => navigateTo("/candidates")}
+              type="button"
+            >
+              Seleccionar candidato
+            </button>
+          )}
+        </div>
+        <div className="workspaceRight">
+          {selectedPerson ? (
+            <nav className="workspaceTabs" aria-label="Navegacion contextual">
+              <button
+                className={showProfilePage ? "workspaceTabButton workspaceTabButtonActive" : "workspaceTabButton"}
                 onClick={() => navigateTo(buildContextPath(selectedPerson.person_id, "profile"))}
                 type="button"
               >
                 Perfil
               </button>
               <button
-                className={showOpportunitiesPage ? "activeButton" : ""}
+                className={
+                  showOpportunitiesPage
+                    ? "workspaceTabButton workspaceTabButtonActive"
+                    : "workspaceTabButton"
+                }
                 onClick={() =>
                   navigateTo(buildContextPath(selectedPerson.person_id, "opportunities"))
                 }
                 type="button"
               >
-                Oportunidades
+                Busqueda
               </button>
               <button
-                className={showAnalysisPage ? "activeButton" : ""}
+                className={
+                  showAnalysisPage
+                    ? "workspaceTabButton workspaceTabButtonActive"
+                    : "workspaceTabButton"
+                }
                 onClick={() => navigateTo(buildContextPath(selectedPerson.person_id, "analysis"))}
                 type="button"
               >
-                Analisis
+                Alineacion
               </button>
-            </div>
-          </header>
-        </section>
-      ) : null}
+            </nav>
+          ) : null}
+          <div className="iconActionGroup">
+            <button
+              className={
+                showAdminPromptsPage
+                  ? "iconActionButton iconActionButtonActive"
+                  : "iconActionButton"
+              }
+              onClick={() => navigateTo("/admin/prompts")}
+              title="Administracion"
+              type="button"
+            >
+              <svg
+                aria-hidden="true"
+                className="iconActionSvg"
+                fill="none"
+                height="16"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.8"
+                viewBox="0 0 24 24"
+                width="16"
+              >
+                <circle cx="12" cy="12" r="3.25" />
+                <path d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V20a2 2 0 1 1-4 0v-.2a1 1 0 0 0-.6-.9 1 1 0 0 0-1.1.2l-.1.1a2 2 0 0 1-2.8-2.8l.1-.1a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6H4a2 2 0 1 1 0-4h.2a1 1 0 0 0 .9-.6 1 1 0 0 0-.2-1.1l-.1-.1a2 2 0 0 1 2.8-2.8l.1.1a1 1 0 0 0 1.1.2h.1a1 1 0 0 0 .6-.9V4a2 2 0 1 1 4 0v.2a1 1 0 0 0 .6.9 1 1 0 0 0 1.1-.2l.1-.1a2 2 0 0 1 2.8 2.8l-.1.1a1 1 0 0 0-.2 1.1v.1a1 1 0 0 0 .9.6H20a2 2 0 1 1 0 4h-.2a1 1 0 0 0-.9.6z" />
+              </svg>
+              <span className="srOnly">Administracion</span>
+            </button>
+            <button
+              className="iconActionButton"
+              onClick={handleLogout}
+              title="Cerrar sesion"
+              type="button"
+            >
+              <svg
+                aria-hidden="true"
+                className="iconActionSvg"
+                fill="none"
+                height="16"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="1.8"
+                viewBox="0 0 24 24"
+                width="16"
+              >
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <path d="m16 17 5-5-5-5" />
+                <path d="M21 12H9" />
+              </svg>
+              <span className="srOnly">Cerrar sesion</span>
+            </button>
+          </div>
+        </div>
+      </section>
 
       <section className="hero">
         <p className="eyebrow">{currentPageLabel}</p>
@@ -3017,7 +3140,9 @@ export default function App() {
                   <span className="metaChip">{result.company || "Empresa no identificada"}</span>
                   <span className="metaChip">{result.location || "Ubicacion no especificada"}</span>
                 </div>
-                <p className="metaText">{result.source_url || "URL no disponible"}</p>
+                <p className="metaText">
+                  <ExternalUrlText url={result.source_url} />
+                </p>
                 <p className="metaText">{result.snippet}</p>
                 <div className="cardActions">
                   <button
@@ -3053,7 +3178,9 @@ export default function App() {
                       {result.company || "No identificada"} · Ubicacion:{" "}
                       {result.location || "No especificada"}
                     </p>
-                    <p className="metaText">URL: {result.source_url || "No disponible"}</p>
+                    <p className="metaText">
+                      URL: <ExternalUrlText noValueText="No disponible" url={result.source_url} />
+                    </p>
                     <article className="chatBubble chatBubbleAssistant">
                       <p className="chatRole">Snippet</p>
                       <p className="chatContent">{result.snippet || "Sin snippet"}</p>
@@ -3088,7 +3215,9 @@ export default function App() {
                   <span className="metaChip">{item.company || "Empresa no identificada"}</span>
                   <span className="metaChip">{item.location || "Ubicacion no especificada"}</span>
                 </div>
-                <p className="metaText">{item.source_url || "URL no disponible"}</p>
+                <p className="metaText">
+                  <ExternalUrlText url={item.source_url} />
+                </p>
                 <div className="cardActions">
                   <button
                     className={
@@ -3135,7 +3264,9 @@ export default function App() {
                   <span className="metaChip">{item.company || "Empresa no identificada"}</span>
                   <span className="metaChip">{item.location || "Ubicacion no especificada"}</span>
                 </div>
-                <p className="metaText">{item.source_url || "URL no disponible"}</p>
+                <p className="metaText">
+                  <ExternalUrlText url={item.source_url} />
+                </p>
                 <div className="cardActions">
                   <button
                     className={
@@ -3337,38 +3468,48 @@ export default function App() {
             </article>
           ) : null}
           {culturalSignals.length > 0 ? (
-            <div className="chatList">
-              {culturalSignals.map((signal) => (
-                <article className="chatBubble chatBubbleAssistant" key={`${signal.source_url}|${signal.title}`}>
-                  <p className="chatRole">{signal.source_provider}</p>
-                  <p className="chatContent">{signal.title}</p>
-                  <p className="metaText">{signal.source_url}</p>
-                  <p className="metaText">{signal.snippet}</p>
-                </article>
-              ))}
-            </div>
+            <details className="collapsibleSection">
+              <summary>Senales culturales ({culturalSignals.length})</summary>
+              <div className="chatList">
+                {culturalSignals.map((signal) => (
+                  <article
+                    className="chatBubble chatBubbleAssistant"
+                    key={`${signal.source_url}|${signal.title}`}
+                  >
+                    <p className="chatRole">{signal.source_provider}</p>
+                    <p className="chatContent">{signal.title}</p>
+                    <p className="metaText">
+                      <ExternalUrlText noValueText="URL no disponible" url={signal.source_url} />
+                    </p>
+                    <p className="metaText">{signal.snippet}</p>
+                  </article>
+                ))}
+              </div>
+            </details>
           ) : null}
           {semanticEvidence ? (
-            <article className="chatBubble chatBubbleAssistant">
-              <p className="chatRole">Evidencia semantica CV ({semanticEvidence.source})</p>
-              <p className="metaText">top_k: {semanticEvidence.top_k}</p>
-              <p className="metaText">{semanticEvidence.query}</p>
-              {semanticEvidence.snippets.length > 0 ? (
-                <div className="chatList">
-                  {semanticEvidence.snippets.map((snippet, index) => (
-                    <article
-                      className="chatBubble chatBubbleUser semanticSnippetBubble"
-                      key={`cv-snippet-${index}`}
-                    >
-                      <p className="chatRole">CV-{index + 1}</p>
-                      <p className="chatContent">{snippet}</p>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <p className="chatContent">No hay snippets disponibles para esta oportunidad.</p>
-              )}
-            </article>
+            <details className="collapsibleSection">
+              <summary>Evidencia semantica CV ({semanticEvidence.source})</summary>
+              <article className="chatBubble chatBubbleAssistant">
+                <p className="metaText">top_k: {semanticEvidence.top_k}</p>
+                <p className="metaText">{semanticEvidence.query}</p>
+                {semanticEvidence.snippets.length > 0 ? (
+                  <div className="chatList">
+                    {semanticEvidence.snippets.map((snippet, index) => (
+                      <article
+                        className="chatBubble chatBubbleUser semanticSnippetBubble"
+                        key={`cv-snippet-${index}`}
+                      >
+                        <p className="chatRole">CV-{index + 1}</p>
+                        <p className="chatContent">{snippet}</p>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="chatContent">No hay snippets disponibles para esta oportunidad.</p>
+                )}
+              </article>
+            </details>
           ) : null}
           <article className="manualCard artifactPanel">
             <p className="chatRole">Panel de artefactos (V1)</p>

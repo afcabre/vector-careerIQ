@@ -144,15 +144,212 @@ select:focus-visible {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   margin-bottom: 0;
   background: color-mix(in srgb, var(--bg-deep) 75%, transparent);
   backdrop-filter: blur(8px);
   border-color: color-mix(in srgb, var(--accent) 22%, var(--border-subtle));
+  padding-top: var(--space-3);
+  padding-bottom: var(--space-3);
 }
 
-.workspaceTopbar .eyebrow {
-  margin-bottom: 4px;
+.workspaceBrand {
+  min-width: 140px;
+}
+
+.workspaceBrand .eyebrow {
+  margin: 0;
+  font-size: 1.65rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.workspaceCenter {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  position: relative;
+}
+
+.contextSelector {
+  position: relative;
+  width: min(520px, 100%);
+}
+
+.contextSelectorButton {
+  width: 100%;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--border-subtle));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 24%, var(--surface-card));
+  color: var(--text-primary);
+  min-height: 48px;
+  padding: 7px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.contextSelectorButton:hover {
+  background: color-mix(in srgb, var(--accent) 30%, var(--surface-card));
+}
+
+.contextSelectorButtonEmpty {
+  justify-content: center;
+  font-weight: 700;
+}
+
+.contextSelectorAvatar {
+  width: 32px;
+  height: 32px;
+  font-size: 0.72rem;
+  flex: 0 0 32px;
+}
+
+.contextSelectorText {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  display: grid;
+  gap: 2px;
+}
+
+.contextSelectorText strong {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.contextSelectorText span {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.contextSelectorChevron {
+  color: var(--text-primary);
+  font-size: 0.96rem;
+}
+
+.contextSelectorMenu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 100%;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border-subtle));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-deep) 92%, black);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+  box-shadow: var(--shadow-float);
+}
+
+.contextSelectorMenuActions {
+  display: grid;
+  gap: 8px;
+}
+
+.contextSelectorMenuActions button {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface-card) 90%, #0f172a);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.contextSelectorMenuActions button:hover {
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--border-subtle));
+  background: color-mix(in srgb, var(--surface-card) 84%, var(--surface-soft));
+}
+
+.workspaceRight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.workspaceTabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding-bottom: 2px;
+}
+
+.workspaceTabButton {
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 85%, var(--accent));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  min-height: 36px;
+  font-size: 0.92rem;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.workspaceTabButton:hover {
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-subtle));
+}
+
+.workspaceTabButtonActive {
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--accent) 68%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--accent) 75%, transparent);
+}
+
+.iconActionGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.iconActionButton {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, var(--accent));
+  background: color-mix(in srgb, var(--surface-card) 85%, #0f172a);
+  color: var(--text-secondary);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.iconActionButton:hover {
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border-subtle));
+}
+
+.iconActionButtonActive {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface-card));
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--border-subtle));
+}
+
+.iconActionSvg {
+  display: block;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .cards {
@@ -354,6 +551,19 @@ select:focus-visible {
 
 .metaText strong {
   color: var(--text-primary);
+}
+
+.inlineLink {
+  color: color-mix(in srgb, var(--accent) 72%, white);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 65%, var(--text-secondary));
+  text-underline-offset: 2px;
+  transition: color 120ms ease, text-decoration-color 120ms ease;
+}
+
+.inlineLink:hover {
+  color: #b6f6ff;
+  text-decoration-color: #b6f6ff;
 }
 
 .metaChips {
@@ -728,6 +938,29 @@ button:disabled {
     position: static;
   }
 
+  .workspaceBrand {
+    min-width: 0;
+  }
+
+  .workspaceCenter {
+    justify-content: stretch;
+  }
+
+  .contextSelector {
+    width: 100%;
+  }
+
+  .workspaceRight {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .workspaceTabs {
+    overflow-x: auto;
+    width: 100%;
+    scrollbar-width: thin;
+  }
+
   .hero h1 {
     max-width: 100%;
   }
@@ -788,5 +1021,23 @@ button:disabled {
 
   .card {
     flex-basis: 88vw;
+  }
+
+  .workspaceRight {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .workspaceTabs {
+    width: 100%;
+  }
+
+  .workspaceTabButton {
+    flex: 0 0 auto;
+    min-width: fit-content;
+  }
+
+  .iconActionGroup {
+    justify-content: flex-end;
   }
 }
