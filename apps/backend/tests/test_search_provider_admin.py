@@ -57,12 +57,35 @@ class SearchProviderAdminTests(unittest.TestCase):
         refreshed = get_search_provider_config(PROVIDER_ADZUNA)
         self.assertFalse(refreshed["is_enabled"])
 
+        enabled_again = search_provider_admin_api.patch_config(
+            provider_key=PROVIDER_ADZUNA,
+            payload=search_provider_admin_api.UpdateSearchProviderConfigRequest(is_enabled=True),
+            session=self.session,
+        )
+        self.assertTrue(enabled_again.is_enabled)
+
     def test_patch_search_provider_config_rejects_unknown_provider(self) -> None:
         with self.assertRaises(HTTPException) as unknown:
             search_provider_admin_api.patch_config(
                 provider_key="unknown",
                 payload=search_provider_admin_api.UpdateSearchProviderConfigRequest(is_enabled=False),
                 session=self.session,
+            )
+        self.assertEqual(unknown.exception.status_code, 404)
+
+    def test_get_search_provider_config_returns_selected_provider(self) -> None:
+        response = search_provider_admin_api.get_config(
+            provider_key=PROVIDER_ADZUNA,
+            _=self.session,
+        )
+        self.assertEqual(response.provider_key, PROVIDER_ADZUNA)
+        self.assertTrue(response.is_enabled)
+
+    def test_get_search_provider_config_rejects_unknown_provider(self) -> None:
+        with self.assertRaises(HTTPException) as unknown:
+            search_provider_admin_api.get_config(
+                provider_key="unknown",
+                _=self.session,
             )
         self.assertEqual(unknown.exception.status_code, 404)
 

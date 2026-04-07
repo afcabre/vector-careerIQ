@@ -286,7 +286,20 @@ class ApiContractsAndIsolationTests(unittest.TestCase):
         with patch.object(
             search_api,
             "search_opportunities",
-            return_value={"items": [mocked_search_item], "warnings": []},
+            return_value={
+                "items": [mocked_search_item],
+                "warnings": [],
+                "provider_status": [
+                    {
+                        "provider_key": "remotive",
+                        "enabled": True,
+                        "attempted": True,
+                        "status": "ok",
+                        "reason": "results_found",
+                        "results_count": 1,
+                    }
+                ],
+            },
         ):
             response = search_api.search(
                 person_id="p-001",
@@ -296,6 +309,7 @@ class ApiContractsAndIsolationTests(unittest.TestCase):
             )
 
         self.assertEqual(len(response.items), 1)
+        self.assertEqual(len(response.provider_status), 1)
         self.assertEqual(response.items[0].search_result_id, mocked_search_item["search_result_id"])
         self.assertEqual(len(opportunity_store.list_opportunities("p-001")), 0)
 
@@ -541,6 +555,11 @@ class FallbackBehaviorTests(unittest.TestCase):
         self.assertTrue(
             any("Tavily provider failed" in warning for warning in response.warnings)
         )
+        self.assertEqual(len(response.provider_status), 3)
+        keys = {item["provider_key"] for item in response.provider_status}
+        self.assertEqual(keys, {"tavily", "adzuna", "remotive"})
+        self.assertTrue(all(item["status"] == "error" for item in response.provider_status))
+        self.assertTrue(all(item["attempted"] for item in response.provider_status))
 
     def test_search_degrades_partially_when_adzuna_fails(self) -> None:
         person = get_person("p-001")
@@ -594,6 +613,12 @@ class FallbackBehaviorTests(unittest.TestCase):
         )
         tavily_result = next(item for item in payload["items"] if item["source_provider"] == "tavily")
         self.assertEqual(tavily_result["location"], person["location"])
+        self.assertEqual(len(payload["provider_status"]), 3)
+        adzuna_status = next(
+            item for item in payload["provider_status"] if item["provider_key"] == "adzuna"
+        )
+        self.assertEqual(adzuna_status["status"], "error")
+        self.assertTrue(adzuna_status["attempted"])
 
     def test_search_api_contract_degrades_partially_with_dedupe_and_limit(self) -> None:
         settings = get_settings()
@@ -656,6 +681,13 @@ class FallbackBehaviorTests(unittest.TestCase):
         self.assertFalse(
             any("All providers returned empty or failed" in warning for warning in response.warnings)
         )
+        self.assertEqual(len(response.provider_status), 3)
+        remotive_status = next(
+            item for item in response.provider_status if item["provider_key"] == "remotive"
+        )
+        self.assertEqual(remotive_status["status"], "ok")
+        self.assertTrue(remotive_status["attempted"])
+        self.assertEqual(remotive_status["results_count"], 2)
 
     def test_search_warns_for_missing_optional_config_but_keeps_results(self) -> None:
         person = get_person("p-001")
@@ -694,6 +726,13 @@ class FallbackBehaviorTests(unittest.TestCase):
         self.assertFalse(
             any("All providers returned empty or failed" in warning for warning in payload["warnings"])
         )
+        self.assertEqual(len(payload["provider_status"]), 3)
+        tavily_status = next(
+            item for item in payload["provider_status"] if item["provider_key"] == "tavily"
+        )
+        self.assertEqual(tavily_status["status"], "skipped")
+        self.assertEqual(tavily_status["reason"], "missing_api_key")
+        self.assertFalse(tavily_status["attempted"])
 
     def test_llm_fallbacks_are_applied_in_analyze_and_prepare(self) -> None:
         person = get_person("p-001")
