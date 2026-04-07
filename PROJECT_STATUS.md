@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `Lote 5 UI completado: microcopy en espanol + ajuste responsive del AI_CHAT_DRAWER`
+- checkpoint_actual: `Lote 6 UI completado: analisis reorganizado con resultados agrupados y secciones secundarias colapsables`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
 - ultima_actualizacion: `2026-04-07`
 
@@ -98,6 +98,8 @@
 - drawer de chat refinado para movil como panel inferior (`bottom sheet`) con quick starts scrollables y mejor usabilidad
 - build frontend revalidado tras cierre de microcopy/UX: `npm run build` en `OK`
 - `ARTEFACT_EDITOR_PANEL` simplificado implementado en `analysis`: lectura estructurada por tipo de material + accion de copiado por bloque
+- pagina `analysis` reorganizada para reducir densidad: bloque principal de resultados + `Historico IA` y `Trazas IA/API` colapsables por defecto
+- build frontend revalidado tras ajuste de jerarquia visual en `analysis`: `npm run build` en `OK`
 - contratos API de `search` reforzados para validar `provider_status` (fallo total, degradacion parcial y config faltante)
 - contratos API/admin de `search-providers` reforzados para `GET`/`PATCH` y manejo `404` en proveedor desconocido
 - `prepare/stream` en frontend muestra deltas no solo de `guidance_text`, tambien de `cover_letter` y `experience_summary`
@@ -211,4 +213,5 @@
 - riesgo operativo local: entorno de desarrollo modificado para diagnostico (`anyio` downgraded en `.venv`) sin solucion aun para el bloqueo ASGI
 
 ## Siguiente Actividad
-- revisar navegacion/jerarquia visual final de pagina `analysis` para reducir densidad de informacion en una sola vista
+- revisar pulido final de estilos y espaciado en `analysis` para mejorar legibilidad en pantallas pequenas
+- decidir cierre de alcance UI V1 y preparar corte de estabilizacion (QA visual + smoke test funcional)

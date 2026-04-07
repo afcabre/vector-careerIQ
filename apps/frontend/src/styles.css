@@ -526,6 +526,10 @@ button:disabled {
   gap: 10px;
 }
 
+.analysisResultsPanel {
+  gap: 12px;
+}
+
 .artifactList {
   display: grid;
   gap: 10px;
@@ -591,6 +595,39 @@ button:disabled {
   cursor: pointer;
   color: var(--accent);
   font-size: 0.9rem;
+}
+
+.collapsibleSection {
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-card) 82%, #0f172a);
+  padding: 10px;
+}
+
+.collapsibleSection > summary {
+  cursor: pointer;
+  list-style: none;
+  color: var(--accent);
+  font-size: 0.94rem;
+  font-weight: 700;
+}
+
+.collapsibleSection > summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsibleSection > summary::after {
+  content: "▾";
+  float: right;
+  transition: transform 140ms ease;
+}
+
+.collapsibleSection[open] > summary::after {
+  transform: rotate(180deg);
+}
+
+.collapsibleSection > :not(summary) {
+  margin-top: 10px;
 }
 
 .subheading {

@@ -3306,178 +3306,194 @@ export default function App() {
             Selecciona una oportunidad guardada para analizar y preparar postulacion.
           </p>
         )}
-        {analysisText ? (
-          <article className="chatBubble chatBubbleAssistant">
-            <p className="chatRole">Analisis</p>
-            <p className="chatContent">{analysisText}</p>
-          </article>
-        ) : null}
-        {culturalConfidence ? (
-          <p className="metaText">
-            Confianza fit cultural: <strong>{culturalConfidence}</strong>
-          </p>
-        ) : null}
-        {culturalWarnings.length > 0 ? (
-          <article className="chatBubble chatBubbleAssistant">
-            <p className="chatRole">Advertencias culturales</p>
-            <p className="chatContent">{culturalWarnings.join("\n")}</p>
-          </article>
-        ) : null}
-        {culturalSignals.length > 0 ? (
-          <div className="chatList">
-            {culturalSignals.map((signal) => (
-              <article className="chatBubble chatBubbleAssistant" key={`${signal.source_url}|${signal.title}`}>
-                <p className="chatRole">{signal.source_provider}</p>
-                <p className="chatContent">{signal.title}</p>
-                <p className="metaText">{signal.source_url}</p>
-                <p className="metaText">{signal.snippet}</p>
-              </article>
-            ))}
-          </div>
-        ) : null}
-        {semanticEvidence ? (
-          <article className="chatBubble chatBubbleAssistant">
-            <p className="chatRole">Evidencia semantica CV ({semanticEvidence.source})</p>
-            <p className="metaText">top_k: {semanticEvidence.top_k}</p>
-            <p className="metaText">{semanticEvidence.query}</p>
-            {semanticEvidence.snippets.length > 0 ? (
-              <div className="chatList">
-                {semanticEvidence.snippets.map((snippet, index) => (
-                  <article className="chatBubble chatBubbleUser" key={`cv-snippet-${index}`}>
-                    <p className="chatRole">CV-{index + 1}</p>
-                    <p className="chatContent">{snippet}</p>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <p className="chatContent">No hay snippets disponibles para esta oportunidad.</p>
-            )}
-          </article>
-        ) : null}
-        <article className="manualCard artifactPanel">
-          <p className="chatRole">Panel de artefactos (V1)</p>
-          {!guidanceText && artifacts.length === 0 ? (
+        <article className="manualCard analysisResultsPanel">
+          <p className="chatRole">Resultados</p>
+          {!analysisText &&
+          !culturalConfidence &&
+          culturalWarnings.length === 0 &&
+          culturalSignals.length === 0 &&
+          !semanticEvidence &&
+          !guidanceText &&
+          artifacts.length === 0 ? (
             <p className="metaText">
-              Aun no hay materiales generados para esta oportunidad.
+              Todavia no hay resultados generados para la oportunidad activa.
             </p>
-          ) : (
-            <div className="artifactList">
-              {guidanceText ? (
-                <article className="artifactItem">
-                  <div className="panelHeader">
-                    <div>
-                      <p className="chatRole">Guia de perfil</p>
-                      <p className="metaText">Ayuda textual contextual</p>
-                    </div>
-                    <div className="cardActions">
-                      <button
-                        onClick={() =>
-                          void handleCopyArtifactContent("guidance_text", guidanceText)
-                        }
-                        type="button"
-                      >
-                        {copiedArtifactKey === "guidance_text" ? "Copiado" : "Copiar"}
-                      </button>
-                    </div>
-                  </div>
-                  <p className="chatContent artifactContent">{guidanceText}</p>
+          ) : null}
+          {analysisText ? (
+            <article className="chatBubble chatBubbleAssistant">
+              <p className="chatRole">Analisis</p>
+              <p className="chatContent">{analysisText}</p>
+            </article>
+          ) : null}
+          {culturalConfidence ? (
+            <p className="metaText">
+              Confianza fit cultural: <strong>{culturalConfidence}</strong>
+            </p>
+          ) : null}
+          {culturalWarnings.length > 0 ? (
+            <article className="chatBubble chatBubbleAssistant">
+              <p className="chatRole">Advertencias culturales</p>
+              <p className="chatContent">{culturalWarnings.join("\n")}</p>
+            </article>
+          ) : null}
+          {culturalSignals.length > 0 ? (
+            <div className="chatList">
+              {culturalSignals.map((signal) => (
+                <article className="chatBubble chatBubbleAssistant" key={`${signal.source_url}|${signal.title}`}>
+                  <p className="chatRole">{signal.source_provider}</p>
+                  <p className="chatContent">{signal.title}</p>
+                  <p className="metaText">{signal.source_url}</p>
+                  <p className="metaText">{signal.snippet}</p>
                 </article>
-              ) : null}
-              {artifacts.map((artifact) => {
-                const copyKey = `${artifact.artifact_type}:${artifact.artifact_id}`;
-                return (
-                  <article className="artifactItem" key={artifact.artifact_id}>
-                    <div className="panelHeader">
-                      <div>
-                        <p className="chatRole">{getArtifactTypeLabel(artifact.artifact_type)}</p>
-                        <p className="metaText">artifact_id: {artifact.artifact_id}</p>
-                      </div>
-                      <div className="cardActions">
-                        <button
-                          onClick={() =>
-                            void handleCopyArtifactContent(copyKey, artifact.content)
-                          }
-                          type="button"
-                        >
-                          {copiedArtifactKey === copyKey ? "Copiado" : "Copiar"}
-                        </button>
-                      </div>
-                    </div>
-                    <p className="chatContent artifactContent">{artifact.content}</p>
-                  </article>
-                );
-              })}
+              ))}
             </div>
-          )}
-        </article>
-        {selectedOpportunity ? (
-          <article className="manualCard">
-            <p className="chatRole">Historico IA (persistido)</p>
-            {isLoadingAiRuns ? (
-              <p className="metaText">Cargando ejecuciones...</p>
-            ) : aiRuns.length === 0 ? (
+          ) : null}
+          {semanticEvidence ? (
+            <article className="chatBubble chatBubbleAssistant">
+              <p className="chatRole">Evidencia semantica CV ({semanticEvidence.source})</p>
+              <p className="metaText">top_k: {semanticEvidence.top_k}</p>
+              <p className="metaText">{semanticEvidence.query}</p>
+              {semanticEvidence.snippets.length > 0 ? (
+                <div className="chatList">
+                  {semanticEvidence.snippets.map((snippet, index) => (
+                    <article className="chatBubble chatBubbleUser" key={`cv-snippet-${index}`}>
+                      <p className="chatRole">CV-{index + 1}</p>
+                      <p className="chatContent">{snippet}</p>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="chatContent">No hay snippets disponibles para esta oportunidad.</p>
+              )}
+            </article>
+          ) : null}
+          <article className="manualCard artifactPanel">
+            <p className="chatRole">Panel de artefactos (V1)</p>
+            {!guidanceText && artifacts.length === 0 ? (
               <p className="metaText">
-                No hay ejecuciones para el filtro seleccionado.
+                Aun no hay materiales generados para esta oportunidad.
               </p>
             ) : (
-              <div className="chatList">
-                {aiRuns.map((run) => {
-                  const previewText = getAiRunPreviewText(run);
-                  const isFocused = focusedRunId === run.run_id;
-                  return (
-                    <article
-                      className={
-                        isFocused
-                          ? "chatBubble chatBubbleAssistant searchResultCard searchResultCardActive"
-                          : "chatBubble chatBubbleAssistant"
-                      }
-                      key={run.run_id}
-                    >
-                      <p className="chatRole">
-                        {AI_RUN_ACTION_LABELS[run.action_key] ?? run.action_key}
-                      </p>
-                      <p className="metaText">
-                        run_id: {run.run_id} · actualizado:{" "}
-                        {formatAiRunTimestamp(run.updated_at)}
-                        {run.is_current ? " · vigente" : ""}
-                      </p>
+              <div className="artifactList">
+                {guidanceText ? (
+                  <article className="artifactItem">
+                    <div className="panelHeader">
+                      <div>
+                        <p className="chatRole">Guia de perfil</p>
+                        <p className="metaText">Ayuda textual contextual</p>
+                      </div>
                       <div className="cardActions">
                         <button
                           onClick={() =>
-                            handleFocusRunTrace(run.run_id, run.opportunity_id)
+                            void handleCopyArtifactContent("guidance_text", guidanceText)
                           }
                           type="button"
                         >
-                          Ver request exacto
-                        </button>
-                        <button
-                          onClick={() =>
-                            handleFocusRunResponse(run.run_id, run.opportunity_id)
-                          }
-                          type="button"
-                        >
-                          Ver request + response
+                          {copiedArtifactKey === "guidance_text" ? "Copiado" : "Copiar"}
                         </button>
                       </div>
-                      {previewText ? (
-                        <p className="chatContent">{previewText}</p>
-                      ) : (
-                        <p className="metaText">
-                          Sin resumen textual directo. Revisa payload estructurado.
-                        </p>
-                      )}
-                      <details className="payloadDetails">
-                        <summary>Ver payload</summary>
-                        <pre className="payloadPre">
-                          {JSON.stringify(run.result_payload, null, 2)}
-                        </pre>
-                      </details>
+                    </div>
+                    <p className="chatContent artifactContent">{guidanceText}</p>
+                  </article>
+                ) : null}
+                {artifacts.map((artifact) => {
+                  const copyKey = `${artifact.artifact_type}:${artifact.artifact_id}`;
+                  return (
+                    <article className="artifactItem" key={artifact.artifact_id}>
+                      <div className="panelHeader">
+                        <div>
+                          <p className="chatRole">{getArtifactTypeLabel(artifact.artifact_type)}</p>
+                          <p className="metaText">artifact_id: {artifact.artifact_id}</p>
+                        </div>
+                        <div className="cardActions">
+                          <button
+                            onClick={() =>
+                              void handleCopyArtifactContent(copyKey, artifact.content)
+                            }
+                            type="button"
+                          >
+                            {copiedArtifactKey === copyKey ? "Copiado" : "Copiar"}
+                          </button>
+                        </div>
+                      </div>
+                      <p className="chatContent artifactContent">{artifact.content}</p>
                     </article>
                   );
                 })}
               </div>
             )}
           </article>
+        </article>
+        {selectedOpportunity ? (
+          <details className="collapsibleSection">
+            <summary>Historico IA (persistido)</summary>
+            <article className="manualCard">
+              {isLoadingAiRuns ? (
+                <p className="metaText">Cargando ejecuciones...</p>
+              ) : aiRuns.length === 0 ? (
+                <p className="metaText">
+                  No hay ejecuciones para el filtro seleccionado.
+                </p>
+              ) : (
+                <div className="chatList">
+                  {aiRuns.map((run) => {
+                    const previewText = getAiRunPreviewText(run);
+                    const isFocused = focusedRunId === run.run_id;
+                    return (
+                      <article
+                        className={
+                          isFocused
+                            ? "chatBubble chatBubbleAssistant searchResultCard searchResultCardActive"
+                            : "chatBubble chatBubbleAssistant"
+                        }
+                        key={run.run_id}
+                      >
+                        <p className="chatRole">
+                          {AI_RUN_ACTION_LABELS[run.action_key] ?? run.action_key}
+                        </p>
+                        <p className="metaText">
+                          run_id: {run.run_id} · actualizado:{" "}
+                          {formatAiRunTimestamp(run.updated_at)}
+                          {run.is_current ? " · vigente" : ""}
+                        </p>
+                        <div className="cardActions">
+                          <button
+                            onClick={() =>
+                              handleFocusRunTrace(run.run_id, run.opportunity_id)
+                            }
+                            type="button"
+                          >
+                            Ver request exacto
+                          </button>
+                          <button
+                            onClick={() =>
+                              handleFocusRunResponse(run.run_id, run.opportunity_id)
+                            }
+                            type="button"
+                          >
+                            Ver request + response
+                          </button>
+                        </div>
+                        {previewText ? (
+                          <p className="chatContent">{previewText}</p>
+                        ) : (
+                          <p className="metaText">
+                            Sin resumen textual directo. Revisa payload estructurado.
+                          </p>
+                        )}
+                        <details className="payloadDetails">
+                          <summary>Ver payload</summary>
+                          <pre className="payloadPre">
+                            {JSON.stringify(run.result_payload, null, 2)}
+                          </pre>
+                        </details>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </article>
+          </details>
         ) : null}
         </section>
       ) : null}
@@ -3510,10 +3526,12 @@ export default function App() {
             {isLoadingRequestTraces ? "Refrescando..." : "Refrescar trazas"}
           </button>
         </header>
-        {!selectedPersonId ? (
-          <p className="metaText">Selecciona una persona para consultar trazas.</p>
-        ) : (
-          <>
+        <details className="collapsibleSection">
+          <summary>Trazas IA/API</summary>
+          {!selectedPersonId ? (
+            <p className="metaText">Selecciona una persona para consultar trazas.</p>
+          ) : (
+            <>
             <div className="manualRow">
               <label className="field">
                 Destino
@@ -3647,8 +3665,9 @@ export default function App() {
                 })}
               </div>
             )}
-          </>
-        )}
+            </>
+          )}
+        </details>
         </section>
       ) : null}
       {errorMessage ? <p className="errorText">{errorMessage}</p> : null}
