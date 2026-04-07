@@ -4,15 +4,26 @@
   --bg-deep: #111827;
   --surface-card: #1e293b;
   --surface-soft: #334155;
+  --surface-elevated: #263448;
   --accent: #22d3ee;
   --success: #10b981;
   --warning: #f59e0b;
   --danger: #f43f5e;
   --text-primary: #f9fafb;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+  --text-secondary: #a8b7cc;
+  --text-muted: #7a8aa1;
   --border-subtle: #334155;
   --ring: #22d3ee4d;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --space-1: 6px;
+  --space-2: 10px;
+  --space-3: 14px;
+  --space-4: 18px;
+  --space-5: 22px;
+  --shadow-soft: 0 18px 42px rgba(2, 6, 23, 0.4);
+  --shadow-float: 0 10px 22px rgba(2, 6, 23, 0.45);
 }
 
 * {
@@ -27,6 +38,10 @@ body {
     radial-gradient(900px 400px at 95% 0%, rgba(16, 185, 129, 0.08), transparent 50%),
     linear-gradient(180deg, #0b1120 0%, #0f172a 70%, #0b1120 100%);
   color: var(--text-primary);
+  line-height: 1.45;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 button,
@@ -50,6 +65,8 @@ select:focus-visible {
   padding: 32px 20px 72px;
   max-width: 1240px;
   margin: 0 auto;
+  display: grid;
+  gap: var(--space-3);
   transition: padding-right 180ms ease;
 }
 
@@ -58,7 +75,7 @@ select:focus-visible {
 }
 
 .hero {
-  margin-bottom: 22px;
+  margin-bottom: var(--space-2);
 }
 
 .eyebrow {
@@ -95,10 +112,10 @@ select:focus-visible {
     color-mix(in srgb, var(--surface-card) 94%, #0f172a)
   );
   border: 1px solid var(--border-subtle);
-  border-radius: 22px;
-  padding: 22px;
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
   box-shadow:
-    0 18px 42px rgba(2, 6, 23, 0.4),
+    var(--shadow-soft),
     inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
@@ -128,7 +145,7 @@ select:focus-visible {
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  margin-bottom: 16px;
+  margin-bottom: 0;
   background: color-mix(in srgb, var(--bg-deep) 75%, transparent);
   backdrop-filter: blur(8px);
   border-color: color-mix(in srgb, var(--accent) 22%, var(--border-subtle));
@@ -140,7 +157,7 @@ select:focus-visible {
 
 .cards {
   display: flex;
-  gap: 14px;
+  gap: var(--space-3);
   overflow-x: auto;
   padding: 4px 2px 10px;
   scroll-snap-type: x mandatory;
@@ -151,9 +168,10 @@ select:focus-visible {
   scroll-snap-align: start;
   border: 1px solid color-mix(in srgb, var(--border-subtle) 80%, var(--accent));
   border-left: 4px solid var(--accent);
-  border-radius: 16px;
-  padding: 16px;
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
   background: color-mix(in srgb, var(--surface-card) 90%, #0f172a);
+  min-height: 182px;
 }
 
 .cardHeader {
@@ -207,6 +225,7 @@ select:focus-visible {
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--accent) 70%, var(--border-subtle));
   padding: 9px 14px;
+  min-height: 38px;
   cursor: pointer;
   transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
@@ -218,6 +237,10 @@ select:focus-visible {
 
 .cardActions button:hover {
   background: color-mix(in srgb, var(--accent) 34%, transparent);
+}
+
+.cardActions button:active {
+  transform: translateY(1px);
 }
 
 .cardActions button.activeButton {
@@ -252,7 +275,7 @@ select:focus-visible {
   font-weight: 700;
   padding: 10px 16px;
   cursor: pointer;
-  box-shadow: 0 10px 22px rgba(2, 6, 23, 0.45);
+  box-shadow: var(--shadow-float);
 }
 
 .chatDrawer {
@@ -324,7 +347,13 @@ select:focus-visible {
 .metaText {
   margin: 0;
   color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.42;
   overflow-wrap: anywhere;
+}
+
+.metaText strong {
+  color: var(--text-primary);
 }
 
 .metaChips {
@@ -365,10 +394,11 @@ select:focus-visible {
 .field textarea,
 .field select {
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   padding: 10px 12px;
   background: color-mix(in srgb, var(--bg-deep) 90%, black);
   color: var(--text-primary);
+  transition: border-color 120ms ease, background-color 120ms ease;
 }
 
 .field textarea {
@@ -383,6 +413,15 @@ select:focus-visible {
   color: #0b1120;
   font-weight: 700;
   cursor: pointer;
+  transition: filter 120ms ease, transform 120ms ease;
+}
+
+.primaryButton:hover {
+  filter: brightness(1.04);
+}
+
+.primaryButton:active {
+  transform: translateY(1px);
 }
 
 .primaryButton:disabled,
@@ -402,18 +441,40 @@ button:disabled {
 }
 
 .chatBubble {
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   padding: 12px;
   border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-card) 82%, #0f172a);
 }
 
 .chatBubbleUser {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-deep));
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border-subtle));
 }
 
-.chatBubbleUser .chatRole,
+.chatBubbleUser .chatRole {
+  color: #8ce6f5;
+}
+
 .chatBubbleUser .chatContent {
-  color: #071120;
+  color: #eefcff;
+}
+
+.chatBubbleUser .metaText {
+  color: #dbeafe;
+}
+
+.semanticSnippetBubble {
+  background: color-mix(in srgb, var(--surface-elevated) 78%, var(--bg-deep));
+  border-color: color-mix(in srgb, var(--accent) 20%, var(--border-subtle));
+}
+
+.semanticSnippetBubble .chatRole {
+  color: #5eb4c3;
+}
+
+.semanticSnippetBubble .chatContent {
+  color: #aab8c9;
 }
 
 .chatBubbleAssistant {
@@ -432,6 +493,7 @@ button:disabled {
 .chatContent {
   margin: 0;
   color: var(--text-primary);
+  line-height: 1.5;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -472,7 +534,7 @@ button:disabled {
 .inlineDetailCard {
   margin-top: 10px;
   border: 1px solid color-mix(in srgb, var(--border-subtle) 80%, var(--accent));
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   padding: 10px;
   background: color-mix(in srgb, var(--surface-soft) 46%, #0f172a);
 }
@@ -484,14 +546,27 @@ button:disabled {
   font-family: "JetBrains Mono", "Cascadia Code", "Fira Code", monospace;
   font-size: 0.82rem;
   color: var(--text-primary);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 85%, var(--accent));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-main) 82%, black);
+  padding: 10px;
 }
 
 .chatForm input {
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   padding: 10px 12px;
   background: color-mix(in srgb, var(--bg-deep) 90%, black);
   color: var(--text-primary);
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.field input::placeholder,
+.field textarea::placeholder,
+.chatForm input::placeholder,
+.manualCard input::placeholder,
+.manualCard textarea::placeholder {
+  color: var(--text-muted);
 }
 
 .manualGrid {
@@ -515,7 +590,7 @@ button:disabled {
 
 .manualCard {
   border: 1px solid var(--border-subtle);
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   padding: 12px;
   background: color-mix(in srgb, var(--surface-card) 88%, #0f172a);
   display: grid;
@@ -537,7 +612,7 @@ button:disabled {
 
 .artifactItem {
   border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border-subtle));
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--surface-card) 80%, #0f172a);
   padding: 10px;
   display: grid;
@@ -548,16 +623,19 @@ button:disabled {
   max-height: 280px;
   overflow-y: auto;
   padding-right: 4px;
+  font-size: 0.95rem;
+  line-height: 1.52;
 }
 
 .manualCard input,
 .manualCard textarea,
 .manualCard select {
   border: 1px solid var(--border-subtle);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   padding: 9px 10px;
   background: color-mix(in srgb, var(--bg-deep) 90%, black);
   color: var(--text-primary);
+  transition: border-color 120ms ease, background-color 120ms ease;
 }
 
 .manualCard textarea {
@@ -599,7 +677,7 @@ button:disabled {
 
 .collapsibleSection {
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--surface-card) 82%, #0f172a);
   padding: 10px;
 }
@@ -610,6 +688,10 @@ button:disabled {
   color: var(--accent);
   font-size: 0.94rem;
   font-weight: 700;
+}
+
+.collapsibleSection > summary:hover {
+  color: #8ce6f5;
 }
 
 .collapsibleSection > summary::-webkit-details-marker {
@@ -657,6 +739,10 @@ button:disabled {
   .chatDrawer {
     width: min(96vw, 420px);
   }
+
+  .manualCard {
+    gap: 10px;
+  }
 }
 
 @media (max-width: 720px) {
@@ -667,6 +753,14 @@ button:disabled {
   .panel {
     padding: 16px;
     border-radius: 16px;
+  }
+
+  .chatContent {
+    font-size: 0.97rem;
+  }
+
+  .metaText {
+    font-size: 0.9rem;
   }
 
   .chatDrawerToggle {

@@ -101,6 +101,9 @@
 - pagina `analysis` reorganizada para reducir densidad: bloque principal de resultados + `Historico IA` y `Trazas IA/API` colapsables por defecto
 - build frontend revalidado tras ajuste de jerarquia visual en `analysis`: `npm run build` en `OK`
 - ajustes de legibilidad aplicados en frontend: mayor contraste en burbujas de usuario (`chatBubbleUser`), mejora de textos secundarios y tipografia/espaciado en movil
+- hardening visual adicional aplicado en frontend: refinamiento de contraste (`text-secondary`/`text-muted`), mejora de legibilidad en bloques `pre`, placeholders y estados interactivos (`hover/active`) para controles y secciones colapsables
+- evidencia semantica CV en `analysis` ajustada con estilo dedicado (`semanticSnippetBubble`) para reducir protagonismo visual: texto deja de ser blanco y pasa a un tono legible de menor contraste
+- calibracion fina adicional en `semanticSnippetBubble`: menor contraste de borde/acento y texto de contenido para dar mas jerarquia al analisis principal
 - build frontend revalidado tras hardening visual de contraste: `npm run build` en `OK`
 - contratos API de `search` reforzados para validar `provider_status` (fallo total, degradacion parcial y config faltante)
 - contratos API/admin de `search-providers` reforzados para `GET`/`PATCH` y manejo `404` en proveedor desconocido

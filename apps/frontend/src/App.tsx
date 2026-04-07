@@ -3356,7 +3356,10 @@ export default function App() {
               {semanticEvidence.snippets.length > 0 ? (
                 <div className="chatList">
                   {semanticEvidence.snippets.map((snippet, index) => (
-                    <article className="chatBubble chatBubbleUser" key={`cv-snippet-${index}`}>
+                    <article
+                      className="chatBubble chatBubbleUser semanticSnippetBubble"
+                      key={`cv-snippet-${index}`}
+                    >
                       <p className="chatRole">CV-{index + 1}</p>
                       <p className="chatContent">{snippet}</p>
                     </article>
