@@ -64,6 +64,7 @@
 - frontend de busqueda muestra panel de diagnostico por proveedor usando `provider_status` de la ultima ejecucion
 - frontend de busqueda muestra motivo amigable, `HTTP status` (si aplica), detalle tecnico y boton de copia por proveedor para depuracion rapida
 - backend endurece `provider_status` para errores de proveedor con `reason` estable + `reason_detail` + `http_status` + `error_class`
+- API `search` valida `provider_status` con esquema tipado y serializa salida estable para frontend (`dict`), evitando respuestas ambiguas
 - contratos API de `search` reforzados para validar `provider_status` (fallo total, degradacion parcial y config faltante)
 - contratos API/admin de `search-providers` reforzados para `GET`/`PATCH` y manejo `404` en proveedor desconocido
 - `prepare/stream` en frontend muestra deltas no solo de `guidance_text`, tambien de `cover_letter` y `experience_summary`
