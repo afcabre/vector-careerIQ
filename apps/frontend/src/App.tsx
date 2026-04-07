@@ -13,6 +13,7 @@ import {
   PromptConfigVersion,
   RequestTrace,
   SearchProviderConfig,
+  SearchProviderStatus,
   SearchResult,
   SemanticEvidence,
   analyzeCulturalFitStream,
@@ -269,6 +270,64 @@ function formatRequestTraceTimestamp(value: string): string {
   return formatAiRunTimestamp(value);
 }
 
+function formatSearchProviderStatus(status: SearchProviderStatus): string {
+  const statusLabelMap: Record<SearchProviderStatus["status"], string> = {
+    ok: "OK",
+    error: "ERROR",
+    skipped: "SKIPPED"
+  };
+  const reasonMap: Record<string, string> = {
+    not_executed: "No ejecutado",
+    disabled_from_admin: "Deshabilitado en administracion",
+    missing_rapidapi_config: "Falta configuracion RapidAPI",
+    missing_api_key: "Falta API key",
+    no_results: "Sin resultados",
+    results_found: "Con resultados",
+    provider_error: "Error de proveedor",
+    unexpected_error: "Error inesperado"
+  };
+  const reason = reasonMap[status.reason] ?? status.reason;
+  const enabledText = status.enabled ? "enabled" : "disabled";
+  const attemptedText = status.attempted ? "attempted" : "not attempted";
+  const truncatedText = status.query_truncated ? " · query_truncated" : "";
+  return `${statusLabelMap[status.status]} · ${enabledText} · ${attemptedText} · results=${status.results_count} · ${reason}${truncatedText}`;
+}
+
+function appendArtifactDelta(
+  current: ApplicationArtifact[],
+  personId: string,
+  opportunityId: string,
+  artifactType: "cover_letter" | "experience_summary",
+  delta: string
+): ApplicationArtifact[] {
+  const now = new Date().toISOString();
+  const index = current.findIndex((item) => item.artifact_type === artifactType);
+  if (index >= 0) {
+    return current.map((item, itemIndex) =>
+      itemIndex === index
+        ? {
+            ...item,
+            content: `${item.content}${delta}`,
+            updated_at: now
+          }
+        : item
+    );
+  }
+  return [
+    ...current,
+    {
+      artifact_id: `stream-${artifactType}`,
+      person_id: personId,
+      opportunity_id: opportunityId,
+      artifact_type: artifactType,
+      content: delta,
+      is_current: true,
+      created_at: now,
+      updated_at: now
+    }
+  ];
+}
+
 type RequestTraceGroup = {
   group_id: string;
   run_id: string;
@@ -352,6 +411,7 @@ export default function App() {
   const [streamingAssistantText, setStreamingAssistantText] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchProviderStatus, setSearchProviderStatus] = useState<SearchProviderStatus[]>([]);
   const [selectedSearchResultId, setSelectedSearchResultId] = useState<string | null>(null);
   const [searchWarnings, setSearchWarnings] = useState<string[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -611,6 +671,7 @@ export default function App() {
   useEffect(() => {
     setSearchQuery("");
     setSearchResults([]);
+    setSearchProviderStatus([]);
     setSelectedSearchResultId(null);
     setSearchWarnings([]);
   }, [selectedPersonId]);
@@ -1049,10 +1110,12 @@ export default function App() {
     }
     setIsSearching(true);
     setErrorMessage(null);
+    setSearchProviderStatus([]);
     try {
       const payload = await searchOpportunities(selectedPersonId, searchQuery.trim(), 6);
       setSearchResults(payload.items);
       setSearchWarnings(payload.warnings);
+      setSearchProviderStatus(payload.provider_status ?? []);
       setSelectedSearchResultId(null);
       await refreshRequestTracesFor(
         selectedPersonId,
@@ -1412,12 +1475,7 @@ export default function App() {
     setIsPreparing(true);
     setErrorMessage(null);
     setGuidanceText("");
-    if (!targets.includes("guidance_text")) {
-      setGuidanceText("");
-    }
-    if (!targets.includes("cover_letter") && !targets.includes("experience_summary")) {
-      setArtifacts([]);
-    }
+    setArtifacts([]);
 
     try {
       const payload = await prepareOpportunityStream(
@@ -1430,6 +1488,30 @@ export default function App() {
         (channel, delta) => {
           if (channel === "guidance_text") {
             setGuidanceText((current) => `${current}${delta}`);
+            return;
+          }
+          if (channel === "cover_letter") {
+            setArtifacts((current) =>
+              appendArtifactDelta(
+                current,
+                personId,
+                opportunityId,
+                "cover_letter",
+                delta
+              )
+            );
+            return;
+          }
+          if (channel === "experience_summary") {
+            setArtifacts((current) =>
+              appendArtifactDelta(
+                current,
+                personId,
+                opportunityId,
+                "experience_summary",
+                delta
+              )
+            );
           }
         }
       );
@@ -2318,6 +2400,24 @@ export default function App() {
         </form>
         {searchWarnings.length > 0 ? (
           <p className="metaText">Avisos: {searchWarnings.join(" | ")}</p>
+        ) : null}
+        {searchProviderStatus.length > 0 ? (
+          <article className="manualCard">
+            <p className="chatRole">Estado de proveedores (ultima busqueda)</p>
+            <div className="chatList">
+              {searchProviderStatus.map((status) => (
+                <article
+                  className="chatBubble chatBubbleAssistant"
+                  key={`provider-status-${status.provider_key}`}
+                >
+                  <p className="chatRole">
+                    {SEARCH_PROVIDER_LABELS[status.provider_key] ?? status.provider_key}
+                  </p>
+                  <p className="metaText">{formatSearchProviderStatus(status)}</p>
+                </article>
+              ))}
+            </div>
+          </article>
         ) : null}
         <h3 className="subheading">Carga manual de vacantes</h3>
         <div className="manualGrid">

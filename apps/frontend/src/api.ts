@@ -51,6 +51,16 @@ export type SearchResult = {
   normalized_payload: Record<string, unknown>;
 };
 
+export type SearchProviderStatus = {
+  provider_key: "adzuna" | "remotive" | "tavily";
+  enabled: boolean;
+  attempted: boolean;
+  status: "ok" | "error" | "skipped";
+  reason: string;
+  results_count: number;
+  query_truncated?: boolean;
+};
+
 export type Opportunity = {
   opportunity_id: string;
   person_id: string;
@@ -558,14 +568,18 @@ export async function searchOpportunities(
   personId: string,
   query: string,
   maxResults = 6
-): Promise<{ items: SearchResult[]; warnings: string[] }> {
+): Promise<{ items: SearchResult[]; warnings: string[]; provider_status: SearchProviderStatus[] }> {
   const response = await fetch(`${API_BASE}/persons/${personId}/search`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ query, max_results: maxResults })
   });
-  return parseResponse<{ items: SearchResult[]; warnings: string[] }>(response);
+  return parseResponse<{
+    items: SearchResult[];
+    warnings: string[];
+    provider_status: SearchProviderStatus[];
+  }>(response);
 }
 
 export async function saveOpportunityFromSearch(
