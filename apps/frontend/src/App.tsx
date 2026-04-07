@@ -270,7 +270,54 @@ function formatRequestTraceTimestamp(value: string): string {
   return formatAiRunTimestamp(value);
 }
 
-function formatSearchProviderStatus(status: SearchProviderStatus): string {
+type SearchProviderDiagnostic = {
+  statusLabel: string;
+  reasonLabel: string;
+  rawReason: string;
+  httpStatus: number | null;
+};
+
+function extractHttpStatus(rawReason: string): number | null {
+  const candidates = [
+    /\bHTTP Error\s+(\d{3})\b/i,
+    /\bstatus(?:\s*code)?[:=\s]+(\d{3})\b/i
+  ];
+  for (const pattern of candidates) {
+    const match = rawReason.match(pattern);
+    if (!match) {
+      continue;
+    }
+    const value = Number.parseInt(match[1], 10);
+    if (Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function getHttpStatusHint(httpStatus: number): string {
+  if (httpStatus === 400) {
+    return "Solicitud invalida para el proveedor";
+  }
+  if (httpStatus === 401) {
+    return "Credenciales invalidas o ausentes";
+  }
+  if (httpStatus === 403) {
+    return "Acceso denegado por el proveedor";
+  }
+  if (httpStatus === 404) {
+    return "Endpoint no encontrado";
+  }
+  if (httpStatus === 429) {
+    return "Rate limit del proveedor";
+  }
+  if (httpStatus >= 500) {
+    return "Fallo temporal del proveedor";
+  }
+  return "Error HTTP del proveedor";
+}
+
+function buildSearchProviderDiagnostic(status: SearchProviderStatus): SearchProviderDiagnostic {
   const statusLabelMap: Record<SearchProviderStatus["status"], string> = {
     ok: "OK",
     error: "ERROR",
@@ -286,11 +333,76 @@ function formatSearchProviderStatus(status: SearchProviderStatus): string {
     provider_error: "Error de proveedor",
     unexpected_error: "Error inesperado"
   };
-  const reason = reasonMap[status.reason] ?? status.reason;
+  const canonicalReason = reasonMap[status.reason];
+  const rawReason = (status.reason_detail ?? "").trim() || (canonicalReason ? "" : status.reason);
+  const httpStatus =
+    typeof status.http_status === "number"
+      ? status.http_status
+      : extractHttpStatus(rawReason);
+  let reasonLabel = canonicalReason ?? "Error de proveedor";
+  if (status.status === "error" && httpStatus) {
+    reasonLabel = `HTTP ${httpStatus} · ${getHttpStatusHint(httpStatus)}`;
+  } else if (status.status !== "error" && canonicalReason) {
+    reasonLabel = canonicalReason;
+  }
+  return {
+    statusLabel: statusLabelMap[status.status],
+    reasonLabel,
+    rawReason,
+    httpStatus
+  };
+}
+
+function formatSearchProviderStatus(status: SearchProviderStatus): string {
+  const diagnostic = buildSearchProviderDiagnostic(status);
   const enabledText = status.enabled ? "enabled" : "disabled";
   const attemptedText = status.attempted ? "attempted" : "not attempted";
-  const truncatedText = status.query_truncated ? " · query_truncated" : "";
-  return `${statusLabelMap[status.status]} · ${enabledText} · ${attemptedText} · results=${status.results_count} · ${reason}${truncatedText}`;
+  return `${diagnostic.statusLabel} · ${enabledText} · ${attemptedText} · results=${status.results_count}`;
+}
+
+function buildSearchProviderDiagnosticText(status: SearchProviderStatus): string {
+  const diagnostic = buildSearchProviderDiagnostic(status);
+  const lines = [
+    `provider_key=${status.provider_key}`,
+    `status=${status.status}`,
+    `enabled=${status.enabled}`,
+    `attempted=${status.attempted}`,
+    `results_count=${status.results_count}`,
+    `reason_code=${status.reason}`,
+    `reason_display=${diagnostic.reasonLabel}`
+  ];
+  if (diagnostic.httpStatus) {
+    lines.push(`http_status=${diagnostic.httpStatus}`);
+  }
+  if (diagnostic.rawReason) {
+    lines.push(`reason_raw=${diagnostic.rawReason}`);
+  }
+  if (status.query_truncated) {
+    lines.push("query_truncated=true");
+  }
+  return lines.join("\n");
+}
+
+async function copyToClipboard(text: string): Promise<void> {
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  if (typeof document === "undefined") {
+    throw new Error("Clipboard API unavailable");
+  }
+  const node = document.createElement("textarea");
+  node.value = text;
+  node.setAttribute("readonly", "true");
+  node.style.position = "fixed";
+  node.style.opacity = "0";
+  document.body.appendChild(node);
+  node.select();
+  const copied = document.execCommand("copy");
+  document.body.removeChild(node);
+  if (!copied) {
+    throw new Error("Clipboard copy command failed");
+  }
 }
 
 function appendArtifactDelta(
@@ -412,6 +524,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searchProviderStatus, setSearchProviderStatus] = useState<SearchProviderStatus[]>([]);
+  const [copiedSearchProviderKey, setCopiedSearchProviderKey] = useState<string | null>(null);
   const [selectedSearchResultId, setSelectedSearchResultId] = useState<string | null>(null);
   const [searchWarnings, setSearchWarnings] = useState<string[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -1111,6 +1224,7 @@ export default function App() {
     setIsSearching(true);
     setErrorMessage(null);
     setSearchProviderStatus([]);
+    setCopiedSearchProviderKey(null);
     try {
       const payload = await searchOpportunities(selectedPersonId, searchQuery.trim(), 6);
       setSearchResults(payload.items);
@@ -1149,6 +1263,22 @@ export default function App() {
       setErrorMessage(message);
     } finally {
       setSavingResultId(null);
+    }
+  }
+
+  async function handleCopySearchProviderDiagnostics(status: SearchProviderStatus) {
+    try {
+      await copyToClipboard(buildSearchProviderDiagnosticText(status));
+      setCopiedSearchProviderKey(status.provider_key);
+      window.setTimeout(() => {
+        setCopiedSearchProviderKey((current) =>
+          current === status.provider_key ? null : current
+        );
+      }, 1600);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo copiar el diagnostico";
+      setErrorMessage(message);
     }
   }
 
@@ -2405,17 +2535,45 @@ export default function App() {
           <article className="manualCard">
             <p className="chatRole">Estado de proveedores (ultima busqueda)</p>
             <div className="chatList">
-              {searchProviderStatus.map((status) => (
-                <article
-                  className="chatBubble chatBubbleAssistant"
-                  key={`provider-status-${status.provider_key}`}
-                >
-                  <p className="chatRole">
-                    {SEARCH_PROVIDER_LABELS[status.provider_key] ?? status.provider_key}
-                  </p>
-                  <p className="metaText">{formatSearchProviderStatus(status)}</p>
-                </article>
-              ))}
+              {searchProviderStatus.map((status) => {
+                const diagnostic = buildSearchProviderDiagnostic(status);
+                return (
+                  <article
+                    className="chatBubble chatBubbleAssistant"
+                    key={`provider-status-${status.provider_key}`}
+                  >
+                    <p className="chatRole">
+                      {SEARCH_PROVIDER_LABELS[status.provider_key] ?? status.provider_key}
+                    </p>
+                    <p className="metaText">{formatSearchProviderStatus(status)}</p>
+                    <p className="metaText">Motivo: {diagnostic.reasonLabel}</p>
+                    {diagnostic.httpStatus ? (
+                      <p className="metaText">HTTP status: {diagnostic.httpStatus}</p>
+                    ) : null}
+                    {status.query_truncated ? (
+                      <p className="metaText">
+                        Tavily query truncada automaticamente a 400 caracteres.
+                      </p>
+                    ) : null}
+                    {diagnostic.rawReason ? (
+                      <details className="payloadDetails">
+                        <summary>Ver detalle tecnico</summary>
+                        <pre className="payloadPre">{diagnostic.rawReason}</pre>
+                      </details>
+                    ) : null}
+                    <div className="cardActions">
+                      <button
+                        onClick={() => void handleCopySearchProviderDiagnostics(status)}
+                        type="button"
+                      >
+                        {copiedSearchProviderKey === status.provider_key
+                          ? "Diagnostico copiado"
+                          : "Copiar diagnostico"}
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           </article>
         ) : null}

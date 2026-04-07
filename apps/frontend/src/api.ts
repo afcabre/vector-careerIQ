@@ -57,6 +57,9 @@ export type SearchProviderStatus = {
   attempted: boolean;
   status: "ok" | "error" | "skipped";
   reason: string;
+  reason_detail?: string;
+  http_status?: number;
+  error_class?: string;
   results_count: number;
   query_truncated?: boolean;
 };
