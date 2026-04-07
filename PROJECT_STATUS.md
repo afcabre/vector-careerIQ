@@ -66,6 +66,8 @@
 - frontend incorpora panel de trazas para visualizar request exacto por destino y filtrar por oportunidad activa
 - trazas `request_traces` ahora soportan `run_id` para vinculo 1:1 con ejecuciones persistidas (`ai_action_runs`)
 - backend permite filtrar trazas por `run_id` y frontend habilita foco desde `Historico IA` con boton `Ver request exacto`
+- arquitectura documenta politica de ventana de contexto y cantidad de mensajes por flujo OpenAI (`chat`, `analyze`, `prepare`, legacy combinado)
+- README incluye resumen operativo de reglas de contexto OpenAI V1 y referencia al detalle normativo
 - API agrega acciones separadas de analisis: `POST .../analyze/profile-match` y `POST .../analyze/cultural-fit`
 - API `prepare` permite `targets` seleccionables (`guidance_text`, `cover_letter`, `experience_summary`) y `force_recompute`
 - comportamiento por defecto de acciones IA: leer ultimo resultado persistido; regenerar solo con `force_recompute=true`

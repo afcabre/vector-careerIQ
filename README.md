@@ -157,6 +157,11 @@ Mapa rapido endpoint -> flow:
 - `POST /api/persons/{person_id}/search`: `search_jobs_tavily`
 - senales culturales en `analyze_cultural_fit`: `search_culture_tavily`
 
+Reglas de contexto OpenAI (resumen V1):
+- `chat/chat-stream`: `1 system + hasta 12` mensajes de historial reciente (max `13`); incluye contexto CV semantico (`top_k=24`) y limites de texto para contexto (`7000` chars) con fallback preview (`1600` chars).
+- `analyze` (profile/cultural y streams): `2` mensajes fijos (`system + user`) por accion; no usa historial de chat.
+- `prepare/prepare-stream`: `2` mensajes por target seleccionado (`guidance`, `cover_letter`, `experience_summary`), con evidencia semantica de CV (`top_k=24`).
+
 Detalle normativo completo (endpoint -> composicion -> variables):
 - `.specify/03.Arquitectura-y-Plan.md`
 
