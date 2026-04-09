@@ -293,6 +293,15 @@
 - pruebas backend ampliadas para deduplicacion de entrevista (`tests/test_interview_brief.py`)
 - suite backend revalidada tras hardening de deduplicacion en entrevista: `84 tests` en `OK` (`skipped=1`)
 - fix UX/SSE en entrevista (frontend): durante `isInterviewing` se bloquea hidratacion desde `ai_runs` para no pisar deltas en vivo; fallback decide recálculo/cache segun llegada de deltas
+- correccion de ordenamiento de historico IA (`ai_runs`) en backend y frontend: prioridad explicita a `is_current` antes de `updated_at` para evitar que un run previo opaque el ultimo recalculo
+- refresh de `interview_brief` endurecido en UI: tras recalculo se posiciona el cursor del bloque en el run mas reciente (`interview_brief: 0`)
+- hardening de plantillas de prompt: `build_prompt_text` ahora degrada a `fallback` si una plantilla tiene formato invalido (llaves no escapadas), evitando que el flujo de entrevista se caiga
+- template default `task_interview_research_plan` corregido con llaves JSON escapadas para evitar errores de `Invalid format specifier`
+- ajuste UX de recálculo en `interview_brief`: reintento corto de refresco de `ai_runs` tras SSE para absorber latencia eventual de Firestore y actualizar paginador automaticamente
+- cards de `Analisis` ahora exponen `Fuentes referenciadas` con enlaces clicables en nueva pestaña para `fit cultural` y `brief de entrevista`
+- `Oportunidades guardadas` en `Busqueda` usa el mismo icono `ExpandCollapseIcon` de `Analisis` para expandir/contraer descripcion, eliminando flechas textuales `▴/▾`
+- botones de `Recalcular` en `Analisis/Postulacion` ahora muestran `...` durante ejecucion (`isAnalyzingProfile`, `isAnalyzingCultural`, `isInterviewing`, `isPreparing`) para feedback inmediato de orden recibida
+- botones de `Recalcular/Generar` en `Analisis/Postulacion` ahora usan spinner SVG pequeño durante ejecucion para consistencia visual
 - build frontend revalidado tras integracion de controles `top_k` en administracion: `npm run build` en `OK`
 
 ## Mejoras Identificadas (Diferidas)
