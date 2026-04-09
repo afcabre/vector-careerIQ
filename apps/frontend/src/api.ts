@@ -143,6 +143,16 @@ export type AnalyzeCulturalFitPayload = {
   served_from_cache: boolean;
 };
 
+export type InterviewBriefPayload = {
+  opportunity: Opportunity;
+  analysis_text: string;
+  interview_warnings: string[];
+  interview_sources: CulturalSignal[];
+  semantic_evidence: SemanticEvidence;
+  served_from_cache: boolean;
+  assistant_message_id: string;
+};
+
 export type PrepareOpportunityPayload = {
   opportunity: Opportunity;
   guidance_text: string;
@@ -748,6 +758,23 @@ export async function analyzeCulturalFit(
   return parseResponse<AnalyzeCulturalFitPayload>(response);
 }
 
+export async function interviewBrief(
+  personId: string,
+  opportunityId: string,
+  forceRecompute: boolean
+): Promise<InterviewBriefPayload> {
+  const response = await safeFetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/interview/brief`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ force_recompute: forceRecompute })
+    }
+  );
+  return parseResponse<InterviewBriefPayload>(response);
+}
+
 export async function prepareOpportunity(
   personId: string,
   opportunityId: string,
@@ -907,6 +934,81 @@ export async function analyzeProfileMatchStream(
   }
   if (!completedPayload) {
     throw new Error("Analyze profile-match stream ended without completion payload");
+  }
+  return completedPayload;
+}
+
+export async function interviewBriefStream(
+  personId: string,
+  opportunityId: string,
+  forceRecompute: boolean,
+  onDelta: (delta: string) => void
+): Promise<InterviewBriefPayload> {
+  const response = await safeFetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/interview/brief/stream`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ force_recompute: forceRecompute })
+    }
+  );
+  if (!response.ok) {
+    let messageText = `Request failed: ${response.status}`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) {
+        messageText = payload.detail;
+      }
+    } catch {
+      // Ignore parsing errors for stream setup failures.
+    }
+    throw new Error(messageText);
+  }
+  if (!response.body) {
+    throw new Error("Streaming response body is empty");
+  }
+
+  const decoder = new TextDecoder();
+  const reader = response.body.getReader();
+  let pending = "";
+  let completedPayload: InterviewBriefPayload | null = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+    pending += decoder.decode(value, { stream: true });
+    const consumed = consumeSseBuffer(pending, (eventName, payload) => {
+      if (eventName === "message_delta") {
+        const delta = payload.delta;
+        const channel = payload.channel;
+        if (channel === "analysis_text" && typeof delta === "string" && delta.length > 0) {
+          onDelta(delta);
+        }
+      } else if (eventName === "message_complete") {
+        completedPayload = payload as unknown as InterviewBriefPayload;
+      }
+    });
+    pending = consumed.remainder;
+  }
+  if (pending.trim()) {
+    consumeSseBuffer(`${pending}\n\n`, (eventName, payload) => {
+      if (eventName === "message_delta") {
+        const delta = payload.delta;
+        const channel = payload.channel;
+        if (channel === "analysis_text" && typeof delta === "string" && delta.length > 0) {
+          onDelta(delta);
+        }
+      } else if (eventName === "message_complete") {
+        completedPayload = payload as unknown as InterviewBriefPayload;
+      }
+    });
+  }
+
+  if (!completedPayload) {
+    throw new Error("Interview brief stream ended without completion payload");
   }
   return completedPayload;
 }

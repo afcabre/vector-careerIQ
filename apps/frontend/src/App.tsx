@@ -24,6 +24,8 @@ import {
   createPerson,
   getAiRuntimeConfig,
   getConversation,
+  interviewBrief,
+  interviewBriefStream,
   getActiveCV,
   getActiveCVText,
   getSession,
@@ -140,6 +142,7 @@ const OPPORTUNITY_STATUSES = [
 const AI_RUN_ACTION_LABELS: Record<string, string> = {
   analyze_profile_match: "Analizar perfil-vacante",
   analyze_cultural_fit: "Analizar ajuste cultural",
+  interview_brief: "Brief de entrevista",
   prepare_guidance_text: "Preparar guia de perfil",
   prepare_cover_letter: "Preparar carta de presentacion",
   prepare_experience_summary: "Preparar resumen de experiencia"
@@ -148,13 +151,15 @@ const AI_RUN_ACTION_LABELS: Record<string, string> = {
 type AnalysisResultBlockId =
   | "analysis_profile_match"
   | "analysis_cultural_fit"
+  | "analysis_interview_brief"
   | "artifact_guidance_text"
   | "artifact_cover_letter"
   | "artifact_experience_summary";
 
 const ANALYSIS_BLOCK_ORDER: AnalysisResultBlockId[] = [
   "analysis_profile_match",
-  "analysis_cultural_fit"
+  "analysis_cultural_fit",
+  "analysis_interview_brief"
 ];
 
 const ARTIFACT_BLOCK_ORDER: AnalysisResultBlockId[] = [
@@ -166,6 +171,7 @@ const ARTIFACT_BLOCK_ORDER: AnalysisResultBlockId[] = [
 const BLOCK_RUN_ACTION_BY_ID: Record<AnalysisResultBlockId, string> = {
   analysis_profile_match: "analyze_profile_match",
   analysis_cultural_fit: "analyze_cultural_fit",
+  analysis_interview_brief: "interview_brief",
   artifact_guidance_text: "prepare_guidance_text",
   artifact_cover_letter: "prepare_cover_letter",
   artifact_experience_summary: "prepare_experience_summary"
@@ -174,6 +180,7 @@ const BLOCK_RUN_ACTION_BY_ID: Record<AnalysisResultBlockId, string> = {
 const BLOCK_LABEL_BY_ID: Record<AnalysisResultBlockId, string> = {
   analysis_profile_match: "Alineacion perfil-vacante",
   analysis_cultural_fit: "Fit cultural",
+  analysis_interview_brief: "Brief de entrevista",
   artifact_guidance_text: "Guia de perfil",
   artifact_cover_letter: "Carta de presentacion",
   artifact_experience_summary: "Resumen adaptado"
@@ -182,11 +189,13 @@ const BLOCK_LABEL_BY_ID: Record<AnalysisResultBlockId, string> = {
 const PROMPT_FLOW_LABELS: Record<string, string> = {
   search_jobs_tavily: "Busqueda de vacantes (Tavily)",
   search_culture_tavily: "Fit cultural (Tavily)",
+  search_interview_tavily: "Contexto entrevista (Tavily)",
   guardrails_core: "Guardrails core (global)",
   system_identity: "Identidad del sistema (global)",
   task_chat: "Prompt de tarea: Chat",
   task_analyze_profile_match: "Prompt de tarea: Analizar perfil-vacante",
   task_analyze_cultural_fit: "Prompt de tarea: Analizar ajuste cultural",
+  task_interview_brief: "Prompt de tarea: Brief de entrevista",
   task_prepare_guidance: "Prompt de tarea: Preparar guia de perfil",
   task_prepare_cover_letter: "Prompt de tarea: Preparar carta",
   task_prepare_experience_summary: "Prompt de tarea: Preparar resumen"
@@ -195,16 +204,22 @@ const PROMPT_FLOW_LABELS: Record<string, string> = {
 const PROMPT_FLOW_ORDER: string[] = [
   "search_jobs_tavily",
   "search_culture_tavily",
+  "search_interview_tavily",
   "guardrails_core",
   "system_identity",
   "task_chat",
   "task_analyze_profile_match",
   "task_analyze_cultural_fit",
+  "task_interview_brief",
   "task_prepare_guidance",
   "task_prepare_cover_letter",
   "task_prepare_experience_summary"
 ];
-const PROMPT_SOURCE_FLOW_KEYS = new Set(["search_jobs_tavily", "search_culture_tavily"]);
+const PROMPT_SOURCE_FLOW_KEYS = new Set([
+  "search_jobs_tavily",
+  "search_culture_tavily",
+  "search_interview_tavily"
+]);
 const SEARCH_PROVIDER_LABELS: Record<string, string> = {
   adzuna: "Adzuna (RapidAPI)",
   remotive: "Remotive",
@@ -689,6 +704,7 @@ export default function App() {
   const [, setAnalysisText] = useState("");
   const [profileAnalysisText, setProfileAnalysisText] = useState("");
   const [cultureAnalysisText, setCultureAnalysisText] = useState("");
+  const [interviewBriefText, setInterviewBriefText] = useState("");
   const [culturalConfidence, setCulturalConfidence] = useState("");
   const [culturalWarnings, setCulturalWarnings] = useState<string[]>([]);
   const [culturalSignals, setCulturalSignals] = useState<CulturalSignal[]>([]);
@@ -702,6 +718,7 @@ export default function App() {
   const [focusedRunId, setFocusedRunId] = useState("");
   const [isAnalyzingProfile, setIsAnalyzingProfile] = useState(false);
   const [isAnalyzingCultural, setIsAnalyzingCultural] = useState(false);
+  const [isInterviewing, setIsInterviewing] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
   const [isLoadingArtifacts, setIsLoadingArtifacts] = useState(false);
   const forceRecomputeAi = false;
@@ -715,6 +732,7 @@ export default function App() {
   >({
     analysis_profile_match: false,
     analysis_cultural_fit: false,
+    analysis_interview_brief: false,
     artifact_guidance_text: false,
     artifact_cover_letter: false,
     artifact_experience_summary: false
@@ -1129,21 +1147,27 @@ export default function App() {
 
     const profileRun = byAction.get("analyze_profile_match");
     const culturalRun = byAction.get("analyze_cultural_fit");
+    const interviewRun = byAction.get("interview_brief");
     const guidanceRun = byAction.get("prepare_guidance_text");
     const profilePayload = (profileRun?.result_payload ?? {}) as Record<string, unknown>;
     const culturalPayload = (culturalRun?.result_payload ?? {}) as Record<string, unknown>;
     const guidancePayload = (guidanceRun?.result_payload ?? {}) as Record<string, unknown>;
+    const interviewPayload = (interviewRun?.result_payload ?? {}) as Record<string, unknown>;
 
     setProfileAnalysisText(String(profilePayload.analysis_text ?? "").trim());
     setCultureAnalysisText(String(culturalPayload.analysis_text ?? "").trim());
+    setInterviewBriefText(String(interviewPayload.analysis_text ?? "").trim());
     setCulturalConfidence(String(culturalPayload.cultural_confidence ?? "").trim());
     setCulturalWarnings(asStringArray(culturalPayload.cultural_warnings));
     setCulturalSignals(asCulturalSignals(culturalPayload.cultural_signals));
 
     const profileEvidence = profilePayload.semantic_evidence;
+    const interviewEvidence = interviewPayload.semantic_evidence;
     const guidanceEvidence = guidancePayload.semantic_evidence;
     if (profileEvidence && typeof profileEvidence === "object") {
       setSemanticEvidence(profileEvidence as SemanticEvidence);
+    } else if (interviewEvidence && typeof interviewEvidence === "object") {
+      setSemanticEvidence(interviewEvidence as SemanticEvidence);
     } else if (guidanceEvidence && typeof guidanceEvidence === "object") {
       setSemanticEvidence(guidanceEvidence as SemanticEvidence);
     }
@@ -1152,7 +1176,14 @@ export default function App() {
     if (guidanceText) {
       setGuidanceText(guidanceText);
     }
-  }, [aiRuns, selectedOpportunityId, isAnalyzingProfile, isAnalyzingCultural, isPreparing]);
+  }, [
+    aiRuns,
+    selectedOpportunityId,
+    isAnalyzingProfile,
+    isAnalyzingCultural,
+    isInterviewing,
+    isPreparing
+  ]);
   const aiRunsById = new Map(aiRuns.map((item) => [item.run_id, item] as const));
   const aiRunsByAction = new Map<string, AIRun[]>();
   for (const run of aiRuns) {
@@ -1216,6 +1247,7 @@ export default function App() {
     setExpandedResultBlocks({
       analysis_profile_match: false,
       analysis_cultural_fit: false,
+      analysis_interview_brief: false,
       artifact_guidance_text: false,
       artifact_cover_letter: false,
       artifact_experience_summary: false
@@ -2127,6 +2159,74 @@ export default function App() {
     }
   }
 
+  async function handleInterviewBrief(opportunityId: string, forceOverride?: boolean) {
+    if (!selectedPersonId) {
+      return;
+    }
+    const personId = selectedPersonId;
+    const forceRecompute = forceOverride ?? forceRecomputeAi;
+    setSelectedOpportunityId(opportunityId);
+    setResultsPanelTab("analysis");
+    setSelectedResultBlockId("analysis_interview_brief");
+    setIsInterviewing(true);
+    setErrorMessage(null);
+    setAnalysisText("");
+    setInterviewBriefText("");
+    try {
+      const payload = await interviewBriefStream(
+        personId,
+        opportunityId,
+        forceRecompute,
+        (delta) => {
+          setAnalysisText((current) => `${current}${delta}`);
+          setInterviewBriefText((current) => `${current}${delta}`);
+        }
+      );
+      setAnalysisText(payload.analysis_text);
+      setInterviewBriefText(payload.analysis_text);
+      setSemanticEvidence(payload.semantic_evidence);
+      setAnalyzeExecutedByOpportunity((current) => ({
+        ...current,
+        [opportunityId]: true
+      }));
+      const [items, conversationPayload] = await Promise.all([
+        listOpportunities(personId),
+        getConversation(personId)
+      ]);
+      setConversation(conversationPayload);
+      setSavedOpportunities(items);
+      setSelectedOpportunityId(opportunityId);
+      await refreshAiRunsFor(personId, opportunityId);
+    } catch (error) {
+      try {
+        const payload = await interviewBrief(personId, opportunityId, forceRecompute);
+        setAnalysisText(payload.analysis_text);
+        setInterviewBriefText(payload.analysis_text);
+        setSemanticEvidence(payload.semantic_evidence);
+        setAnalyzeExecutedByOpportunity((current) => ({
+          ...current,
+          [opportunityId]: true
+        }));
+        const [items, conversationPayload] = await Promise.all([
+          listOpportunities(personId),
+          getConversation(personId)
+        ]);
+        setConversation(conversationPayload);
+        setSavedOpportunities(items);
+        setSelectedOpportunityId(opportunityId);
+        await refreshAiRunsFor(personId, opportunityId);
+        setErrorMessage(
+          "Streaming de entrevista no disponible. Se uso endpoint sin streaming como respaldo."
+        );
+      } catch {
+        const message = error instanceof Error ? error.message : "No se pudo generar brief de entrevista";
+        setErrorMessage(message);
+      }
+    } finally {
+      setIsInterviewing(false);
+    }
+  }
+
   async function handlePrepare(
     opportunityId: string,
     forceOverride?: boolean,
@@ -2453,11 +2553,13 @@ export default function App() {
 
   const profileRun = getSelectedRunForBlock("analysis_profile_match");
   const culturalRun = getSelectedRunForBlock("analysis_cultural_fit");
+  const interviewRun = getSelectedRunForBlock("analysis_interview_brief");
   const guidanceRun = getSelectedRunForBlock("artifact_guidance_text");
   const coverRun = getSelectedRunForBlock("artifact_cover_letter");
   const summaryRun = getSelectedRunForBlock("artifact_experience_summary");
   const profileRuns = getRunsForBlock("analysis_profile_match");
   const culturalRuns = getRunsForBlock("analysis_cultural_fit");
+  const interviewRuns = getRunsForBlock("analysis_interview_brief");
   const guidanceRuns = getRunsForBlock("artifact_guidance_text");
   const coverRuns = getRunsForBlock("artifact_cover_letter");
   const summaryRuns = getRunsForBlock("artifact_experience_summary");
@@ -2465,12 +2567,14 @@ export default function App() {
 
   const liveProfileContent = isAnalyzingProfile ? profileAnalysisText : "";
   const liveCulturalContent = isAnalyzingCultural ? cultureAnalysisText : "";
+  const liveInterviewContent = isInterviewing ? interviewBriefText : "";
   const liveGuidanceContent = isPreparing ? guidanceText : "";
   const liveCoverContent = getArtifactFallbackContent("cover_letter");
   const liveSummaryContent = getArtifactFallbackContent("experience_summary");
 
   const profileContent = liveProfileContent || getRunPreview(profileRun);
   const culturalContent = liveCulturalContent || getRunPreview(culturalRun);
+  const interviewContent = liveInterviewContent || getRunPreview(interviewRun);
   const guidanceContent = liveGuidanceContent || getRunPreview(guidanceRun) || guidanceText;
   const coverContent = (isPreparing ? liveCoverContent : "") || getRunPreview(coverRun) || liveCoverContent;
   const summaryContent =
@@ -2490,6 +2594,11 @@ export default function App() {
     guidanceContent,
     7,
     expandedResultBlocks.artifact_guidance_text
+  );
+  const interviewPreview = buildContentLinePreview(
+    interviewContent,
+    7,
+    expandedResultBlocks.analysis_interview_brief
   );
   const coverPreview = buildContentLinePreview(
     coverContent,
@@ -4170,6 +4279,146 @@ export default function App() {
                               >
                                 <ExpandCollapseIcon
                                   expanded={expandedResultBlocks.analysis_cultural_fit}
+                                />
+                              </button>
+                            </div>
+                          ) : null}
+                        </article>
+
+                        <article
+                          className={
+                            selectedResultBlockId === "analysis_interview_brief"
+                              ? "resultBlockCard resultBlockCardActive"
+                              : "resultBlockCard"
+                          }
+                          onClick={() => handleSelectResultBlock("analysis_interview_brief")}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              handleSelectResultBlock("analysis_interview_brief");
+                            }
+                          }}
+                          role="button"
+                          tabIndex={0}
+                        >
+                          <div className="resultBlockTop">
+                            <div>
+                              <p className="chatRole">{BLOCK_LABEL_BY_ID.analysis_interview_brief}</p>
+                              <p className="metaText">
+                                {interviewRun
+                                  ? `Generado · ${formatAiRunTimestamp(interviewRun.updated_at)}`
+                                  : "Sin generar"}
+                              </p>
+                            </div>
+                            <div className="cardActions">
+                              {interviewRun ? (
+                                <button
+                                  aria-label="Recalcular brief de entrevista"
+                                  className="iconOnlyButton"
+                                  disabled={isInterviewing}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    selectedOpportunity
+                                      ? void handleInterviewBrief(
+                                          selectedOpportunity.opportunity_id,
+                                          true
+                                        )
+                                      : undefined;
+                                  }}
+                                  title="Recalcular"
+                                  type="button"
+                                >
+                                  ↻
+                                </button>
+                              ) : (
+                                <button
+                                  aria-label="Generar brief de entrevista"
+                                  className="iconOnlyButton"
+                                  disabled={isInterviewing}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    selectedOpportunity
+                                      ? void handleInterviewBrief(
+                                          selectedOpportunity.opportunity_id
+                                        )
+                                      : undefined;
+                                  }}
+                                  title="Generar"
+                                  type="button"
+                                >
+                                  {isInterviewing ? "…" : "▶"}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          {interviewRuns.length > 1 ? (
+                            <div className="resultBlockPager">
+                              <button
+                                className="ghostButton compactActionButton"
+                                disabled={getCurrentRunIndexForBlock("analysis_interview_brief") === 0}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleMoveRunCursor("analysis_interview_brief", -1);
+                                }}
+                                type="button"
+                              >
+                                ◀
+                              </button>
+                              <span className="metaText">
+                                {getCurrentRunIndexForBlock("analysis_interview_brief") + 1}/
+                                {interviewRuns.length}
+                              </span>
+                              <button
+                                className="ghostButton compactActionButton"
+                                disabled={
+                                  getCurrentRunIndexForBlock("analysis_interview_brief") >=
+                                  interviewRuns.length - 1
+                                }
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleMoveRunCursor("analysis_interview_brief", 1);
+                                }}
+                                type="button"
+                              >
+                                ▶
+                              </button>
+                            </div>
+                          ) : null}
+                          {interviewPreview.previewText ? (
+                            <p className="chatContent resultBlockContent">{interviewPreview.previewText}</p>
+                          ) : null}
+                          {interviewRun ? (
+                            <p className="metaText">
+                              Fuentes:{" "}
+                              {asCulturalSignals(interviewRun.result_payload["interview_sources"]).length} ·
+                              Advertencias:{" "}
+                              {asStringArray(interviewRun.result_payload["interview_warnings"]).length}
+                            </p>
+                          ) : null}
+                          {interviewContent &&
+                          (interviewPreview.truncated ||
+                            expandedResultBlocks.analysis_interview_brief) ? (
+                            <div className="cardActions resultBlockToggleRow">
+                              <button
+                                aria-label={
+                                  expandedResultBlocks.analysis_interview_brief
+                                    ? "Contraer contenido"
+                                    : "Expandir contenido"
+                                }
+                                className="iconOnlyButton"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleToggleResultBlockPreview("analysis_interview_brief");
+                                }}
+                                title={
+                                  expandedResultBlocks.analysis_interview_brief
+                                    ? "Contraer"
+                                    : "Expandir"
+                                }
+                                type="button"
+                              >
+                                <ExpandCollapseIcon
+                                  expanded={expandedResultBlocks.analysis_interview_brief}
                                 />
                               </button>
                             </div>

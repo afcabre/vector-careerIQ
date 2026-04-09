@@ -21,6 +21,7 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
 - `/chat` y `/chat/stream` conectados a OpenAI (`OPENAI_API_KEY`) con fallback seguro
 - `/search` multi-provider y guardado explicito de oportunidades implementados por `person_id`
 - `analyze` separado por accion (`perfil-vacante` y `fit cultural`) con cache por defecto, `forzar recalculo` y historico backend por accion
+- `interview brief` por oportunidad implementado como accion IA separada (`interview_brief`) con cache por defecto, `forzar recalculo`, historico y streaming SSE
 - `prepare` con seleccion de materiales (`guidance`, `cover_letter`, `experience_summary`), cache por defecto y historico backend por accion
 - frontend permite consulta explicita de historico IA persistido por oportunidad (filtro opcional por `action_key`)
 - backend persiste trazas de request exacto enviado a `OpenAI`, `Tavily`, `Adzuna` y `Remotive` (sin secretos)
@@ -28,7 +29,7 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
 - hardening de `request_traces` aplicado: redaccion automatica de secretos y cap de tamano de payload con truncamiento seguro
 - frontend agrupa trazas por `run_id` y habilita navegacion bidireccional `request <-> response` con vista unificada por ejecucion
 - administracion de busqueda agrega switches por proveedor (`Tavily`, `Adzuna`, `Remotive`) para habilitar/deshabilitar ejecucion por UI
-- administracion IA agrega control global de retrieval semantico con `top_k` separado por contexto (`analisis/preparacion` y `entrevista` reservado)
+- administracion IA agrega control global de retrieval semantico con `top_k` separado por contexto (`analisis/preparacion` y `entrevista`)
 - busqueda Tavily aplica cap de query a `400` caracteres para evitar `HTTP 400` por longitud
 - respuesta de busqueda incluye `provider_status` por ejecucion (estado por proveedor, razon y conteo) y frontend lo muestra en el panel de busqueda
 - importacion manual de vacantes por URL y texto pegado desde frontend
@@ -123,6 +124,15 @@ Flujo `search_culture_tavily`:
   - `{person_location}`
   - `{target_sources}` (inyectado desde lista de fuentes objetivo configuradas)
 
+Flujo `search_interview_tavily`:
+- requerido:
+  - `{company}`
+- disponibles:
+  - `{roles}`
+  - `{target_roles}`
+  - `{person_location}`
+  - `{target_sources}` (inyectado desde lista de fuentes objetivo configuradas)
+
 Flujo `system_identity`:
 - requerido:
   - `{person_name}`
@@ -137,13 +147,15 @@ Flujo `task_chat`:
   - `{cv_context_source}`
   - `{cv_context}`
 
-Flujos `task_analyze_profile_match`, `task_analyze_cultural_fit`, `task_prepare_guidance`, `task_prepare_cover_letter`, `task_prepare_experience_summary`:
+Flujos `task_analyze_profile_match`, `task_analyze_cultural_fit`, `task_interview_brief`, `task_prepare_guidance`, `task_prepare_cover_letter`, `task_prepare_experience_summary`:
 - requeridos:
   - `{person_context}`
   - `{opportunity_context}`
 - disponibles segun flujo:
   - `{semantic_evidence_context}`
   - `{cultural_evidence_context}`
+  - `{interview_evidence_context}`
+  - `{research_warnings}`
   - `{confidence_hint}`
 
 Referencia tecnica de esta definicion:
@@ -155,8 +167,10 @@ Mapa rapido endpoint -> flow:
 - `POST /api/persons/{person_id}/chat` y `.../chat/stream`: `guardrails_core + system_identity + task_chat`
 - `POST /api/persons/{person_id}/opportunities/{opportunity_id}/analyze/profile-match`: `guardrails_core + system_identity + task_analyze_profile_match`
 - `POST /api/persons/{person_id}/opportunities/{opportunity_id}/analyze/cultural-fit`: `guardrails_core + system_identity + task_analyze_cultural_fit`
+- `POST /api/persons/{person_id}/opportunities/{opportunity_id}/interview/brief`: `guardrails_core + system_identity + task_interview_brief`
 - `POST /api/persons/{person_id}/opportunities/{opportunity_id}/analyze/profile-match/stream`: SSE especifico de `analyze profile-match`
 - `POST /api/persons/{person_id}/opportunities/{opportunity_id}/analyze/cultural-fit/stream`: SSE especifico de `analyze cultural-fit`
+- `POST /api/persons/{person_id}/opportunities/{opportunity_id}/interview/brief/stream`: SSE especifico de `interview brief`
 - `POST /api/persons/{person_id}/opportunities/{opportunity_id}/prepare`: `guardrails_core + system_identity + task_prepare_*` segun `targets`
 - `POST /api/persons/{person_id}/opportunities/{opportunity_id}/prepare/stream`: misma composicion de `prepare` con SSE por canal y soporte de `targets` + `force_recompute`
 - `GET /api/persons/{person_id}/opportunities/{opportunity_id}/ai-runs`: historico backend por accion IA (`action_key` opcional)
@@ -169,11 +183,13 @@ Mapa rapido endpoint -> flow:
 - `PATCH /api/admin/ai-runtime-config`: actualizar `top_k_semantic_analysis` y/o `top_k_semantic_interview`
 - `POST /api/persons/{person_id}/search`: `search_jobs_tavily`
 - senales culturales en `analyze_cultural_fit`: `search_culture_tavily`
+- contexto pre-entrevista en `interview_brief`: `search_interview_tavily`
 
 Reglas de contexto OpenAI (resumen V1):
 - `chat/chat-stream`: `1 system + hasta 12` mensajes de historial reciente (max `13`); incluye contexto CV semantico (`top_k=24`) y limites de texto para contexto (`7000` chars) con fallback preview (`1600` chars).
 - `analyze` (profile/cultural y streams): `2` mensajes fijos (`system + user`) por accion; no usa historial de chat.
 - `analyze` y `prepare` usan evidencia semantica con `top_k` configurable desde admin (`/api/admin/ai-runtime-config`), default V1 `12` para analisis/preparacion.
+- `interview brief` usa evidencia semantica con `top_k_semantic_interview` configurable desde admin (default V1 `8`) y evidencia externa de Tavily.
 - `prepare/prepare-stream`: `2` mensajes por target seleccionado (`guidance`, `cover_letter`, `experience_summary`) con evidencia semantica por target.
 
 Detalle normativo completo (endpoint -> composicion -> variables):

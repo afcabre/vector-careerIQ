@@ -2,8 +2,8 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `Control global de retrieval semantico en administracion: top_k separado por contexto (analisis/preparacion y entrevista reservado)`
-- repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
+- checkpoint_actual: `Accion IA interview_brief activa con SSE, cache por accion y trazabilidad enlazada por run_id`
+- repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, analisis por accion, interview brief, importacion manual, CV activo y capa semantica`
 - ultima_actualizacion: `2026-04-09`
 
 ## Progreso Por Fase
@@ -33,6 +33,7 @@
 - `/search` implementado con Tavily (fallback seguro)
 - guardado explicito desde busqueda a oportunidades persistidas por `person_id`
 - `analyze` por oportunidad implementado
+- `interview_brief` por oportunidad implementado como accion IA separada, con cache por defecto (`force_recompute` opcional), historico por accion y endpoint SSE dedicado
 - `prepare` implementado con artefactos persistidos (`cover_letter`, `experience_summary`)
 - importacion manual de vacantes por `URL` y por `texto pegado` habilitada en frontend
 - toolchain frontend local operativo (`npm install` + `npm run build` exitoso)
@@ -62,7 +63,7 @@
 - frontend consume endpoints admin de prompt configs y aplica validaciones basicas antes de guardar
 - frontend de admin prompts permite consultar versiones por flow y restaurar una version previa (rollback)
 - frontend incorpora seccion de administracion de proveedores de busqueda con checkboxes para habilitar/deshabilitar ejecucion por proveedor
-- frontend incorpora seccion de administracion de retrieval semantico con `top_k` separado para `analisis/preparacion` y `entrevista` (reservado)
+- frontend incorpora seccion de administracion de retrieval semantico con `top_k` separado para `analisis/preparacion` y `entrevista`
 - `analyze` y `prepare` consumen `top_k_semantic_analysis` configurable (default V1 `12`) en lugar de valor hardcodeado
 - frontend de busqueda muestra panel de diagnostico por proveedor usando `provider_status` de la ultima ejecucion
 - frontend de busqueda muestra motivo amigable, `HTTP status` (si aplica), detalle tecnico y boton de copia por proveedor para depuracion rapida
@@ -172,7 +173,7 @@
 - contratos API/admin de `search-providers` reforzados para `GET`/`PATCH` y manejo `404` en proveedor desconocido
 - `prepare/stream` en frontend muestra deltas no solo de `guidance_text`, tambien de `cover_letter` y `experience_summary`
 - build frontend verificado localmente tras integracion UI admin: `npm run build` en `OK`
-- prompt configs ampliados para V1 con capas editables: `guardrails_core` (global), `system_identity` (global) y `task_*` por accion (`chat`, `analyze`, `prepare`)
+- prompt configs ampliados para V1 con capas editables: `guardrails_core` (global), `system_identity` (global) y `task_*` por accion (`chat`, `analyze`, `interview_brief`, `prepare`)
 - arquitectura normativa actualizada con matriz operativa de prompts/parametros V1 (destino, objetivo, placeholders, alcance, riesgo y control de consumo)
 - arquitectura normativa extendida con trazabilidad endpoint->composicion->variables y reglas de fallback por flow
 - backend incorpora store `ai_action_runs` para persistir resultado vigente + historico por accion IA
@@ -183,20 +184,23 @@
 - frontend incorpora panel de trazas para visualizar request exacto por destino y filtrar por oportunidad activa
 - trazas `request_traces` ahora soportan `run_id` para vinculo 1:1 con ejecuciones persistidas (`ai_action_runs`)
 - backend permite filtrar trazas por `run_id` y frontend habilita foco desde `Historico IA` con boton `Ver request exacto`
+- primera ejecucion generada de `interview_brief` se registra en conversacion como mensaje de asistente del perfil activo
 - `request_traces` endurecido con saneo de payload: redaccion automatica de secretos (api_key/token/password/authorization) y truncamiento seguro por cap de tamano
 - frontend agrupa trazas por `run_id`, habilita navegacion bidireccional `request <-> response` y muestra vista unificada por ejecucion
-- arquitectura documenta politica de ventana de contexto y cantidad de mensajes por flujo OpenAI (`chat`, `analyze`, `prepare`, legacy combinado)
+- arquitectura documenta politica de ventana de contexto y cantidad de mensajes por flujo OpenAI (`chat`, `analyze`, `interview_brief`, `prepare`, legacy combinado)
 - README incluye resumen operativo de reglas de contexto OpenAI V1 y referencia al detalle normativo
 - API agrega acciones separadas de analisis: `POST .../analyze/profile-match` y `POST .../analyze/cultural-fit`
+- API agrega accion separada de entrevista: `POST .../interview/brief` y `POST .../interview/brief/stream`
 - API `prepare` permite `targets` seleccionables (`guidance_text`, `cover_letter`, `experience_summary`) y `force_recompute`
 - comportamiento por defecto de acciones IA: leer ultimo resultado persistido; regenerar solo con `force_recompute=true`
 - rate limiting de login implementado con ventana temporal, max intentos y bloqueo temporal configurable por variables seguras
 - frontend agrega switch global `Forzar recalculo IA` y botones separados para `Analyze perfil` y `Analyze cultura`
 - frontend agrega seleccion de materiales para `prepare seleccionado` y consume respuesta vigente por cache cuando aplica
-- capa de prompt en chat/analyze/prepare alineada a composicion: `guardrails_core + system_identity + task_prompt`
+- capa de prompt en chat/analyze/interview/prepare alineada a composicion: `guardrails_core + system_identity + task_prompt`
+- capa de prompt extendida para entrevista: `guardrails_core + system_identity + task_interview_brief`, con query Tavily configurable en `search_interview_tavily`
 - hardening de guardrails implementado: piso no editable, deteccion basica de prompt injection y saneo de salida ante intento de divulgacion de prompt interno
 - pruebas de hardening de guardrails agregadas (`apps/backend/tests/test_guardrails.py`)
-- flujos streaming ajustados para paridad operativa: lo emitido por `message_delta` coincide con `message_complete` y con contenido persistido en `chat`, `analyze/stream` y `prepare/stream`
+- flujos streaming ajustados para paridad operativa: lo emitido por `message_delta` coincide con `message_complete` y con contenido persistido en `chat`, `analyze/stream`, `interview/brief/stream` y `prepare/stream`
 - pruebas edge de seguridad en SSE agregadas para prompt leak/prompt injection en `chat`, `analyze` y `prepare` (`apps/backend/tests/test_sse_flows.py`, `apps/backend/tests/test_guardrails.py`)
 - pruebas de rate limiting de login agregadas (`apps/backend/tests/test_auth_rate_limit.py`)
 - README actualizado con seccion de placeholders validos (`{placeholder}`) y variables disponibles por flujo de prompt
@@ -267,6 +271,7 @@
 - suite backend revalidada con admin de proveedores y guard de longitud Tavily: `72 tests` en `OK` (`skipped=1`)
 - contratos focalizados revalidados: `test_search_provider_admin` + `test_api_error_and_fallbacks` en `OK` (`28 tests`)
 - suite backend revalidada tras admin de runtime IA y top_k configurable: `80 tests` en `OK` (`skipped=1`)
+- suite backend revalidada tras activar `interview_brief` (cache + SSE + trazabilidad): `83 tests` en `OK` (`skipped=1`)
 - build frontend revalidado tras integracion de controles `top_k` en administracion: `npm run build` en `OK`
 
 ## Mejoras Identificadas (Diferidas)
@@ -284,8 +289,8 @@
 - riesgo operativo local: entorno de desarrollo modificado para diagnostico (`anyio` downgraded en `.venv`) sin solucion aun para el bloqueo ASGI
 
 ## Siguiente Actividad
-- revisar pulido final de estilos y espaciado en `analysis` para mejorar legibilidad en pantallas pequenas
-- decidir cierre de alcance UI V1 y preparar corte de estabilizacion (QA visual + smoke test funcional)
+- cerrar commit(s) del bloque `interview_brief` (backend + frontend + docs) y preparar push
+- ejecutar smoke test funcional en UI de `analysis` para validar flujo `generar -> recalcular -> historial -> trazas` en `interview_brief`
 
 ## Ajustes Post-UI Confirmados
 - `semantic_evidence` colapsable por defecto en la vista de `analysis` (implementado)
