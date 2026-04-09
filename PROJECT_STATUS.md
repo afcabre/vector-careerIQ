@@ -154,7 +154,7 @@
 - acciones por oportunidad simplificadas a `Analizar` y `Artefactos` con icono+texto, dejando el recalc mediante icono `refresh` dentro del panel de resultados
 - bloque de ejecucion central ahora es modal por accion (`Analizar`/`Artefactos`) con checkboxes y boton de lanzamiento por flujo
 - botones `Copiar` en artefactos reemplazados por iconos discretos para reducir ruido visual
-- panel central de `Resultados` reorganizado con tabs `Analisis` y `Artefactos`
+- panel central de `Resultados` reorganizado con tabs `Analisis` y `Postulacion`
 - recalc movido al lugar correcto: icono `refresh` en cada bloque de analisis y en cada artefacto generado
 - seleccion de oportunidad ahora hidrata resultados persistidos (`ai_runs` + artefactos actuales) para evitar vacios en oportunidades ya `analyzed`
 - rail derecho de contexto ajustado para evitar desborde horizontal de contenido tecnico
@@ -162,7 +162,12 @@
 - `Analisis` cambia a seleccion explicita: ingreso sin oportunidad activa seleccionada y toggle de seleccion/deseleccion por click en card
 - acciones IA removidas de las cards de oportunidades; ejecucion se centraliza por bloque en `Resultados` (`Analisis` y `Artefactos`)
 - cada bloque de resultado soporta estado `sin generar/generado`, `refresh`, vista previa de `7` lineas con `Ver mas` y paginacion por historico de `run_id`
+- panel central de `Resultados` agrega submenu explicito en `Analisis` para acceso directo a `Perfil-vacante`, `Fit cultural` y `Entrevista`
+- panel central de `Resultados` agrega submenu explicito en `Postulacion` para acceso directo a `Guia de perfil`, `Carta de presentacion` y `Resumen adaptado`
 - columna derecha de `Contextual Intelligence` queda filtrada al bloque/run activo (request+response vinculados) y se vacia cuando no hay seleccion activa
+- al lanzar `Entrevista` desde `Analisis`, el drawer de chat se abre automaticamente para continuar conversacion contextual sobre la oportunidad activa
+- se eliminan en V1 las sugerencias predefinidas (`quick starts`) del chat para reducir ruido y mantener interaccion directa por mensaje libre
+- hardening del fallback de entrevista en frontend: si falla SSE, el fallback no fuerza recomputo (`force=false`) para evitar doble generacion y mensajes duplicados en chat
 - bugfix UX aplicado: streaming SSE visible en `analyze_profile_match` y `analyze_cultural_fit` durante ejecucion (priorizando buffer en vivo sobre ultimo persistido)
 - oportunidades guardadas en `Busqueda` ahora muestran preview de `snapshot_raw_text` (2 lineas) con expand/collapse por card
 - oportunidades guardadas muestran badge de origen (`Busqueda` vs `Manual`) en `Busqueda` y en la lista lateral de `Analisis`

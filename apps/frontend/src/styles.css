@@ -498,7 +498,7 @@ select:focus-visible {
   transform: translateX(100%);
   transition: transform 190ms ease;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 10px;
   box-shadow: -20px 0 40px rgba(2, 6, 23, 0.42);
 }
@@ -526,29 +526,6 @@ select:focus-visible {
 
 .chatDrawerForm {
   margin-top: 0;
-}
-
-.chatQuickStarts {
-  display: grid;
-  gap: 8px;
-  max-height: 146px;
-  overflow-y: auto;
-}
-
-.chatQuickStarts button {
-  text-align: left;
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border-subtle));
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--surface-card) 80%, #0f172a);
-  color: var(--text-secondary);
-  padding: 8px 10px;
-  cursor: pointer;
-  font-size: 0.86rem;
-}
-
-.chatQuickStarts button:hover {
-  border-color: var(--accent);
-  color: var(--text-primary);
 }
 
 .metaText {
@@ -978,6 +955,13 @@ button:disabled {
 .analysisResultTabs {
   display: flex;
   gap: 8px;
+}
+
+.analysisResultSubTabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 2px;
 }
 
 .analysisBubbleHeader {

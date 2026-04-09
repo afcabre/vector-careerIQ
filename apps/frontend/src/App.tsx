@@ -186,6 +186,24 @@ const BLOCK_LABEL_BY_ID: Record<AnalysisResultBlockId, string> = {
   artifact_experience_summary: "Resumen adaptado"
 };
 
+const ANALYSIS_MENU_BLOCKS: Array<{
+  id: "analysis_profile_match" | "analysis_cultural_fit" | "analysis_interview_brief";
+  label: string;
+}> = [
+  { id: "analysis_profile_match", label: "Perfil-vacante" },
+  { id: "analysis_cultural_fit", label: "Fit cultural" },
+  { id: "analysis_interview_brief", label: "Entrevista" }
+];
+
+const POSTULATION_MENU_BLOCKS: Array<{
+  id: "artifact_guidance_text" | "artifact_cover_letter" | "artifact_experience_summary";
+  label: string;
+}> = [
+  { id: "artifact_guidance_text", label: "Guia de perfil" },
+  { id: "artifact_cover_letter", label: "Carta de presentacion" },
+  { id: "artifact_experience_summary", label: "Resumen adaptado" }
+];
+
 const PROMPT_FLOW_LABELS: Record<string, string> = {
   search_jobs_tavily: "Busqueda de vacantes (Tavily)",
   search_culture_tavily: "Fit cultural (Tavily)",
@@ -227,11 +245,6 @@ const SEARCH_PROVIDER_LABELS: Record<string, string> = {
 };
 const AI_RUNTIME_TOP_K_MIN = 4;
 const AI_RUNTIME_TOP_K_MAX = 30;
-const CHAT_QUICK_STARTS = [
-  "Resume el perfil actual en fortalezas y posibles brechas para postulacion.",
-  "Que 3 vacantes deberia priorizar primero y por que?",
-  "Que ajustes minimos recomiendas para mejorar fit con las vacantes activas?"
-];
 
 type PromptConfigDraft = {
   template_text: string;
@@ -947,13 +960,6 @@ export default function App() {
   const selectedSearchRoleCount = searchRoleKeywords.filter((role) =>
     hasRoleToken(searchQuery, role)
   ).length;
-  const chatQuickStarts = selectedPerson
-    ? [
-        `Cual es el foco de posicionamiento para ${selectedPerson.full_name} hoy?`,
-        `Que vacantes deberia priorizar para ${selectedPerson.full_name}?`,
-        "Que mejoras de perfil recomiendas antes de postular?"
-      ]
-    : CHAT_QUICK_STARTS;
   const cvPreviewLineLimit = 8;
   const cvPreviewText = (activeCv?.extracted_text_preview ?? "").trim();
   const cvExpandedText = (activeCvFullText || cvPreviewText).trim();
@@ -1789,14 +1795,6 @@ export default function App() {
     await submitChatMessage(chatInput);
   }
 
-  async function handleQuickStart(message: string) {
-    if (!isChatDrawerOpen) {
-      setIsChatDrawerOpen(true);
-    }
-    setChatInput(message);
-    await submitChatMessage(message);
-  }
-
   async function handleSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedPersonId || !searchQuery.trim()) {
@@ -2168,6 +2166,7 @@ export default function App() {
     setSelectedOpportunityId(opportunityId);
     setResultsPanelTab("analysis");
     setSelectedResultBlockId("analysis_interview_brief");
+    setIsChatDrawerOpen(true);
     setIsInterviewing(true);
     setErrorMessage(null);
     setAnalysisText("");
@@ -2199,7 +2198,8 @@ export default function App() {
       await refreshAiRunsFor(personId, opportunityId);
     } catch (error) {
       try {
-        const payload = await interviewBrief(personId, opportunityId, forceRecompute);
+        // Fallback defensivo: evita doble generacion/append si el stream ya alcanzo a persistir.
+        const payload = await interviewBrief(personId, opportunityId, false);
         setAnalysisText(payload.analysis_text);
         setInterviewBriefText(payload.analysis_text);
         setSemanticEvidence(payload.semantic_evidence);
@@ -3560,18 +3560,6 @@ export default function App() {
                 </div>
               )}
             </div>
-            <div className="chatQuickStarts">
-              {chatQuickStarts.map((message) => (
-                <button
-                  disabled={!selectedPersonId || isSendingMessage}
-                  key={message}
-                  onClick={() => void handleQuickStart(message)}
-                  type="button"
-                >
-                  {message}
-                </button>
-              ))}
-            </div>
             <form className="chatForm chatDrawerForm" onSubmit={handleSendMessage}>
               <input
                 disabled={!selectedPersonId || isSendingMessage}
@@ -4005,13 +3993,30 @@ export default function App() {
                         onClick={() => handleSwitchResultsTab("artifacts")}
                         type="button"
                       >
-                        Artefactos
+                        Postulacion
                       </button>
                     </div>
 
                     {resultsPanelTab === "analysis" ? (
-                      <div className="resultBlockList">
-                        <article
+                      <>
+                        <div className="analysisResultSubTabs">
+                          {ANALYSIS_MENU_BLOCKS.map((item) => (
+                            <button
+                              className={
+                                selectedResultBlockId === item.id
+                                  ? "workspaceTabButton workspaceTabButtonActive"
+                                  : "workspaceTabButton"
+                              }
+                              key={item.id}
+                              onClick={() => handleSelectResultBlock(item.id)}
+                              type="button"
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="resultBlockList">
+                          <article
                           className={
                             selectedResultBlockId === "analysis_profile_match"
                               ? "resultBlockCard resultBlockCardActive"
@@ -4141,9 +4146,9 @@ export default function App() {
                               </button>
                             </div>
                           ) : null}
-                        </article>
+                          </article>
 
-                        <article
+                          <article
                           className={
                             selectedResultBlockId === "analysis_cultural_fit"
                               ? "resultBlockCard resultBlockCardActive"
@@ -4283,9 +4288,9 @@ export default function App() {
                               </button>
                             </div>
                           ) : null}
-                        </article>
+                          </article>
 
-                        <article
+                          <article
                           className={
                             selectedResultBlockId === "analysis_interview_brief"
                               ? "resultBlockCard resultBlockCardActive"
@@ -4423,10 +4428,28 @@ export default function App() {
                               </button>
                             </div>
                           ) : null}
-                        </article>
-                      </div>
+                          </article>
+                        </div>
+                      </>
                     ) : (
-                      <div className="resultBlockList">
+                      <>
+                        <div className="analysisResultSubTabs">
+                          {POSTULATION_MENU_BLOCKS.map((item) => (
+                            <button
+                              className={
+                                selectedResultBlockId === item.id
+                                  ? "workspaceTabButton workspaceTabButtonActive"
+                                  : "workspaceTabButton"
+                              }
+                              key={item.id}
+                              onClick={() => handleSelectResultBlock(item.id)}
+                              type="button"
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="resultBlockList">
                         <article
                           className={
                             selectedResultBlockId === "artifact_guidance_text"
@@ -4876,6 +4899,7 @@ export default function App() {
                           ) : null}
                         </article>
                       </div>
+                      </>
                     )}
                   </article>
 
