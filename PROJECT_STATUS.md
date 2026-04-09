@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `Ajuste UX Analisis: tabs de resultados, hidratacion de persistidos, acciones IA simplificadas y alineacion visual de cards`
+- checkpoint_actual: `Ajuste fino UX Analisis: acciones por bloque con SSE visible, origen de oportunidad, rail contextual colapsable y correcciones de layout`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
 - ultima_actualizacion: `2026-04-08`
 
@@ -159,6 +159,11 @@
 - acciones IA removidas de las cards de oportunidades; ejecucion se centraliza por bloque en `Resultados` (`Analisis` y `Artefactos`)
 - cada bloque de resultado soporta estado `sin generar/generado`, `refresh`, vista previa de `7` lineas con `Ver mas` y paginacion por historico de `run_id`
 - columna derecha de `Contextual Intelligence` queda filtrada al bloque/run activo (request+response vinculados) y se vacia cuando no hay seleccion activa
+- bugfix UX aplicado: streaming SSE visible en `analyze_profile_match` y `analyze_cultural_fit` durante ejecucion (priorizando buffer en vivo sobre ultimo persistido)
+- oportunidades guardadas en `Busqueda` ahora muestran preview de `snapshot_raw_text` (2 lineas) con expand/collapse por card
+- oportunidades guardadas muestran badge de origen (`Busqueda` vs `Manual`) en `Busqueda` y en la lista lateral de `Analisis`
+- columna `Contextual Intelligence` se puede colapsar/expandir con control iconografico y persistencia local (`localStorage`)
+- hardening de layout en `Analisis`: eliminacion de error global `Opportunity not found` por IDs stale al cambiar perfil y alineacion visual consistente de headers/columnas
 - build frontend revalidado tras hardening visual de contraste: `npm run build` en `OK`
 - contratos API de `search` reforzados para validar `provider_status` (fallo total, degradacion parcial y config faltante)
 - contratos API/admin de `search-providers` reforzados para `GET`/`PATCH` y manejo `404` en proveedor desconocido
