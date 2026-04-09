@@ -107,6 +107,24 @@ function ExternalUrlText({ url, noValueText = "URL no disponible" }: ExternalUrl
   );
 }
 
+function ExpandCollapseIcon({ expanded }: { expanded: boolean }) {
+  return (
+    <svg aria-hidden="true" className="iconChevron" focusable="false" viewBox="0 0 24 24">
+      <path d={expanded ? "M6 14l6-6 6 6" : "M6 10l6 6 6-6"} />
+    </svg>
+  );
+}
+
+function ContextPanelIcon() {
+  return (
+    <svg aria-hidden="true" className="iconContextPanel" focusable="false" viewBox="0 0 24 24">
+      <rect x="3" y="4" width="18" height="16" rx="2.5" />
+      <path d="M8 8h9M8 12h9M8 16h6" />
+      <path d="M6 7v10" />
+    </svg>
+  );
+}
+
 const OPPORTUNITY_STATUSES = [
   "detected",
   "analyzed",
@@ -323,6 +341,23 @@ function getArtifactTypeLabel(artifactType: string): string {
   return artifactType;
 }
 
+function getOpportunityOriginLabel(sourceType: string): string {
+  if (sourceType === "search") {
+    return "Busqueda";
+  }
+  if (sourceType === "manual_url" || sourceType === "manual_text") {
+    return "Manual";
+  }
+  return "Manual";
+}
+
+function getOpportunityOriginChipClass(sourceType: string): string {
+  if (sourceType === "search") {
+    return "metaChip metaChipOrigin metaChipOriginSearch";
+  }
+  return "metaChip metaChipOrigin metaChipOriginManual";
+}
+
 function buildPromptConfigDrafts(
   configs: PromptConfig[]
 ): Record<string, PromptConfigDraft> {
@@ -351,22 +386,26 @@ function getAiRunPreviewText(run: AIRun): string {
 
 function buildContentLinePreview(content: string, maxLines: number, expanded: boolean) {
   const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const lines = normalized.split("\n");
+  const hasOverflow = lines.length > maxLines;
   if (expanded) {
     return {
       previewText: normalized,
-      truncated: false
+      truncated: false,
+      hasOverflow
     };
   }
-  const lines = normalized.split("\n");
   if (lines.length <= maxLines) {
     return {
       previewText: normalized,
-      truncated: false
+      truncated: false,
+      hasOverflow
     };
   }
   return {
     previewText: lines.slice(0, maxLines).join("\n"),
-    truncated: true
+    truncated: true,
+    hasOverflow
   };
 }
 
@@ -623,6 +662,9 @@ export default function App() {
   const [manualUrlRawText, setManualUrlRawText] = useState("");
   const [isImportingUrl, setIsImportingUrl] = useState(false);
   const [savedOpportunities, setSavedOpportunities] = useState<Opportunity[]>([]);
+  const [expandedSavedOpportunityPreview, setExpandedSavedOpportunityPreview] = useState<
+    Record<string, boolean>
+  >({});
   const [activeCv, setActiveCv] = useState<ActiveCV | null>(null);
   const [activeCvFullText, setActiveCvFullText] = useState("");
   const [selectedCvFile, setSelectedCvFile] = useState<File | null>(null);
@@ -690,6 +732,12 @@ export default function App() {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isChatDrawerOpen, setIsChatDrawerOpen] = useState(false);
   const [isPersonContextMenuOpen, setIsPersonContextMenuOpen] = useState(false);
+  const [isContextRailCollapsed, setIsContextRailCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") {
+      return false;
+    }
+    return window.localStorage.getItem("analysis_context_rail_collapsed") === "1";
+  });
   const [copiedArtifactKey, setCopiedArtifactKey] = useState<string | null>(null);
 
   useEffect(() => {
@@ -726,6 +774,16 @@ export default function App() {
     };
     void boot();
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(
+      "analysis_context_rail_collapsed",
+      isContextRailCollapsed ? "1" : "0"
+    );
+  }, [isContextRailCollapsed]);
 
   useEffect(() => {
     if (view !== "workspace") {
@@ -1103,21 +1161,27 @@ export default function App() {
   const focusedRunRequestTraces = requestTraces;
 
   useEffect(() => {
+    if (!showAnalysisPage) {
+      return;
+    }
     if (!selectedPersonId || !selectedOpportunityId) {
       setAiRuns([]);
       return;
     }
     void refreshAiRunsFor(selectedPersonId, selectedOpportunityId);
-  }, [selectedPersonId, selectedOpportunityId]);
+  }, [selectedPersonId, selectedOpportunityId, showAnalysisPage]);
 
   useEffect(() => {
+    if (!showAnalysisPage) {
+      return;
+    }
     if (!selectedPersonId || !selectedOpportunityId) {
       setArtifacts([]);
       setGuidanceText("");
       return;
     }
     void refreshArtifacts(selectedOpportunityId);
-  }, [selectedPersonId, selectedOpportunityId]);
+  }, [selectedPersonId, selectedOpportunityId, showAnalysisPage]);
 
   useEffect(() => {
     if (!selectedOpportunityId) {
@@ -1177,12 +1241,24 @@ export default function App() {
   }, [selectedOpportunityId, selectedResultBlockId, aiRuns, runCursorByAction]);
 
   useEffect(() => {
+    if (!showAnalysisPage) {
+      return;
+    }
     if (!selectedPersonId || !selectedOpportunityId || !focusedRunId) {
       setRequestTraces([]);
       return;
     }
     void refreshRequestTracesFor(selectedPersonId, selectedOpportunityId, focusedRunId);
-  }, [selectedPersonId, selectedOpportunityId, focusedRunId]);
+  }, [selectedPersonId, selectedOpportunityId, focusedRunId, showAnalysisPage]);
+
+  useEffect(() => {
+    setSelectedOpportunityId(null);
+    setFocusedRunId("");
+    setSelectedResultBlockId("");
+    setRunCursorByAction({});
+    setAiRuns([]);
+    setRequestTraces([]);
+  }, [selectedPersonId]);
 
   useEffect(() => {
     setSearchQuery("");
@@ -1194,6 +1270,10 @@ export default function App() {
 
   useEffect(() => {
     setOpportunityDiscoveryMode("search");
+  }, [selectedPersonId]);
+
+  useEffect(() => {
+    setExpandedSavedOpportunityPreview({});
   }, [selectedPersonId]);
 
   useEffect(() => {
@@ -1795,6 +1875,11 @@ export default function App() {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "No se pudo cargar el historico IA";
+      if (message.includes("Opportunity not found")) {
+        setAiRuns([]);
+        setFocusedRunId("");
+        return;
+      }
       setErrorMessage(message);
     } finally {
       setIsLoadingAiRuns(false);
@@ -1817,6 +1902,10 @@ export default function App() {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "No se pudo cargar trazas de prompts/API";
+      if (message.includes("Opportunity not found")) {
+        setRequestTraces([]);
+        return;
+      }
       setErrorMessage(message);
     } finally {
       setIsLoadingRequestTraces(false);
@@ -1859,6 +1948,7 @@ export default function App() {
         forceRecompute,
         (delta) => {
           setAnalysisText((current) => `${current}${delta}`);
+          setProfileAnalysisText((current) => `${current}${delta}`);
         }
       );
       setAnalysisText(payload.analysis_text);
@@ -1923,6 +2013,7 @@ export default function App() {
         forceRecompute,
         (delta) => {
           setAnalysisText((current) => `${current}${delta}`);
+          setCultureAnalysisText((current) => `${current}${delta}`);
         }
       );
       setAnalysisText(payload.analysis_text);
@@ -1999,6 +2090,23 @@ export default function App() {
     }
     setIsPreparing(true);
     setErrorMessage(null);
+    if (targets.includes("guidance_text")) {
+      setGuidanceText("");
+    }
+    setArtifacts((current) =>
+      current.filter((item) => {
+        if (item.artifact_type === "cover_letter" && targets.includes("cover_letter")) {
+          return false;
+        }
+        if (
+          item.artifact_type === "experience_summary" &&
+          targets.includes("experience_summary")
+        ) {
+          return false;
+        }
+        return true;
+      })
+    );
 
     try {
       const payload = await prepareOpportunityStream(
@@ -2285,16 +2393,18 @@ export default function App() {
   const summaryRuns = getRunsForBlock("artifact_experience_summary");
   const getRunPreview = (run: AIRun | null) => (run ? getAiRunPreviewText(run) : "");
 
-  const profileContent =
-    getRunPreview(profileRun) || (isAnalyzingProfile ? profileAnalysisText : "");
-  const culturalContent =
-    getRunPreview(culturalRun) || (isAnalyzingCultural ? cultureAnalysisText : "");
-  const guidanceContent =
-    getRunPreview(guidanceRun) || guidanceText;
-  const coverContent =
-    getRunPreview(coverRun) || getArtifactFallbackContent("cover_letter");
+  const liveProfileContent = isAnalyzingProfile ? profileAnalysisText : "";
+  const liveCulturalContent = isAnalyzingCultural ? cultureAnalysisText : "";
+  const liveGuidanceContent = isPreparing ? guidanceText : "";
+  const liveCoverContent = getArtifactFallbackContent("cover_letter");
+  const liveSummaryContent = getArtifactFallbackContent("experience_summary");
+
+  const profileContent = liveProfileContent || getRunPreview(profileRun);
+  const culturalContent = liveCulturalContent || getRunPreview(culturalRun);
+  const guidanceContent = liveGuidanceContent || getRunPreview(guidanceRun) || guidanceText;
+  const coverContent = (isPreparing ? liveCoverContent : "") || getRunPreview(coverRun) || liveCoverContent;
   const summaryContent =
-    getRunPreview(summaryRun) || getArtifactFallbackContent("experience_summary");
+    (isPreparing ? liveSummaryContent : "") || getRunPreview(summaryRun) || liveSummaryContent;
 
   const profilePreview = buildContentLinePreview(
     profileContent,
@@ -3501,29 +3611,67 @@ export default function App() {
           <p className="metaText">No hay oportunidades guardadas para este perfil.</p>
         ) : (
           <div className="chatList">
-            {savedOpportunities.map((item) => (
-              <article
-                className="chatBubble chatBubbleUser savedOpportunityCard"
-                key={item.opportunity_id}
-              >
-                <p className="chatRole savedOpportunityStatus">{item.status.toUpperCase()}</p>
-                <p className="chatContent savedOpportunityTitle">{item.title}</p>
-                <div className="metaChips">
-                  <span className="metaChip">{item.company || "Empresa no identificada"}</span>
-                  <span className="metaChip">{item.location || "Ubicacion no especificada"}</span>
-                </div>
-                <p className="metaText savedOpportunityLink">
-                  <ExternalUrlText url={item.source_url} />
-                </p>
-              </article>
-            ))}
+            {savedOpportunities.map((item) => {
+              const isExpanded = expandedSavedOpportunityPreview[item.opportunity_id] ?? false;
+              const descriptionPreview = buildContentLinePreview(
+                item.snapshot_raw_text ?? "",
+                2,
+                isExpanded
+              );
+              return (
+                <article
+                  className="chatBubble chatBubbleUser savedOpportunityCard"
+                  key={item.opportunity_id}
+                >
+                  <p className="chatRole savedOpportunityStatus">{item.status.toUpperCase()}</p>
+                  <p className="chatContent savedOpportunityTitle">{item.title}</p>
+                  <div className="metaChips">
+                    <span className="metaChip">{item.company || "Empresa no identificada"}</span>
+                    <span className="metaChip">{item.location || "Ubicacion no especificada"}</span>
+                    <span className={getOpportunityOriginChipClass(item.source_type)}>
+                      {getOpportunityOriginLabel(item.source_type)}
+                    </span>
+                  </div>
+                  {descriptionPreview.previewText ? (
+                    <p className="savedOpportunitySnippet">{descriptionPreview.previewText}</p>
+                  ) : null}
+                  {descriptionPreview.hasOverflow ? (
+                    <div className="savedOpportunityExpandRow">
+                      <button
+                        aria-label={isExpanded ? "Contraer descripcion" : "Expandir descripcion"}
+                        className="iconOnlyButton"
+                        onClick={() =>
+                          setExpandedSavedOpportunityPreview((current) => ({
+                            ...current,
+                            [item.opportunity_id]: !isExpanded
+                          }))
+                        }
+                        title={isExpanded ? "Contraer" : "Ver mas"}
+                        type="button"
+                      >
+                        {isExpanded ? "▴" : "▾"}
+                      </button>
+                    </div>
+                  ) : null}
+                  <p className="metaText savedOpportunityLink">
+                    <ExternalUrlText url={item.source_url} />
+                  </p>
+                </article>
+              );
+            })}
           </div>
         )}
         </section>
       ) : null}
       {showAnalysisPage ? (
         <section className="panel selectedPanel">
-          <div className="analysisLayoutGrid">
+          <div
+            className={
+              isContextRailCollapsed
+                ? "analysisLayoutGrid analysisLayoutGridCollapsed"
+                : "analysisLayoutGrid"
+            }
+          >
             <aside className="analysisRail analysisRailLeft">
               <header className="analysisColumnHeader">
                 <h3>Oportunidades guardadas</h3>
@@ -3554,6 +3702,11 @@ export default function App() {
                     >
                       <p className="chatRole savedOpportunityStatus">{item.status.toUpperCase()}</p>
                       <p className="chatContent savedOpportunityTitle">{item.title}</p>
+                      <div className="metaChips">
+                        <span className={getOpportunityOriginChipClass(item.source_type)}>
+                          {getOpportunityOriginLabel(item.source_type)}
+                        </span>
+                      </div>
                       <p className="metaText analysisOpportunityCompany">
                         {item.company || "Empresa no identificada"}
                       </p>
@@ -3736,7 +3889,9 @@ export default function App() {
                                 }
                                 type="button"
                               >
-                                {expandedResultBlocks.analysis_profile_match ? "▴" : "▾"}
+                                <ExpandCollapseIcon
+                                  expanded={expandedResultBlocks.analysis_profile_match}
+                                />
                               </button>
                             </div>
                           ) : null}
@@ -3876,7 +4031,9 @@ export default function App() {
                                 }
                                 type="button"
                               >
-                                {expandedResultBlocks.analysis_cultural_fit ? "▴" : "▾"}
+                                <ExpandCollapseIcon
+                                  expanded={expandedResultBlocks.analysis_cultural_fit}
+                                />
                               </button>
                             </div>
                           ) : null}
@@ -4025,7 +4182,9 @@ export default function App() {
                                 }
                                 type="button"
                               >
-                                {expandedResultBlocks.artifact_guidance_text ? "▴" : "▾"}
+                                <ExpandCollapseIcon
+                                  expanded={expandedResultBlocks.artifact_guidance_text}
+                                />
                               </button>
                             </div>
                           ) : null}
@@ -4171,7 +4330,9 @@ export default function App() {
                                 }
                                 type="button"
                               >
-                                {expandedResultBlocks.artifact_cover_letter ? "▴" : "▾"}
+                                <ExpandCollapseIcon
+                                  expanded={expandedResultBlocks.artifact_cover_letter}
+                                />
                               </button>
                             </div>
                           ) : null}
@@ -4321,7 +4482,9 @@ export default function App() {
                                 }
                                 type="button"
                               >
-                                {expandedResultBlocks.artifact_experience_summary ? "▴" : "▾"}
+                                <ExpandCollapseIcon
+                                  expanded={expandedResultBlocks.artifact_experience_summary}
+                                />
                               </button>
                             </div>
                           ) : null}
@@ -4394,9 +4557,20 @@ export default function App() {
               )}
             </div>
 
+            {!isContextRailCollapsed ? (
             <aside className="analysisRail analysisRailRight">
               <header className="analysisColumnHeader">
                 <h3>Contextual Intelligence</h3>
+                <button
+                  aria-label="Ocultar contexto de historial y trazas"
+                  className="iconOnlyButton contextRailToggleButton hasTooltip"
+                  data-tooltip="Ocultar contexto"
+                  onClick={() => setIsContextRailCollapsed(true)}
+                  title="Ocultar contexto"
+                  type="button"
+                >
+                  <ContextPanelIcon />
+                </button>
               </header>
 
               {!selectedOpportunity ? (
@@ -4467,6 +4641,21 @@ export default function App() {
                 </>
               )}
             </aside>
+            ) : null}
+            {isContextRailCollapsed ? (
+              <div className="analysisRailCollapsedHandle">
+                <button
+                  aria-label="Mostrar contexto de historial y trazas"
+                  className="iconOnlyButton contextRailToggleButton contextRailToggleButtonCollapsed hasTooltip"
+                  data-tooltip="Mostrar contexto"
+                  onClick={() => setIsContextRailCollapsed(false)}
+                  title="Mostrar contexto"
+                  type="button"
+                >
+                  <ContextPanelIcon />
+                </button>
+              </div>
+            ) : null}
           </div>
         </section>
       ) : null}
