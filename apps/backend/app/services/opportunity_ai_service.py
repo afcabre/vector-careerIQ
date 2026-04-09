@@ -21,9 +21,11 @@ from app.services.person_store import PersonRecord
 from app.services.prompt_config_store import (
     FLOW_GUARDRAILS_CORE,
     FLOW_SEARCH_CULTURE_TAVILY,
+    FLOW_SEARCH_INTERVIEW_TAVILY,
     FLOW_SYSTEM_IDENTITY,
     FLOW_TASK_ANALYZE_CULTURAL_FIT,
     FLOW_TASK_ANALYZE_PROFILE_MATCH,
+    FLOW_TASK_INTERVIEW_BRIEF,
     FLOW_TASK_PREPARE_COVER_LETTER,
     FLOW_TASK_PREPARE_EXPERIENCE_SUMMARY,
     FLOW_TASK_PREPARE_GUIDANCE,
@@ -87,6 +89,13 @@ class AnalyzeCulturalFitResult(TypedDict):
     cultural_signals: list[CulturalSignal]
 
 
+class InterviewBriefResult(TypedDict):
+    analysis_text: str
+    interview_warnings: list[str]
+    interview_sources: list[CulturalSignal]
+    semantic_evidence: SemanticEvidence
+
+
 class PreparationSelectionResult(TypedDict):
     outputs: dict[str, str]
     semantic_evidence: SemanticEvidence
@@ -121,6 +130,10 @@ PREPARE_TARGETS = [
 
 def _semantic_top_k_analysis() -> int:
     return int(get_ai_runtime_config()["top_k_semantic_analysis"])
+
+
+def _semantic_top_k_interview() -> int:
+    return int(get_ai_runtime_config()["top_k_semantic_interview"])
 
 
 def _now_iso() -> str:
@@ -467,6 +480,115 @@ def _tavily_culture_signals(
     return signals, warnings
 
 
+def _tavily_interview_signals(
+    person: PersonRecord,
+    opportunity: OpportunityRecord,
+    settings: Settings,
+    max_results: int = 6,
+    run_id: str = "",
+) -> tuple[list[CulturalSignal], list[str]]:
+    warnings: list[str] = []
+    if not settings.tavily_api_key:
+        warnings.append("No Tavily API key: contexto de entrevista con evidencia externa limitada")
+        return [], warnings
+
+    company = _company_name(opportunity)
+    roles = ", ".join(person["target_roles"][:2]).strip()
+    fallback_query = (
+        f"{company} company profile recent news strategy leadership hiring interview process "
+        f"employee experience {roles}"
+    ).strip()
+    query = build_prompt_query(
+        flow_key=FLOW_SEARCH_INTERVIEW_TAVILY,
+        context={
+            "company": company,
+            "roles": roles,
+            "person_location": person["location"],
+            "target_roles": ", ".join(person["target_roles"][:3]),
+        },
+        fallback=fallback_query,
+    )
+
+    payload = json.dumps(
+        {
+            "api_key": settings.tavily_api_key,
+            "query": query,
+            "max_results": max_results,
+            "search_depth": "basic",
+            "include_answer": False,
+        }
+    ).encode("utf-8")
+    add_request_trace(
+        person_id=person["person_id"],
+        opportunity_id=opportunity["opportunity_id"],
+        run_id=run_id,
+        destination="tavily",
+        flow_key="search_interview_tavily",
+        request_payload={
+            "method": "POST",
+            "url": "https://api.tavily.com/search",
+            "body": {
+                "query": query,
+                "max_results": max_results,
+                "search_depth": "basic",
+                "include_answer": False,
+            },
+        },
+    )
+    request = Request(
+        url="https://api.tavily.com/search",
+        method="POST",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+    )
+
+    try:
+        with urlopen(request, timeout=20) as response:
+            raw = response.read().decode("utf-8")
+        body = json.loads(raw)
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
+        warnings.append("No fue posible consultar Tavily para contexto de entrevista")
+        logger.warning(
+            "tavily interview query failed person_id=%s opportunity_id=%s error=%s",
+            person["person_id"],
+            opportunity["opportunity_id"],
+            exc,
+        )
+        return [], warnings
+    except Exception:
+        warnings.append("Error inesperado al consultar fuentes externas para entrevista")
+        logger.exception(
+            "tavily interview unexpected error person_id=%s opportunity_id=%s",
+            person["person_id"],
+            opportunity["opportunity_id"],
+        )
+        return [], warnings
+
+    signals: list[CulturalSignal] = []
+    for result in body.get("results", []):
+        url = str(result.get("url", "")).strip()
+        title = str(result.get("title", "")).strip()
+        snippet = _short_text(str(result.get("content", "")))
+        if not (url or title or snippet):
+            continue
+        signals.append(
+            {
+                "source_provider": "tavily",
+                "source_url": url,
+                "title": title or "Fuente sin titulo",
+                "snippet": snippet or "Sin snippet disponible",
+                "captured_at": _now_iso(),
+            }
+        )
+
+    if not signals:
+        warnings.append("Sin evidencia externa suficiente para brief de entrevista")
+    elif len(signals) < 3:
+        warnings.append("Evidencia externa limitada para entrevista: pocas fuentes")
+
+    return signals, warnings
+
+
 def _cultural_confidence(signals_count: int) -> str:
     if signals_count <= 0:
         return "low"
@@ -704,6 +826,61 @@ def stream_analyze_cultural_fit_text(
     return confidence, warnings, signals, stream
 
 
+def stream_interview_brief_text(
+    person: PersonRecord,
+    opportunity: OpportunityRecord,
+    settings: Settings,
+    run_id: str = "",
+):
+    interview_sources, interview_warnings = _tavily_interview_signals(
+        person,
+        opportunity,
+        settings,
+        run_id=run_id,
+    )
+    semantic_evidence = _build_semantic_evidence(
+        person,
+        opportunity,
+        settings,
+        top_k=_semantic_top_k_interview(),
+    )
+    warnings_text = "\n".join(f"- {item}" for item in interview_warnings) or "- sin advertencias"
+    user_prompt = build_prompt_text(
+        flow_key=FLOW_TASK_INTERVIEW_BRIEF,
+        context={
+            "person_context": _person_context(person),
+            "opportunity_context": _opportunity_context(opportunity),
+            "semantic_evidence_context": _semantic_evidence_context(semantic_evidence),
+            "interview_evidence_context": _cultural_evidence_context(interview_sources),
+            "research_warnings": warnings_text,
+        },
+        fallback=(
+            "Genera brief de entrevista para la oportunidad.\n"
+            "Incluye resumen ejecutivo, riesgos/red flags y preguntas sugeridas.\n"
+            "Cita fuentes y evita afirmaciones sin evidencia.\n\n"
+            f"Persona:\n{_person_context(person)}\n\n"
+            f"Vacante:\n{_opportunity_context(opportunity)}\n\n"
+            f"Evidencia semantica CV:\n{_semantic_evidence_context(semantic_evidence)}\n\n"
+            f"Evidencia externa:\n{_cultural_evidence_context(interview_sources)}\n\n"
+            f"Advertencias:\n{warnings_text}"
+        ),
+    )
+    stream = stream_prompt(
+        _system_prompt_base(
+            person,
+            suspicious_input=_is_suspicious_opportunity_input(opportunity),
+        ),
+        user_prompt,
+        settings,
+        temperature=0.2,
+        person_id=person["person_id"],
+        opportunity_id=opportunity["opportunity_id"],
+        flow_key="interview_brief_stream",
+        run_id=run_id,
+    )
+    return semantic_evidence, interview_sources, interview_warnings, stream
+
+
 def stream_prepare_sections(
     person: PersonRecord,
     opportunity: OpportunityRecord,
@@ -851,6 +1028,72 @@ def analyze_cultural_fit(
         "cultural_confidence": confidence,
         "cultural_warnings": warnings,
         "cultural_signals": signals,
+    }
+
+
+def interview_brief(
+    person: PersonRecord,
+    opportunity: OpportunityRecord,
+    settings: Settings,
+    run_id: str = "",
+) -> InterviewBriefResult:
+    interview_sources, interview_warnings = _tavily_interview_signals(
+        person,
+        opportunity,
+        settings,
+        run_id=run_id,
+    )
+    semantic_evidence = _build_semantic_evidence(
+        person,
+        opportunity,
+        settings,
+        top_k=_semantic_top_k_interview(),
+    )
+    warnings_text = "\n".join(f"- {item}" for item in interview_warnings) or "- sin advertencias"
+    user_prompt = build_prompt_text(
+        flow_key=FLOW_TASK_INTERVIEW_BRIEF,
+        context={
+            "person_context": _person_context(person),
+            "opportunity_context": _opportunity_context(opportunity),
+            "semantic_evidence_context": _semantic_evidence_context(semantic_evidence),
+            "interview_evidence_context": _cultural_evidence_context(interview_sources),
+            "research_warnings": warnings_text,
+        },
+        fallback=(
+            "Genera brief de entrevista para la oportunidad.\n"
+            "Incluye resumen ejecutivo, riesgos/red flags y preguntas sugeridas.\n"
+            "Cita fuentes y evita afirmaciones sin evidencia.\n\n"
+            f"Persona:\n{_person_context(person)}\n\n"
+            f"Vacante:\n{_opportunity_context(opportunity)}\n\n"
+            f"Evidencia semantica CV:\n{_semantic_evidence_context(semantic_evidence)}\n\n"
+            f"Evidencia externa:\n{_cultural_evidence_context(interview_sources)}\n\n"
+            f"Advertencias:\n{warnings_text}"
+        ),
+    )
+    response = complete_prompt(
+        _system_prompt_base(
+            person,
+            suspicious_input=_is_suspicious_opportunity_input(opportunity),
+        ),
+        user_prompt,
+        settings,
+        temperature=0.2,
+        person_id=person["person_id"],
+        opportunity_id=opportunity["opportunity_id"],
+        flow_key="interview_brief",
+        run_id=run_id,
+    )
+    response = enforce_output_guardrails(response)
+    if response == FALLBACK_MESSAGE:
+        response = (
+            "No fue posible generar brief de entrevista con LLM. "
+            "Como fallback, revisa fuentes publicas sobre la empresa y prepara preguntas clave."
+        )
+    return {
+        "analysis_text": response,
+        "interview_warnings": interview_warnings,
+        "interview_sources": interview_sources,
+        "semantic_evidence": semantic_evidence,
     }
 
 

@@ -11,6 +11,7 @@ from app.core.settings import Settings, get_settings
 from app.services.ai_run_store import (
     ACTION_ANALYZE_CULTURAL_FIT,
     ACTION_ANALYZE_PROFILE_MATCH,
+    ACTION_INTERVIEW_BRIEF,
     ACTION_PREPARE_COVER_LETTER,
     ACTION_PREPARE_EXPERIENCE_SUMMARY,
     ACTION_PREPARE_GUIDANCE,
@@ -21,6 +22,7 @@ from app.services.ai_run_store import (
     upsert_current_ai_run,
 )
 from app.services.artifact_store import ARTIFACT_TYPES, list_current_artifacts, upsert_current_artifact
+from app.services.conversation_store import append_message
 from app.services.opportunity_ai_service import (
     PREPARE_TARGET_COVER_LETTER,
     PREPARE_TARGET_EXPERIENCE_SUMMARY,
@@ -29,11 +31,13 @@ from app.services.opportunity_ai_service import (
     analyze_cultural_fit,
     analyze_profile_match,
     analyze_opportunity,
+    interview_brief,
     prepare_application_materials,
     prepare_selected_materials,
     stream_analyze_cultural_fit_text,
     stream_analyze_profile_match_text,
     stream_analyze_text,
+    stream_interview_brief_text,
     stream_prepare_sections,
 )
 from app.services.opportunity_store import (
@@ -167,6 +171,16 @@ class AnalyzeCulturalFitResponse(BaseModel):
     cultural_warnings: list[str]
     cultural_signals: list[CulturalSignalResponse]
     served_from_cache: bool
+
+
+class InterviewBriefResponse(BaseModel):
+    opportunity: OpportunityResponse
+    analysis_text: str
+    interview_warnings: list[str]
+    interview_sources: list[CulturalSignalResponse]
+    semantic_evidence: SemanticEvidenceResponse
+    served_from_cache: bool
+    assistant_message_id: str
 
 
 class ArtifactResponse(BaseModel):
@@ -583,6 +597,85 @@ def analyze_cultural_fit_action(
     )
 
 
+@router.post("/{opportunity_id}/interview/brief")
+def interview_brief_action(
+    person_id: str,
+    opportunity_id: str,
+    payload: ActionRequest,
+    _: SessionData = Depends(require_operator_session),
+    settings: Settings = Depends(get_settings),
+) -> InterviewBriefResponse:
+    person = get_person(person_id)
+    if not person:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Person not found",
+        )
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    if not payload.force_recompute:
+        cached = get_current_ai_run(
+            person_id=person_id,
+            opportunity_id=opportunity_id,
+            action_key=ACTION_INTERVIEW_BRIEF,
+        )
+        if cached:
+            cached_payload = cached.get("result_payload", {})
+            if isinstance(cached_payload, dict):
+                text = str(cached_payload.get("analysis_text", "")).strip()
+                warnings = _as_cultural_warnings(cached_payload.get("interview_warnings"))
+                sources = _as_cultural_signals(cached_payload.get("interview_sources"))
+                evidence = _as_semantic_evidence(cached_payload.get("semantic_evidence"))
+                if text:
+                    return InterviewBriefResponse(
+                        opportunity=_to_response(opportunity),
+                        analysis_text=text,
+                        interview_warnings=warnings,
+                        interview_sources=[CulturalSignalResponse(**item) for item in sources],
+                        semantic_evidence=evidence,
+                        served_from_cache=True,
+                        assistant_message_id="",
+                    )
+
+    run_id = new_ai_run_id()
+    result = interview_brief(person, opportunity, settings, run_id=run_id)
+    upsert_current_ai_run(
+        person_id=person_id,
+        opportunity_id=opportunity_id,
+        action_key=ACTION_INTERVIEW_BRIEF,
+        run_id=run_id,
+        result_payload={
+            "analysis_text": result["analysis_text"],
+            "interview_warnings": result["interview_warnings"],
+            "interview_sources": result["interview_sources"],
+            "semantic_evidence": result["semantic_evidence"],
+        },
+    )
+    appended = append_message(person_id, "assistant", result["analysis_text"])
+    assistant_message_id = appended["messages"][-1]["message_id"] if appended["messages"] else ""
+    updated = update_saved_opportunity(
+        person_id=person_id,
+        opportunity_id=opportunity_id,
+        status="analyzed",
+        notes=opportunity.get("notes", ""),
+    )
+    final_item = updated or opportunity
+    return InterviewBriefResponse(
+        opportunity=_to_response(final_item),
+        analysis_text=result["analysis_text"],
+        interview_warnings=result["interview_warnings"],
+        interview_sources=result["interview_sources"],
+        semantic_evidence=result["semantic_evidence"],
+        served_from_cache=False,
+        assistant_message_id=assistant_message_id,
+    )
+
+
 @router.post("/{opportunity_id}/analyze/profile-match/stream")
 async def analyze_profile_match_stream(
     person_id: str,
@@ -854,6 +947,159 @@ async def analyze_cultural_fit_stream(
                     "cultural_warnings": warnings,
                     "cultural_signals": signals,
                     "served_from_cache": False,
+                },
+            )
+        except Exception as exc:  # pragma: no cover - network stream path
+            yield _serialize_sse(
+                "error",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "detail": str(exc),
+                },
+            )
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.post("/{opportunity_id}/interview/brief/stream")
+async def interview_brief_stream(
+    person_id: str,
+    opportunity_id: str,
+    payload: ActionRequest | None = None,
+    _: SessionData = Depends(require_operator_session),
+    settings: Settings = Depends(get_settings),
+) -> StreamingResponse:
+    person = get_person(person_id)
+    if not person:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Person not found",
+        )
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    async def event_generator():
+        try:
+            request_payload = payload or ActionRequest()
+            yield _serialize_sse(
+                "message_start",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "channel": "analysis_text",
+                },
+            )
+            if not request_payload.force_recompute:
+                cached = get_current_ai_run(
+                    person_id=person_id,
+                    opportunity_id=opportunity_id,
+                    action_key=ACTION_INTERVIEW_BRIEF,
+                )
+                if cached and isinstance(cached.get("result_payload"), dict):
+                    cached_payload = cached["result_payload"]
+                    text = str(cached_payload.get("analysis_text", "")).strip()
+                    warnings = _as_cultural_warnings(cached_payload.get("interview_warnings"))
+                    sources = _as_cultural_signals(cached_payload.get("interview_sources"))
+                    evidence = _as_semantic_evidence(cached_payload.get("semantic_evidence"))
+                    if text:
+                        yield _serialize_sse(
+                            "tool_status",
+                            {
+                                "person_id": person_id,
+                                "opportunity_id": opportunity_id,
+                                "stage": "interview_brief_cached",
+                            },
+                        )
+                        yield _serialize_sse(
+                            "message_delta",
+                            {
+                                "person_id": person_id,
+                                "opportunity_id": opportunity_id,
+                                "channel": "analysis_text",
+                                "delta": text,
+                            },
+                        )
+                        yield _serialize_sse(
+                            "message_complete",
+                            {
+                                "opportunity": opportunity,
+                                "analysis_text": text,
+                                "interview_warnings": warnings,
+                                "interview_sources": sources,
+                                "semantic_evidence": evidence,
+                                "served_from_cache": True,
+                                "assistant_message_id": "",
+                            },
+                        )
+                        return
+
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "interview_brief_running",
+                },
+            )
+            run_id = new_ai_run_id()
+            semantic_evidence, interview_sources, interview_warnings, stream = (
+                stream_interview_brief_text(
+                    person,
+                    opportunity,
+                    settings,
+                    run_id=run_id,
+                )
+            )
+            analysis_text = ""
+            for delta in stream:
+                analysis_text += delta
+                yield _serialize_sse(
+                    "message_delta",
+                    {
+                        "person_id": person_id,
+                        "opportunity_id": opportunity_id,
+                        "channel": "analysis_text",
+                        "delta": delta,
+                    },
+                )
+                await asyncio.sleep(0)
+
+            upsert_current_ai_run(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                action_key=ACTION_INTERVIEW_BRIEF,
+                run_id=run_id,
+                result_payload={
+                    "analysis_text": analysis_text,
+                    "interview_warnings": interview_warnings,
+                    "interview_sources": interview_sources,
+                    "semantic_evidence": semantic_evidence,
+                },
+            )
+            appended = append_message(person_id, "assistant", analysis_text)
+            assistant_message_id = appended["messages"][-1]["message_id"] if appended["messages"] else ""
+            updated = update_saved_opportunity(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                status="analyzed",
+                notes=opportunity.get("notes", ""),
+            )
+            final_item = updated or opportunity
+            yield _serialize_sse(
+                "message_complete",
+                {
+                    "opportunity": final_item,
+                    "analysis_text": analysis_text,
+                    "interview_warnings": interview_warnings,
+                    "interview_sources": interview_sources,
+                    "semantic_evidence": semantic_evidence,
+                    "served_from_cache": False,
+                    "assistant_message_id": assistant_message_id,
                 },
             )
         except Exception as exc:  # pragma: no cover - network stream path

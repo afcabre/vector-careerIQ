@@ -9,11 +9,13 @@ from app.services.firestore_client import get_firestore_client
 
 FLOW_SEARCH_JOBS_TAVILY = "search_jobs_tavily"
 FLOW_SEARCH_CULTURE_TAVILY = "search_culture_tavily"
+FLOW_SEARCH_INTERVIEW_TAVILY = "search_interview_tavily"
 FLOW_GUARDRAILS_CORE = "guardrails_core"
 FLOW_SYSTEM_IDENTITY = "system_identity"
 FLOW_TASK_CHAT = "task_chat"
 FLOW_TASK_ANALYZE_PROFILE_MATCH = "task_analyze_profile_match"
 FLOW_TASK_ANALYZE_CULTURAL_FIT = "task_analyze_cultural_fit"
+FLOW_TASK_INTERVIEW_BRIEF = "task_interview_brief"
 FLOW_TASK_PREPARE_GUIDANCE = "task_prepare_guidance"
 FLOW_TASK_PREPARE_COVER_LETTER = "task_prepare_cover_letter"
 FLOW_TASK_PREPARE_EXPERIENCE_SUMMARY = "task_prepare_experience_summary"
@@ -88,6 +90,8 @@ def _required_placeholders(flow_key: str) -> set[str]:
         return {"query"}
     if flow_key == FLOW_SEARCH_CULTURE_TAVILY:
         return {"company"}
+    if flow_key == FLOW_SEARCH_INTERVIEW_TAVILY:
+        return {"company"}
     if flow_key == FLOW_SYSTEM_IDENTITY:
         return {"person_name"}
     if flow_key == FLOW_TASK_CHAT:
@@ -95,6 +99,8 @@ def _required_placeholders(flow_key: str) -> set[str]:
     if flow_key == FLOW_TASK_ANALYZE_PROFILE_MATCH:
         return {"person_context", "opportunity_context"}
     if flow_key == FLOW_TASK_ANALYZE_CULTURAL_FIT:
+        return {"person_context", "opportunity_context"}
+    if flow_key == FLOW_TASK_INTERVIEW_BRIEF:
         return {"person_context", "opportunity_context"}
     if flow_key == FLOW_TASK_PREPARE_GUIDANCE:
         return {"person_context", "opportunity_context"}
@@ -155,6 +161,30 @@ def _default_configs() -> dict[str, PromptConfigRecord]:
                 "\"careers\"",
                 "\"people\"",
                 "\"culture\"",
+                "\"employee experience\"",
+            ],
+            "is_active": True,
+            "updated_by": "system",
+            "created_at": now,
+            "updated_at": now,
+        },
+        {
+            "config_id": f"pc-{FLOW_SEARCH_INTERVIEW_TAVILY}",
+            "scope": "global",
+            "flow_key": FLOW_SEARCH_INTERVIEW_TAVILY,
+            "template_text": (
+                "Investiga contexto pre-entrevista de {company} para roles {roles}. "
+                "Prioriza noticias recientes y fuentes publicas confiables en: {target_sources}."
+            ),
+            "target_sources": [
+                "site:linkedin.com/company",
+                "site:news.google.com",
+                "site:crunchbase.com/organization",
+                "site:glassdoor.com",
+                "site:indeed.com/cmp",
+                "\"news\"",
+                "\"careers\"",
+                "\"interview\"",
                 "\"employee experience\"",
             ],
             "is_active": True,
@@ -247,6 +277,29 @@ def _default_configs() -> dict[str, PromptConfigRecord]:
                 "Vacante:\n{opportunity_context}\n\n"
                 "Senales culturales externas:\n{cultural_evidence_context}\n\n"
                 "Nivel de confianza sugerido por evidencia: {confidence_hint}"
+            ),
+            "target_sources": [],
+            "is_active": True,
+            "updated_by": "system",
+            "created_at": now,
+            "updated_at": now,
+        },
+        {
+            "config_id": f"pc-{FLOW_TASK_INTERVIEW_BRIEF}",
+            "scope": "global",
+            "flow_key": FLOW_TASK_INTERVIEW_BRIEF,
+            "template_text": (
+                "Genera un brief de entrevista para esta oportunidad.\n"
+                "Formato:\n"
+                "1) Resumen ejecutivo de la empresa y la oportunidad\n"
+                "2) Riesgos o red flags (con evidencia)\n"
+                "3) Preguntas sugeridas para entrevista (priorizadas)\n"
+                "4) Fuentes usadas y nivel de confianza\n\n"
+                "Persona:\n{person_context}\n\n"
+                "Vacante:\n{opportunity_context}\n\n"
+                "Evidencia semantica CV:\n{semantic_evidence_context}\n\n"
+                "Evidencia externa pre-entrevista:\n{interview_evidence_context}\n\n"
+                "Advertencias de investigacion:\n{research_warnings}"
             ),
             "target_sources": [],
             "is_active": True,
@@ -379,7 +432,11 @@ def _validate_update(
     cleaned_sources: list[str] | None = None
     if target_sources is not None:
         cleaned_sources = _sanitize_sources(target_sources)
-        if flow_key in {FLOW_SEARCH_JOBS_TAVILY, FLOW_SEARCH_CULTURE_TAVILY} and not cleaned_sources:
+        if flow_key in {
+            FLOW_SEARCH_JOBS_TAVILY,
+            FLOW_SEARCH_CULTURE_TAVILY,
+            FLOW_SEARCH_INTERVIEW_TAVILY,
+        } and not cleaned_sources:
             raise ValueError("target_sources cannot be empty")
 
     return cleaned_template, cleaned_sources

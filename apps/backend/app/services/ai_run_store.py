@@ -9,6 +9,7 @@ from app.services.firestore_client import get_firestore_client
 
 ACTION_ANALYZE_PROFILE_MATCH = "analyze_profile_match"
 ACTION_ANALYZE_CULTURAL_FIT = "analyze_cultural_fit"
+ACTION_INTERVIEW_BRIEF = "interview_brief"
 ACTION_PREPARE_GUIDANCE = "prepare_guidance_text"
 ACTION_PREPARE_COVER_LETTER = "prepare_cover_letter"
 ACTION_PREPARE_EXPERIENCE_SUMMARY = "prepare_experience_summary"
@@ -16,6 +17,7 @@ ACTION_PREPARE_EXPERIENCE_SUMMARY = "prepare_experience_summary"
 AI_ACTION_KEYS = [
     ACTION_ANALYZE_PROFILE_MATCH,
     ACTION_ANALYZE_CULTURAL_FIT,
+    ACTION_INTERVIEW_BRIEF,
     ACTION_PREPARE_GUIDANCE,
     ACTION_PREPARE_COVER_LETTER,
     ACTION_PREPARE_EXPERIENCE_SUMMARY,
