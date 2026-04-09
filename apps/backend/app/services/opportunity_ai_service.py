@@ -25,6 +25,7 @@ from app.services.prompt_config_store import (
     FLOW_SYSTEM_IDENTITY,
     FLOW_TASK_ANALYZE_CULTURAL_FIT,
     FLOW_TASK_ANALYZE_PROFILE_MATCH,
+    FLOW_TASK_INTERVIEW_RESEARCH_PLAN,
     FLOW_TASK_INTERVIEW_BRIEF,
     FLOW_TASK_PREPARE_COVER_LETTER,
     FLOW_TASK_PREPARE_EXPERIENCE_SUMMARY,
@@ -62,6 +63,23 @@ class SemanticEvidence(TypedDict):
     snippets: list[str]
 
 
+class InterviewResearchIteration(TypedDict):
+    step_order: int
+    topic_key: str
+    topic_label: str
+    query: str
+    status: str
+    results_count: int
+    top_urls: list[str]
+    warning: str
+
+
+class InterviewResearchQuery(TypedDict):
+    topic_key: str
+    topic_label: str
+    query: str
+
+
 class AnalyzeResult(TypedDict):
     analysis_text: str
     cultural_confidence: str
@@ -93,6 +111,7 @@ class InterviewBriefResult(TypedDict):
     analysis_text: str
     interview_warnings: list[str]
     interview_sources: list[CulturalSignal]
+    interview_iterations: list[InterviewResearchIteration]
     semantic_evidence: SemanticEvidence
 
 
@@ -127,6 +146,32 @@ PREPARE_TARGETS = [
     PREPARE_TARGET_EXPERIENCE_SUMMARY,
 ]
 
+INTERVIEW_RESEARCH_MODE_GUIDED = "guided"
+INTERVIEW_RESEARCH_MODE_ADAPTIVE = "adaptive"
+
+INTERVIEW_RESEARCH_TOPICS: list[dict[str, str]] = [
+    {
+        "topic_key": "company_news",
+        "topic_label": "Noticias corporativas recientes",
+        "topic_query_hint": "noticias corporativas recientes estrategia expansion resultados",
+    },
+    {
+        "topic_key": "hiring_signals",
+        "topic_label": "Senales de contratacion y proceso",
+        "topic_query_hint": "careers jobs hiring interview process recruitment",
+    },
+    {
+        "topic_key": "financial_legal_risk",
+        "topic_label": "Riesgos financieros o legales",
+        "topic_query_hint": "layoffs bankruptcy legal issues sanctions lawsuit",
+    },
+    {
+        "topic_key": "employee_sentiment",
+        "topic_label": "Experiencia y percepcion de empleados",
+        "topic_query_hint": "employee reviews work culture leadership management",
+    },
+]
+
 
 def _semantic_top_k_analysis() -> int:
     return int(get_ai_runtime_config()["top_k_semantic_analysis"])
@@ -134,6 +179,26 @@ def _semantic_top_k_analysis() -> int:
 
 def _semantic_top_k_interview() -> int:
     return int(get_ai_runtime_config()["top_k_semantic_interview"])
+
+
+def _interview_research_mode() -> str:
+    raw = str(get_ai_runtime_config().get("interview_research_mode", "guided")).strip().lower()
+    if raw in {INTERVIEW_RESEARCH_MODE_GUIDED, INTERVIEW_RESEARCH_MODE_ADAPTIVE}:
+        return raw
+    return INTERVIEW_RESEARCH_MODE_GUIDED
+
+
+def _interview_research_max_steps() -> int:
+    raw = get_ai_runtime_config().get("interview_research_max_steps", 5)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return 5
+    if value < 3:
+        return 3
+    if value > 8:
+        return 8
+    return value
 
 
 def _now_iso() -> str:
@@ -145,6 +210,14 @@ def _short_text(raw: str, max_chars: int = 420) -> str:
     if len(text) <= max_chars:
         return text
     return f"{text[:max_chars].rstrip()}..."
+
+
+def _cap_tavily_query(query: str, max_chars: int = 400) -> tuple[str, bool]:
+    compact = " ".join(query.split())
+    if len(compact) <= max_chars:
+        return compact, False
+    truncated = compact[:max_chars].rstrip()
+    return truncated, True
 
 
 def _join_snippets(snippets: list[str], max_chars: int = 3800) -> str:
@@ -371,6 +444,150 @@ def _semantic_evidence_context(evidence: SemanticEvidence) -> str:
     return _join_snippets(lines, max_chars=4200)
 
 
+def _extract_json_object(raw_text: str) -> dict[str, object] | None:
+    text = raw_text.strip()
+    if not text:
+        return None
+    if text.startswith("```"):
+        text = text.strip("`")
+        if text.lower().startswith("json"):
+            text = text[4:].strip()
+    start = text.find("{")
+    end = text.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    candidate = text[start : end + 1]
+    try:
+        parsed = json.loads(candidate)
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _guided_interview_queries(
+    person: PersonRecord,
+    opportunity: OpportunityRecord,
+    *,
+    max_steps: int,
+) -> list[InterviewResearchQuery]:
+    company = _company_name(opportunity)
+    roles = ", ".join(person["target_roles"][:2]).strip()
+    queries: list[InterviewResearchQuery] = []
+    for topic in INTERVIEW_RESEARCH_TOPICS[:max_steps]:
+        topic_key = topic["topic_key"]
+        topic_label = topic["topic_label"]
+        topic_query_hint = topic["topic_query_hint"]
+        queries.append(
+            {
+                "topic_key": topic_key,
+                "topic_label": topic_label,
+                "query": f"{company} {topic_query_hint} {roles}".strip(),
+            }
+        )
+    return queries
+
+
+def _plan_interview_queries_adaptive(
+    person: PersonRecord,
+    opportunity: OpportunityRecord,
+    settings: Settings,
+    *,
+    max_steps: int,
+    run_id: str,
+) -> list[InterviewResearchQuery]:
+    planner_prompt = build_prompt_text(
+        flow_key=FLOW_TASK_INTERVIEW_RESEARCH_PLAN,
+        context={
+            "person_context": _person_context(person),
+            "opportunity_context": _opportunity_context(opportunity),
+            "max_steps": str(max_steps),
+        },
+        fallback=(
+            "Devuelve JSON valido (sin markdown) con forma "
+            "{\"queries\":[{\"topic_key\":\"...\",\"topic_label\":\"...\",\"query\":\"...\"}]}. "
+            f"Genera entre 3 y {max_steps} queries diferentes y accionables para investigar empresa y vacante.\n\n"
+            f"Persona:\n{_person_context(person)}\n\n"
+            f"Vacante:\n{_opportunity_context(opportunity)}"
+        ),
+    )
+    started_at = _now_iso()
+    plan_text = complete_prompt(
+        _system_prompt_base(
+            person,
+            suspicious_input=_is_suspicious_opportunity_input(opportunity),
+        ),
+        planner_prompt,
+        settings,
+        temperature=0.1,
+        person_id=person["person_id"],
+        opportunity_id=opportunity["opportunity_id"],
+        flow_key="interview_research_plan",
+        run_id=run_id,
+    )
+    parsed = _extract_json_object(plan_text)
+    raw_queries = parsed.get("queries", []) if isinstance(parsed, dict) else []
+    planned: list[InterviewResearchQuery] = []
+    seen_queries: set[str] = set()
+    if isinstance(raw_queries, list):
+        for index, raw_item in enumerate(raw_queries, start=1):
+            if not isinstance(raw_item, dict):
+                continue
+            query_text = str(raw_item.get("query", "")).strip()
+            if not query_text:
+                continue
+            query_key = " ".join(query_text.lower().split())
+            if query_key in seen_queries:
+                continue
+            seen_queries.add(query_key)
+            planned.append(
+                {
+                    "topic_key": str(raw_item.get("topic_key", "")).strip() or f"adaptive_{index}",
+                    "topic_label": str(raw_item.get("topic_label", "")).strip()
+                    or f"Tema {index}",
+                    "query": query_text,
+                }
+            )
+            if len(planned) >= max_steps:
+                break
+
+    if len(planned) < 3:
+        fallback_queries = _guided_interview_queries(
+            person,
+            opportunity,
+            max_steps=max_steps,
+        )
+        for item in fallback_queries:
+            key = " ".join(item["query"].lower().split())
+            if key in seen_queries:
+                continue
+            seen_queries.add(key)
+            planned.append(item)
+            if len(planned) >= max_steps:
+                break
+
+    add_request_trace(
+        person_id=person["person_id"],
+        opportunity_id=opportunity["opportunity_id"],
+        run_id=run_id,
+        destination="openai",
+        flow_key="interview_research_plan",
+        request_payload={"planner_prompt": planner_prompt, "max_steps": max_steps},
+        step_order=0,
+        tool_name="openai.chat.completions",
+        stage="interview_planning",
+        status="ok" if planned else "error",
+        input_summary=f"adaptive planning max_steps={max_steps}",
+        output_summary=f"planned_queries={len(planned)}",
+        started_at=started_at,
+        finished_at=_now_iso(),
+        response_payload={
+            "plan_text": plan_text,
+            "queries": planned,
+        },
+    )
+    return planned
+
+
 def _tavily_culture_signals(
     person: PersonRecord,
     opportunity: OpportunityRecord,
@@ -399,6 +616,17 @@ def _tavily_culture_signals(
         },
         fallback=fallback_query,
     )
+    request_payload_for_trace = {
+        "method": "POST",
+        "url": "https://api.tavily.com/search",
+        "body": {
+            "query": query,
+            "max_results": max_results,
+            "search_depth": "basic",
+            "include_answer": False,
+        },
+    }
+    started_at = _now_iso()
 
     payload = json.dumps(
         {
@@ -409,23 +637,6 @@ def _tavily_culture_signals(
             "include_answer": False,
         }
     ).encode("utf-8")
-    add_request_trace(
-        person_id=person["person_id"],
-        opportunity_id=opportunity["opportunity_id"],
-        run_id=run_id,
-        destination="tavily",
-        flow_key="search_culture_tavily",
-        request_payload={
-            "method": "POST",
-            "url": "https://api.tavily.com/search",
-            "body": {
-                "query": query,
-                "max_results": max_results,
-                "search_depth": "basic",
-                "include_answer": False,
-            },
-        },
-    )
     request = Request(
         url="https://api.tavily.com/search",
         method="POST",
@@ -439,6 +650,23 @@ def _tavily_culture_signals(
         body = json.loads(raw)
     except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
         warnings.append("No fue posible consultar Tavily para señales culturales")
+        add_request_trace(
+            person_id=person["person_id"],
+            opportunity_id=opportunity["opportunity_id"],
+            run_id=run_id,
+            destination="tavily",
+            flow_key="search_culture_tavily",
+            request_payload=request_payload_for_trace,
+            step_order=1,
+            tool_name="tavily.search",
+            stage="culture_research",
+            status="error",
+            input_summary=f"query: {query}",
+            output_summary=f"error: {type(exc).__name__}",
+            started_at=started_at,
+            finished_at=_now_iso(),
+            response_payload={"error": str(exc), "error_class": type(exc).__name__},
+        )
         logger.warning(
             "tavily culture query failed person_id=%s opportunity_id=%s error=%s",
             person["person_id"],
@@ -448,6 +676,23 @@ def _tavily_culture_signals(
         return [], warnings
     except Exception:
         warnings.append("Error inesperado al consultar señales culturales externas")
+        add_request_trace(
+            person_id=person["person_id"],
+            opportunity_id=opportunity["opportunity_id"],
+            run_id=run_id,
+            destination="tavily",
+            flow_key="search_culture_tavily",
+            request_payload=request_payload_for_trace,
+            step_order=1,
+            tool_name="tavily.search",
+            stage="culture_research",
+            status="error",
+            input_summary=f"query: {query}",
+            output_summary="error inesperado",
+            started_at=started_at,
+            finished_at=_now_iso(),
+            response_payload={"error": "unexpected_error"},
+        )
         logger.exception(
             "tavily culture unexpected error person_id=%s opportunity_id=%s",
             person["person_id"],
@@ -477,6 +722,35 @@ def _tavily_culture_signals(
     elif len(signals) < 2:
         warnings.append("Evidencia cultural debil: pocas fuentes externas")
 
+    add_request_trace(
+        person_id=person["person_id"],
+        opportunity_id=opportunity["opportunity_id"],
+        run_id=run_id,
+        destination="tavily",
+        flow_key="search_culture_tavily",
+        request_payload=request_payload_for_trace,
+        step_order=1,
+        tool_name="tavily.search",
+        stage="culture_research",
+        status="ok" if signals else "empty",
+        input_summary=f"query: {query}",
+        output_summary=f"signals={len(signals)}",
+        started_at=started_at,
+        finished_at=_now_iso(),
+        response_payload={
+            "results_count": len(signals),
+            "results": [
+                {
+                    "url": item["source_url"],
+                    "title": item["title"],
+                    "snippet": item["snippet"],
+                }
+                for item in signals[:5]
+            ],
+            "warnings": warnings,
+        },
+    )
+
     return signals, warnings
 
 
@@ -484,47 +758,78 @@ def _tavily_interview_signals(
     person: PersonRecord,
     opportunity: OpportunityRecord,
     settings: Settings,
-    max_results: int = 6,
+    max_results: int = 3,
     run_id: str = "",
-) -> tuple[list[CulturalSignal], list[str]]:
+) -> tuple[list[CulturalSignal], list[str], list[InterviewResearchIteration]]:
     warnings: list[str] = []
+    iterations: list[InterviewResearchIteration] = []
     if not settings.tavily_api_key:
         warnings.append("No Tavily API key: contexto de entrevista con evidencia externa limitada")
-        return [], warnings
+        iterations.append(
+            {
+                "step_order": 1,
+                "topic_key": "tavily_unavailable",
+                "topic_label": "Tavily no configurado",
+                "query": "",
+                "status": "skipped",
+                "results_count": 0,
+                "top_urls": [],
+                "warning": "No Tavily API key configurada",
+            }
+        )
+        return [], warnings, iterations
 
     company = _company_name(opportunity)
     roles = ", ".join(person["target_roles"][:2]).strip()
-    fallback_query = (
-        f"{company} company profile recent news strategy leadership hiring interview process "
-        f"employee experience {roles}"
-    ).strip()
-    query = build_prompt_query(
-        flow_key=FLOW_SEARCH_INTERVIEW_TAVILY,
-        context={
-            "company": company,
-            "roles": roles,
-            "person_location": person["location"],
-            "target_roles": ", ".join(person["target_roles"][:3]),
-        },
-        fallback=fallback_query,
-    )
+    max_steps = _interview_research_max_steps()
+    research_mode = _interview_research_mode()
+    if research_mode == INTERVIEW_RESEARCH_MODE_ADAPTIVE:
+        planned_queries = _plan_interview_queries_adaptive(
+            person,
+            opportunity,
+            settings,
+            max_steps=max_steps,
+            run_id=run_id,
+        )
+    else:
+        planned_queries = _guided_interview_queries(
+            person,
+            opportunity,
+            max_steps=max_steps,
+        )
+    base_context = {
+        "company": company,
+        "roles": roles,
+        "person_location": person["location"],
+        "target_roles": ", ".join(person["target_roles"][:3]),
+    }
+    seen_urls: set[str] = set()
+    signals: list[CulturalSignal] = []
 
-    payload = json.dumps(
-        {
-            "api_key": settings.tavily_api_key,
-            "query": query,
-            "max_results": max_results,
-            "search_depth": "basic",
-            "include_answer": False,
-        }
-    ).encode("utf-8")
-    add_request_trace(
-        person_id=person["person_id"],
-        opportunity_id=opportunity["opportunity_id"],
-        run_id=run_id,
-        destination="tavily",
-        flow_key="search_interview_tavily",
-        request_payload={
+    for index, planned_query in enumerate(planned_queries, start=1):
+        topic_key = planned_query["topic_key"]
+        topic_label = planned_query["topic_label"]
+        base_query_text = planned_query["query"].strip()
+        fallback_query = base_query_text or f"{company} {roles}".strip()
+        query = build_prompt_query(
+            flow_key=FLOW_SEARCH_INTERVIEW_TAVILY,
+            context={
+                **base_context,
+                "research_topic": topic_label,
+                "topic_key": topic_key,
+                "topic_query_hint": base_query_text,
+                "query": base_query_text,
+            },
+            fallback=fallback_query,
+        )
+        if base_query_text and base_query_text.lower() not in query.lower():
+            query = f"{query} {base_query_text}".strip()
+        query, was_truncated = _cap_tavily_query(query)
+        if was_truncated:
+            warning_text = f"Query de entrevista truncada para tema {topic_label.lower()}"
+            warnings.append(warning_text)
+        started_at = _now_iso()
+        request_payload_for_trace = {
             "method": "POST",
             "url": "https://api.tavily.com/search",
             "body": {
@@ -533,51 +838,145 @@ def _tavily_interview_signals(
                 "search_depth": "basic",
                 "include_answer": False,
             },
-        },
-    )
-    request = Request(
-        url="https://api.tavily.com/search",
-        method="POST",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-    )
-
-    try:
-        with urlopen(request, timeout=20) as response:
-            raw = response.read().decode("utf-8")
-        body = json.loads(raw)
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
-        warnings.append("No fue posible consultar Tavily para contexto de entrevista")
-        logger.warning(
-            "tavily interview query failed person_id=%s opportunity_id=%s error=%s",
-            person["person_id"],
-            opportunity["opportunity_id"],
-            exc,
-        )
-        return [], warnings
-    except Exception:
-        warnings.append("Error inesperado al consultar fuentes externas para entrevista")
-        logger.exception(
-            "tavily interview unexpected error person_id=%s opportunity_id=%s",
-            person["person_id"],
-            opportunity["opportunity_id"],
-        )
-        return [], warnings
-
-    signals: list[CulturalSignal] = []
-    for result in body.get("results", []):
-        url = str(result.get("url", "")).strip()
-        title = str(result.get("title", "")).strip()
-        snippet = _short_text(str(result.get("content", "")))
-        if not (url or title or snippet):
-            continue
-        signals.append(
+            "meta": {
+                "research_mode": research_mode,
+                "query_truncated": was_truncated,
+            },
+        }
+        payload = json.dumps(
             {
-                "source_provider": "tavily",
-                "source_url": url,
-                "title": title or "Fuente sin titulo",
-                "snippet": snippet or "Sin snippet disponible",
-                "captured_at": _now_iso(),
+                "api_key": settings.tavily_api_key,
+                "query": query,
+                "max_results": max_results,
+                "search_depth": "basic",
+                "include_answer": False,
+            }
+        ).encode("utf-8")
+        request = Request(
+            url="https://api.tavily.com/search",
+            method="POST",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+        )
+
+        results: list[dict[str, str]] = []
+        status = "ok"
+        warning = ""
+        try:
+            with urlopen(request, timeout=20) as response:
+                raw = response.read().decode("utf-8")
+            body = json.loads(raw)
+            raw_results = body.get("results", [])
+            if isinstance(raw_results, list):
+                for item in raw_results:
+                    if not isinstance(item, dict):
+                        continue
+                    results.append(
+                        {
+                            "url": str(item.get("url", "")).strip(),
+                            "title": str(item.get("title", "")).strip(),
+                            "snippet": _short_text(str(item.get("content", ""))),
+                        }
+                    )
+            if not results:
+                status = "empty"
+                warning = f"Sin resultados en Tavily para {topic_label.lower()}"
+                warnings.append(warning)
+        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
+            status = "error"
+            warning = f"No fue posible consultar Tavily para {topic_label.lower()}"
+            warnings.append(warning)
+            logger.warning(
+                "tavily interview query failed person_id=%s opportunity_id=%s topic=%s error=%s",
+                person["person_id"],
+                opportunity["opportunity_id"],
+                topic_key,
+                exc,
+            )
+        except Exception:
+            status = "error"
+            warning = f"Error inesperado consultando fuentes para {topic_label.lower()}"
+            warnings.append(warning)
+            logger.exception(
+                "tavily interview unexpected error person_id=%s opportunity_id=%s topic=%s",
+                person["person_id"],
+                opportunity["opportunity_id"],
+                topic_key,
+            )
+
+        results_added = 0
+        top_urls: list[str] = []
+        for result in results:
+            url = result["url"]
+            title = result["title"]
+            snippet = result["snippet"]
+            if url and url in seen_urls:
+                continue
+            if url:
+                seen_urls.add(url)
+            if not (url or title or snippet):
+                continue
+            signals.append(
+                {
+                    "source_provider": "tavily",
+                    "source_url": url,
+                    "title": title or "Fuente sin titulo",
+                    "snippet": snippet or "Sin snippet disponible",
+                    "captured_at": _now_iso(),
+                }
+            )
+            results_added += 1
+            if url and len(top_urls) < 3:
+                top_urls.append(url)
+
+        output_summary = (
+            f"topic={topic_key}; status={status}; new_results={results_added}; "
+            f"raw_results={len(results)}"
+        )
+        add_request_trace(
+            person_id=person["person_id"],
+            opportunity_id=opportunity["opportunity_id"],
+            run_id=run_id,
+            destination="tavily",
+            flow_key="search_interview_tavily",
+            request_payload=request_payload_for_trace,
+            step_order=index,
+            tool_name="tavily.search",
+            stage="interview_research",
+            status=status,
+            input_summary=f"{topic_label}: {query}",
+            output_summary=output_summary,
+            started_at=started_at,
+            finished_at=_now_iso(),
+            response_payload={
+                "topic_key": topic_key,
+                "status": status,
+                "results_count": results_added,
+                "raw_results_count": len(results),
+                "research_mode": research_mode,
+                "query": query,
+                "query_truncated": was_truncated,
+                "results": [
+                    {
+                        "url": item["url"],
+                        "title": item["title"],
+                        "snippet": item["snippet"],
+                    }
+                    for item in results[:5]
+                ],
+                "warning": warning,
+            },
+        )
+        iterations.append(
+            {
+                "step_order": index,
+                "topic_key": topic_key,
+                "topic_label": topic_label,
+                "query": query,
+                "status": status,
+                "results_count": results_added,
+                "top_urls": top_urls,
+                "warning": warning,
             }
         )
 
@@ -586,7 +985,8 @@ def _tavily_interview_signals(
     elif len(signals) < 3:
         warnings.append("Evidencia externa limitada para entrevista: pocas fuentes")
 
-    return signals, warnings
+    deduped_warnings = list(dict.fromkeys(warnings))
+    return signals, deduped_warnings, iterations
 
 
 def _cultural_confidence(signals_count: int) -> str:
@@ -832,7 +1232,7 @@ def stream_interview_brief_text(
     settings: Settings,
     run_id: str = "",
 ):
-    interview_sources, interview_warnings = _tavily_interview_signals(
+    interview_sources, interview_warnings, interview_iterations = _tavily_interview_signals(
         person,
         opportunity,
         settings,
@@ -878,7 +1278,7 @@ def stream_interview_brief_text(
         flow_key="interview_brief_stream",
         run_id=run_id,
     )
-    return semantic_evidence, interview_sources, interview_warnings, stream
+    return semantic_evidence, interview_sources, interview_warnings, interview_iterations, stream
 
 
 def stream_prepare_sections(
@@ -1037,7 +1437,7 @@ def interview_brief(
     settings: Settings,
     run_id: str = "",
 ) -> InterviewBriefResult:
-    interview_sources, interview_warnings = _tavily_interview_signals(
+    interview_sources, interview_warnings, interview_iterations = _tavily_interview_signals(
         person,
         opportunity,
         settings,
@@ -1093,6 +1493,7 @@ def interview_brief(
         "analysis_text": response,
         "interview_warnings": interview_warnings,
         "interview_sources": interview_sources,
+        "interview_iterations": interview_iterations,
         "semantic_evidence": semantic_evidence,
     }
 

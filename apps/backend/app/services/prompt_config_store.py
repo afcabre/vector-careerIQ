@@ -15,6 +15,7 @@ FLOW_SYSTEM_IDENTITY = "system_identity"
 FLOW_TASK_CHAT = "task_chat"
 FLOW_TASK_ANALYZE_PROFILE_MATCH = "task_analyze_profile_match"
 FLOW_TASK_ANALYZE_CULTURAL_FIT = "task_analyze_cultural_fit"
+FLOW_TASK_INTERVIEW_RESEARCH_PLAN = "task_interview_research_plan"
 FLOW_TASK_INTERVIEW_BRIEF = "task_interview_brief"
 FLOW_TASK_PREPARE_GUIDANCE = "task_prepare_guidance"
 FLOW_TASK_PREPARE_COVER_LETTER = "task_prepare_cover_letter"
@@ -100,6 +101,8 @@ def _required_placeholders(flow_key: str) -> set[str]:
         return {"person_context", "opportunity_context"}
     if flow_key == FLOW_TASK_ANALYZE_CULTURAL_FIT:
         return {"person_context", "opportunity_context"}
+    if flow_key == FLOW_TASK_INTERVIEW_RESEARCH_PLAN:
+        return {"person_context", "opportunity_context"}
     if flow_key == FLOW_TASK_INTERVIEW_BRIEF:
         return {"person_context", "opportunity_context"}
     if flow_key == FLOW_TASK_PREPARE_GUIDANCE:
@@ -173,8 +176,11 @@ def _default_configs() -> dict[str, PromptConfigRecord]:
             "scope": "global",
             "flow_key": FLOW_SEARCH_INTERVIEW_TAVILY,
             "template_text": (
-                "Investiga contexto pre-entrevista de {company} para roles {roles}. "
-                "Prioriza noticias recientes y fuentes publicas confiables en: {target_sources}."
+                "Investiga {research_topic} de {company} para roles {roles}. "
+                "Usa pistas: {topic_query_hint}. "
+                "Query base: {query}. "
+                "Prioriza fuentes publicas confiables en: {target_sources}. "
+                "Ubicacion de referencia: {person_location}."
             ),
             "target_sources": [
                 "site:linkedin.com/company",
@@ -285,6 +291,28 @@ def _default_configs() -> dict[str, PromptConfigRecord]:
             "updated_at": now,
         },
         {
+            "config_id": f"pc-{FLOW_TASK_INTERVIEW_RESEARCH_PLAN}",
+            "scope": "global",
+            "flow_key": FLOW_TASK_INTERVIEW_RESEARCH_PLAN,
+            "template_text": (
+                "Planifica una estrategia de investigacion pre-entrevista para esta vacante.\n"
+                "Debes devolver JSON valido (sin markdown) con esta forma exacta:\n"
+                "{\"queries\":[{\"topic_key\":\"...\",\"topic_label\":\"...\",\"query\":\"...\"}]}\n"
+                "Reglas:\n"
+                "- entre 3 y 5 queries\n"
+                "- cada query debe ser distinta y accionable\n"
+                "- evita consultas redundantes o demasiado generales\n"
+                "- prioriza hechos verificables y fuentes publicas confiables\n\n"
+                "Persona:\n{person_context}\n\n"
+                "Vacante:\n{opportunity_context}"
+            ),
+            "target_sources": [],
+            "is_active": True,
+            "updated_by": "system",
+            "created_at": now,
+            "updated_at": now,
+        },
+        {
             "config_id": f"pc-{FLOW_TASK_INTERVIEW_BRIEF}",
             "scope": "global",
             "flow_key": FLOW_TASK_INTERVIEW_BRIEF,
@@ -370,9 +398,14 @@ def _normalize_firestore_record(flow_key: str, payload: dict[str, Any] | None) -
         raise KeyError(flow_key)
 
     source = payload or {}
-    target_sources = _sanitize_sources(source.get("target_sources", base["target_sources"]))
-    if not target_sources:
-        target_sources = base["target_sources"]
+    if "target_sources" in source:
+        raw_sources = source.get("target_sources", [])
+        if isinstance(raw_sources, list):
+            target_sources = _sanitize_sources(raw_sources)
+        else:
+            target_sources = []
+    else:
+        target_sources = _sanitize_sources(base["target_sources"])
 
     return PromptConfigRecord(
         config_id=str(source.get("config_id", base["config_id"])),
@@ -432,12 +465,6 @@ def _validate_update(
     cleaned_sources: list[str] | None = None
     if target_sources is not None:
         cleaned_sources = _sanitize_sources(target_sources)
-        if flow_key in {
-            FLOW_SEARCH_JOBS_TAVILY,
-            FLOW_SEARCH_CULTURE_TAVILY,
-            FLOW_SEARCH_INTERVIEW_TAVILY,
-        } and not cleaned_sources:
-            raise ValueError("target_sources cannot be empty")
 
     return cleaned_template, cleaned_sources
 

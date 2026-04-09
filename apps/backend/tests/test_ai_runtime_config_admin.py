@@ -13,6 +13,8 @@ from app.services import opportunity_store, person_store
 from app.services.ai_runtime_config_store import (
     DEFAULT_TOP_K_SEMANTIC_ANALYSIS,
     DEFAULT_TOP_K_SEMANTIC_INTERVIEW,
+    DEFAULT_INTERVIEW_RESEARCH_MODE,
+    DEFAULT_INTERVIEW_RESEARCH_MAX_STEPS,
     reset_ai_runtime_config,
     update_ai_runtime_config,
 )
@@ -45,17 +47,23 @@ class AIRuntimeConfigAdminTests(unittest.TestCase):
         self.assertEqual(response.config_key, "global")
         self.assertEqual(response.top_k_semantic_analysis, DEFAULT_TOP_K_SEMANTIC_ANALYSIS)
         self.assertEqual(response.top_k_semantic_interview, DEFAULT_TOP_K_SEMANTIC_INTERVIEW)
+        self.assertEqual(response.interview_research_mode, DEFAULT_INTERVIEW_RESEARCH_MODE)
+        self.assertEqual(response.interview_research_max_steps, DEFAULT_INTERVIEW_RESEARCH_MAX_STEPS)
 
     def test_patch_ai_runtime_config_updates_values(self) -> None:
         updated = ai_runtime_admin_api.patch_config(
             payload=ai_runtime_admin_api.UpdateAIRuntimeConfigRequest(
                 top_k_semantic_analysis=15,
                 top_k_semantic_interview=10,
+                interview_research_mode="adaptive",
+                interview_research_max_steps=6,
             ),
             session=self.session,
         )
         self.assertEqual(updated.top_k_semantic_analysis, 15)
         self.assertEqual(updated.top_k_semantic_interview, 10)
+        self.assertEqual(updated.interview_research_mode, "adaptive")
+        self.assertEqual(updated.interview_research_max_steps, 6)
         self.assertEqual(updated.updated_by, "tutor")
 
     def test_patch_ai_runtime_config_requires_payload_fields(self) -> None:

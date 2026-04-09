@@ -148,6 +148,17 @@ class SemanticEvidenceResponse(BaseModel):
     snippets: list[str]
 
 
+class InterviewIterationResponse(BaseModel):
+    step_order: int
+    topic_key: str
+    topic_label: str
+    query: str
+    status: str
+    results_count: int
+    top_urls: list[str]
+    warning: str
+
+
 class AnalyzeResponse(BaseModel):
     opportunity: OpportunityResponse
     analysis_text: str
@@ -178,6 +189,7 @@ class InterviewBriefResponse(BaseModel):
     analysis_text: str
     interview_warnings: list[str]
     interview_sources: list[CulturalSignalResponse]
+    interview_iterations: list[InterviewIterationResponse]
     semantic_evidence: SemanticEvidenceResponse
     served_from_cache: bool
     assistant_message_id: str
@@ -280,6 +292,30 @@ def _as_cultural_signals(payload: Any) -> list[dict[str, str]]:
                 "title": str(item.get("title", "")),
                 "snippet": str(item.get("snippet", "")),
                 "captured_at": str(item.get("captured_at", "")),
+            }
+        )
+    return items
+
+
+def _as_interview_iterations(payload: Any) -> list[dict[str, Any]]:
+    if not isinstance(payload, list):
+        return []
+    items: list[dict[str, Any]] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        raw_urls = item.get("top_urls", [])
+        top_urls = [str(url) for url in raw_urls if str(url).strip()] if isinstance(raw_urls, list) else []
+        items.append(
+            {
+                "step_order": int(item.get("step_order", 0) or 0),
+                "topic_key": str(item.get("topic_key", "")),
+                "topic_label": str(item.get("topic_label", "")),
+                "query": str(item.get("query", "")),
+                "status": str(item.get("status", "")),
+                "results_count": int(item.get("results_count", 0) or 0),
+                "top_urls": top_urls,
+                "warning": str(item.get("warning", "")),
             }
         )
     return items
@@ -649,6 +685,7 @@ def interview_brief_action(
                 text = str(cached_payload.get("analysis_text", "")).strip()
                 warnings = _as_cultural_warnings(cached_payload.get("interview_warnings"))
                 sources = _as_cultural_signals(cached_payload.get("interview_sources"))
+                iterations = _as_interview_iterations(cached_payload.get("interview_iterations"))
                 evidence = _as_semantic_evidence(cached_payload.get("semantic_evidence"))
                 if text:
                     return InterviewBriefResponse(
@@ -656,6 +693,7 @@ def interview_brief_action(
                         analysis_text=text,
                         interview_warnings=warnings,
                         interview_sources=[CulturalSignalResponse(**item) for item in sources],
+                        interview_iterations=[InterviewIterationResponse(**item) for item in iterations],
                         semantic_evidence=evidence,
                         served_from_cache=True,
                         assistant_message_id="",
@@ -672,6 +710,7 @@ def interview_brief_action(
             "analysis_text": result["analysis_text"],
             "interview_warnings": result["interview_warnings"],
             "interview_sources": result["interview_sources"],
+            "interview_iterations": result["interview_iterations"],
             "semantic_evidence": result["semantic_evidence"],
         },
     )
@@ -691,6 +730,7 @@ def interview_brief_action(
         analysis_text=result["analysis_text"],
         interview_warnings=result["interview_warnings"],
         interview_sources=result["interview_sources"],
+        interview_iterations=result["interview_iterations"],
         semantic_evidence=result["semantic_evidence"],
         served_from_cache=False,
         assistant_message_id=assistant_message_id,
@@ -1026,6 +1066,7 @@ async def interview_brief_stream(
                     text = str(cached_payload.get("analysis_text", "")).strip()
                     warnings = _as_cultural_warnings(cached_payload.get("interview_warnings"))
                     sources = _as_cultural_signals(cached_payload.get("interview_sources"))
+                    iterations = _as_interview_iterations(cached_payload.get("interview_iterations"))
                     evidence = _as_semantic_evidence(cached_payload.get("semantic_evidence"))
                     if text:
                         yield _serialize_sse(
@@ -1052,6 +1093,7 @@ async def interview_brief_stream(
                                 "analysis_text": text,
                                 "interview_warnings": warnings,
                                 "interview_sources": sources,
+                                "interview_iterations": iterations,
                                 "semantic_evidence": evidence,
                                 "served_from_cache": True,
                                 "assistant_message_id": "",
@@ -1068,7 +1110,7 @@ async def interview_brief_stream(
                 },
             )
             run_id = new_ai_run_id()
-            semantic_evidence, interview_sources, interview_warnings, stream = (
+            semantic_evidence, interview_sources, interview_warnings, interview_iterations, stream = (
                 stream_interview_brief_text(
                     person,
                     opportunity,
@@ -1099,6 +1141,7 @@ async def interview_brief_stream(
                     "analysis_text": analysis_text,
                     "interview_warnings": interview_warnings,
                     "interview_sources": interview_sources,
+                    "interview_iterations": interview_iterations,
                     "semantic_evidence": semantic_evidence,
                 },
             )
@@ -1120,6 +1163,7 @@ async def interview_brief_stream(
                     "analysis_text": analysis_text,
                     "interview_warnings": interview_warnings,
                     "interview_sources": interview_sources,
+                    "interview_iterations": interview_iterations,
                     "semantic_evidence": semantic_evidence,
                     "served_from_cache": False,
                     "assistant_message_id": assistant_message_id,

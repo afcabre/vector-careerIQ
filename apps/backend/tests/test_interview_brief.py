@@ -93,6 +93,7 @@ class InterviewBriefTests(unittest.TestCase):
                 "analysis_text": "Brief cacheado",
                 "interview_warnings": ["warning 1"],
                 "interview_sources": [],
+                "interview_iterations": [],
                 "semantic_evidence": {
                     "source": "semantic_retrieval",
                     "query": "query",
@@ -112,6 +113,7 @@ class InterviewBriefTests(unittest.TestCase):
         self.assertTrue(response.served_from_cache)
         self.assertEqual(response.analysis_text, "Brief cacheado")
         self.assertEqual(response.semantic_evidence.top_k, 8)
+        self.assertEqual(len(response.interview_iterations), 0)
         self.assertEqual(response.assistant_message_id, "")
 
     def test_interview_brief_generates_run_and_appends_chat_message(self) -> None:
@@ -131,6 +133,18 @@ class InterviewBriefTests(unittest.TestCase):
                 "analysis_text": "Brief generado",
                 "interview_warnings": ["warning 1"],
                 "interview_sources": [],
+                "interview_iterations": [
+                    {
+                        "step_order": 1,
+                        "topic_key": "company_news",
+                        "topic_label": "Noticias corporativas recientes",
+                        "query": "Acme news",
+                        "status": "ok",
+                        "results_count": 2,
+                        "top_urls": ["https://example.com/acme-news"],
+                        "warning": "",
+                    }
+                ],
                 "semantic_evidence": {
                     "source": "semantic_retrieval",
                     "query": "query",
@@ -149,6 +163,7 @@ class InterviewBriefTests(unittest.TestCase):
 
         self.assertFalse(response.served_from_cache)
         self.assertEqual(response.analysis_text, "Brief generado")
+        self.assertEqual(len(response.interview_iterations), 1)
         self.assertTrue(response.assistant_message_id)
 
         run = get_current_ai_run("p-001", opportunity_id, ACTION_INTERVIEW_BRIEF)
@@ -178,6 +193,7 @@ class InterviewBriefTests(unittest.TestCase):
                 "analysis_text": "Brief generado",
                 "interview_warnings": [],
                 "interview_sources": [],
+                "interview_iterations": [],
                 "semantic_evidence": {
                     "source": "semantic_retrieval",
                     "query": "query",
@@ -221,6 +237,7 @@ class InterviewBriefTests(unittest.TestCase):
                 },
                 [],
                 [],
+                [],
                 iter(["Brief ", "stream"]),
             ),
         ):
@@ -244,6 +261,7 @@ class InterviewBriefTests(unittest.TestCase):
         complete_payload = next(payload for name, payload in events if name == "message_complete")
         self.assertEqual(complete_payload["analysis_text"], "Brief stream")
         self.assertFalse(bool(complete_payload["served_from_cache"]))
+        self.assertIn("interview_iterations", complete_payload)
 
         run = get_current_ai_run("p-001", opportunity_id, ACTION_INTERVIEW_BRIEF)
         self.assertIsNotNone(run)

@@ -11,12 +11,24 @@ AI_RUNTIME_TOP_K_MIN = 4
 AI_RUNTIME_TOP_K_MAX = 30
 DEFAULT_TOP_K_SEMANTIC_ANALYSIS = 12
 DEFAULT_TOP_K_SEMANTIC_INTERVIEW = 8
+INTERVIEW_RESEARCH_MODE_GUIDED = "guided"
+INTERVIEW_RESEARCH_MODE_ADAPTIVE = "adaptive"
+INTERVIEW_RESEARCH_MODES = {
+    INTERVIEW_RESEARCH_MODE_GUIDED,
+    INTERVIEW_RESEARCH_MODE_ADAPTIVE,
+}
+INTERVIEW_RESEARCH_MAX_STEPS_MIN = 3
+INTERVIEW_RESEARCH_MAX_STEPS_MAX = 8
+DEFAULT_INTERVIEW_RESEARCH_MODE = INTERVIEW_RESEARCH_MODE_GUIDED
+DEFAULT_INTERVIEW_RESEARCH_MAX_STEPS = 5
 
 
 class AIRuntimeConfigRecord(TypedDict):
     config_key: str
     top_k_semantic_analysis: int
     top_k_semantic_interview: int
+    interview_research_mode: str
+    interview_research_max_steps: int
     updated_by: str
     created_at: str
     updated_at: str
@@ -41,6 +53,8 @@ def _default_config() -> AIRuntimeConfigRecord:
         config_key=AI_RUNTIME_CONFIG_KEY,
         top_k_semantic_analysis=DEFAULT_TOP_K_SEMANTIC_ANALYSIS,
         top_k_semantic_interview=DEFAULT_TOP_K_SEMANTIC_INTERVIEW,
+        interview_research_mode=DEFAULT_INTERVIEW_RESEARCH_MODE,
+        interview_research_max_steps=DEFAULT_INTERVIEW_RESEARCH_MAX_STEPS,
         updated_by="system",
         created_at=now,
         updated_at=now,
@@ -62,6 +76,26 @@ def _coerce_top_k(value: Any, default: int) -> int:
 def _normalize_firestore_record(payload: dict[str, Any] | None) -> AIRuntimeConfigRecord:
     base = _default_config()
     source = payload or {}
+    raw_mode = str(
+        source.get("interview_research_mode", base["interview_research_mode"])
+    ).strip().lower()
+    normalized_mode = (
+        raw_mode
+        if raw_mode in INTERVIEW_RESEARCH_MODES
+        else base["interview_research_mode"]
+    )
+    raw_max_steps = source.get(
+        "interview_research_max_steps", base["interview_research_max_steps"]
+    )
+    try:
+        max_steps = int(raw_max_steps)
+    except (TypeError, ValueError):
+        max_steps = base["interview_research_max_steps"]
+    if max_steps < INTERVIEW_RESEARCH_MAX_STEPS_MIN:
+        max_steps = INTERVIEW_RESEARCH_MAX_STEPS_MIN
+    if max_steps > INTERVIEW_RESEARCH_MAX_STEPS_MAX:
+        max_steps = INTERVIEW_RESEARCH_MAX_STEPS_MAX
+
     return AIRuntimeConfigRecord(
         config_key=AI_RUNTIME_CONFIG_KEY,
         top_k_semantic_analysis=_coerce_top_k(
@@ -72,6 +106,8 @@ def _normalize_firestore_record(payload: dict[str, Any] | None) -> AIRuntimeConf
             source.get("top_k_semantic_interview"),
             base["top_k_semantic_interview"],
         ),
+        interview_research_mode=normalized_mode,
+        interview_research_max_steps=max_steps,
         updated_by=str(source.get("updated_by", base["updated_by"])).strip() or "system",
         created_at=str(source.get("created_at", base["created_at"])).strip() or base["created_at"],
         updated_at=str(source.get("updated_at", base["updated_at"])).strip() or base["updated_at"],
@@ -122,10 +158,33 @@ def _validate_top_k(value: int, field_name: str) -> int:
     return number
 
 
+def _validate_interview_mode(value: str) -> str:
+    normalized = str(value).strip().lower()
+    if normalized not in INTERVIEW_RESEARCH_MODES:
+        allowed = ", ".join(sorted(INTERVIEW_RESEARCH_MODES))
+        raise ValueError(f"interview_research_mode must be one of: {allowed}")
+    return normalized
+
+
+def _validate_interview_max_steps(value: int) -> int:
+    number = int(value)
+    if (
+        number < INTERVIEW_RESEARCH_MAX_STEPS_MIN
+        or number > INTERVIEW_RESEARCH_MAX_STEPS_MAX
+    ):
+        raise ValueError(
+            "interview_research_max_steps must be between "
+            f"{INTERVIEW_RESEARCH_MAX_STEPS_MIN} and {INTERVIEW_RESEARCH_MAX_STEPS_MAX}"
+        )
+    return number
+
+
 def update_ai_runtime_config(
     *,
     top_k_semantic_analysis: int | None = None,
     top_k_semantic_interview: int | None = None,
+    interview_research_mode: str | None = None,
+    interview_research_max_steps: int | None = None,
     updated_by: str,
 ) -> AIRuntimeConfigRecord:
     current = get_ai_runtime_config()
@@ -139,6 +198,14 @@ def update_ai_runtime_config(
         current["top_k_semantic_interview"] = _validate_top_k(
             top_k_semantic_interview,
             "top_k_semantic_interview",
+        )
+    if interview_research_mode is not None:
+        current["interview_research_mode"] = _validate_interview_mode(
+            interview_research_mode
+        )
+    if interview_research_max_steps is not None:
+        current["interview_research_max_steps"] = _validate_interview_max_steps(
+            interview_research_max_steps
         )
 
     current["updated_by"] = updated_by.strip() or "tutor"

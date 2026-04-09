@@ -43,6 +43,14 @@ class RequestTracesTests(unittest.TestCase):
             run_id="r-111",
             destination="openai",
             flow_key="chat_stream",
+            step_order=1,
+            tool_name="openai.responses",
+            stage="chat_generation",
+            status="ok",
+            input_summary="prompt chat",
+            output_summary="response 1",
+            started_at="2026-04-09T10:00:00+00:00",
+            finished_at="2026-04-09T10:00:01+00:00",
             request_payload={"messages": [{"role": "user", "content": "hola"}]},
         )
         add_request_trace(
@@ -90,6 +98,10 @@ class RequestTracesTests(unittest.TestCase):
         self.assertEqual(len(openai_items.items), 1)
         self.assertEqual(openai_items.items[0].destination, "openai")
         self.assertEqual(openai_items.items[0].flow_key, "chat_stream")
+        self.assertEqual(openai_items.items[0].step_order, 1)
+        self.assertEqual(openai_items.items[0].tool_name, "openai.responses")
+        self.assertEqual(openai_items.items[0].stage, "chat_generation")
+        self.assertEqual(openai_items.items[0].status, "ok")
 
         opportunity_items = request_traces_api.list_person_request_traces(
             person_id="p-001",

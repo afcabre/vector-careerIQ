@@ -18,7 +18,16 @@ class RequestTraceResponse(BaseModel):
     run_id: str
     destination: str
     flow_key: str
+    step_order: int
+    tool_name: str
+    stage: str
+    status: str
+    input_summary: str
+    output_summary: str
+    started_at: str
+    finished_at: str
     request_payload: dict[str, Any]
+    response_payload: dict[str, Any]
     created_at: str
 
 

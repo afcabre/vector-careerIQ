@@ -476,21 +476,16 @@ def search_opportunities(
                     person["person_id"],
                 )
                 provider_status[PROVIDER_TAVILY]["query_truncated"] = True
-            add_request_trace(
-                person_id=person["person_id"],
-                destination="tavily",
-                flow_key="search_jobs_tavily",
-                request_payload={
-                    "method": "POST",
-                    "url": "https://api.tavily.com/search",
-                    "body": {
-                        "query": tavily_query,
-                        "max_results": provider_max_results,
-                        "search_depth": "basic",
-                        "include_answer": False,
-                    },
+            request_payload_for_trace = {
+                "method": "POST",
+                "url": "https://api.tavily.com/search",
+                "body": {
+                    "query": tavily_query,
+                    "max_results": provider_max_results,
+                    "search_depth": "basic",
+                    "include_answer": False,
                 },
-            )
+            }
             tavily_items = _tavily_search(tavily_query, provider_max_results, settings)
             provider_status[PROVIDER_TAVILY]["status"] = "ok"
             provider_status[PROVIDER_TAVILY]["reason"] = (
@@ -501,10 +496,49 @@ def search_opportunities(
                 item["location"] = item["location"] or person["location"]
                 item["normalized_payload"]["query_used"] = tavily_query
             items.extend(tavily_items)
+            add_request_trace(
+                person_id=person["person_id"],
+                destination="tavily",
+                flow_key="search_jobs_tavily",
+                request_payload=request_payload_for_trace,
+                response_payload={
+                    "status": "ok" if tavily_items else "empty",
+                    "results_count": len(tavily_items),
+                    "results": [
+                        {
+                            "title": item["title"],
+                            "company": item["company"],
+                            "source_url": item["source_url"],
+                            "snippet": item["snippet"],
+                        }
+                        for item in tavily_items[:5]
+                    ],
+                },
+            )
         except (HTTPError, URLError, TimeoutError, json.JSONDecodeError) as exc:
             warnings.append("Tavily provider failed, continuing with partial results")
             logger.warning("tavily provider failed: %s", exc)
             _apply_provider_error_status(provider_status[PROVIDER_TAVILY], exc)
+            add_request_trace(
+                person_id=person["person_id"],
+                destination="tavily",
+                flow_key="search_jobs_tavily",
+                request_payload={
+                    "method": "POST",
+                    "url": "https://api.tavily.com/search",
+                    "body": {
+                        "query": tavily_query if "tavily_query" in locals() else query,
+                        "max_results": provider_max_results,
+                        "search_depth": "basic",
+                        "include_answer": False,
+                    },
+                },
+                response_payload={
+                    "status": "error",
+                    "error": str(exc),
+                    "error_class": type(exc).__name__,
+                },
+            )
         except Exception as exc:
             warnings.append("Tavily provider unexpected error, continuing")
             logger.exception("tavily provider unexpected error")
@@ -512,6 +546,26 @@ def search_opportunities(
                 provider_status[PROVIDER_TAVILY],
                 exc,
                 unexpected=True,
+            )
+            add_request_trace(
+                person_id=person["person_id"],
+                destination="tavily",
+                flow_key="search_jobs_tavily",
+                request_payload={
+                    "method": "POST",
+                    "url": "https://api.tavily.com/search",
+                    "body": {
+                        "query": tavily_query if "tavily_query" in locals() else query,
+                        "max_results": provider_max_results,
+                        "search_depth": "basic",
+                        "include_answer": False,
+                    },
+                },
+                response_payload={
+                    "status": "error",
+                    "error": str(exc),
+                    "error_class": type(exc).__name__,
+                },
             )
     else:
         warnings.append("Tavily API key is missing")

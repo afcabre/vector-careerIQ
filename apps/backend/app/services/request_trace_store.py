@@ -16,7 +16,16 @@ class RequestTraceRecord(TypedDict):
     run_id: str
     destination: str
     flow_key: str
+    step_order: int
+    tool_name: str
+    stage: str
+    status: str
+    input_summary: str
+    output_summary: str
+    started_at: str
+    finished_at: str
     request_payload: dict[str, Any]
+    response_payload: dict[str, Any]
     created_at: str
 
 
@@ -67,6 +76,9 @@ def _normalize(payload: dict[str, Any] | None) -> RequestTraceRecord:
     raw_request_payload = source.get("request_payload", {})
     if not isinstance(raw_request_payload, dict):
         raw_request_payload = {}
+    raw_response_payload = source.get("response_payload", {})
+    if not isinstance(raw_response_payload, dict):
+        raw_response_payload = {}
     return {
         "trace_id": str(source.get("trace_id", "")),
         "person_id": str(source.get("person_id", "")),
@@ -74,7 +86,16 @@ def _normalize(payload: dict[str, Any] | None) -> RequestTraceRecord:
         "run_id": str(source.get("run_id", "")),
         "destination": str(source.get("destination", "")),
         "flow_key": str(source.get("flow_key", "")),
+        "step_order": int(source.get("step_order", 0) or 0),
+        "tool_name": str(source.get("tool_name", "")),
+        "stage": str(source.get("stage", "")),
+        "status": str(source.get("status", "")),
+        "input_summary": str(source.get("input_summary", "")),
+        "output_summary": str(source.get("output_summary", "")),
+        "started_at": str(source.get("started_at", "")),
+        "finished_at": str(source.get("finished_at", "")),
         "request_payload": raw_request_payload,
+        "response_payload": raw_response_payload,
         "created_at": str(source.get("created_at", "")),
     }
 
@@ -183,8 +204,19 @@ def add_request_trace(
     request_payload: dict[str, Any],
     opportunity_id: str = "",
     run_id: str = "",
+    step_order: int = 0,
+    tool_name: str = "",
+    stage: str = "",
+    status: str = "",
+    input_summary: str = "",
+    output_summary: str = "",
+    started_at: str = "",
+    finished_at: str = "",
+    response_payload: dict[str, Any] | None = None,
 ) -> RequestTraceRecord:
     safe_payload = _sanitize_request_payload(request_payload)
+    safe_response_payload = _sanitize_request_payload(response_payload or {})
+    normalized_step_order = max(0, int(step_order))
     record: RequestTraceRecord = {
         "trace_id": _new_id(),
         "person_id": person_id,
@@ -192,7 +224,16 @@ def add_request_trace(
         "run_id": run_id.strip(),
         "destination": destination.strip().lower(),
         "flow_key": flow_key.strip(),
+        "step_order": normalized_step_order,
+        "tool_name": tool_name.strip(),
+        "stage": stage.strip(),
+        "status": status.strip(),
+        "input_summary": input_summary.strip(),
+        "output_summary": output_summary.strip(),
+        "started_at": started_at.strip(),
+        "finished_at": finished_at.strip(),
         "request_payload": safe_payload,
+        "response_payload": safe_response_payload,
         "created_at": _now_iso(),
     }
     return _save(record)

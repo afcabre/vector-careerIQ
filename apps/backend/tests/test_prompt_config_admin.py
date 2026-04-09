@@ -91,6 +91,18 @@ class PromptConfigAdminTests(unittest.TestCase):
         self.assertEqual(invalid_template.exception.status_code, 422)
         self.assertIn("{query}", str(invalid_template.exception.detail))
 
+    def test_patch_prompt_config_allows_empty_target_sources_for_tavily(self) -> None:
+        updated = prompt_admin_api.patch_config(
+            flow_key=FLOW_SEARCH_JOBS_TAVILY,
+            payload=prompt_admin_api.UpdatePromptConfigRequest(
+                template_text="Busqueda libre: {query}",
+                target_sources=[],
+            ),
+            session=self.session,
+        )
+        self.assertEqual(updated.flow_key, FLOW_SEARCH_JOBS_TAVILY)
+        self.assertEqual(updated.target_sources, [])
+
     def test_prompt_config_versions_endpoint_returns_previous_snapshots(self) -> None:
         prompt_admin_api.patch_config(
             flow_key=FLOW_SEARCH_JOBS_TAVILY,
