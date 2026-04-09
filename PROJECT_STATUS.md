@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `Accion IA interview_brief activa con SSE, cache por accion y trazabilidad enlazada por run_id`
+- checkpoint_actual: `entrevista con modo dual guided/adaptive (planner+tools) y trazabilidad request/response por run_id`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, analisis por accion, interview brief, importacion manual, CV activo y capa semantica`
 - ultima_actualizacion: `2026-04-09`
 
@@ -192,9 +192,18 @@
 - frontend incorpora panel de trazas para visualizar request exacto por destino y filtrar por oportunidad activa
 - trazas `request_traces` ahora soportan `run_id` para vinculo 1:1 con ejecuciones persistidas (`ai_action_runs`)
 - backend permite filtrar trazas por `run_id` y frontend habilita foco desde `Historico IA` con boton `Ver request exacto`
+- `request_traces` ampliado con timeline de ejecucion por paso (`step_order`, `tool_name`, `stage`, `status`, `input_summary`, `output_summary`, `started_at`, `finished_at`)
+- `interview_brief` cambia de consulta unica a investigacion iterativa multi-topico en Tavily (noticias, contratacion, riesgo, sentimiento), con deduplicacion de fuentes y pasos persistidos por `run_id`
+- frontend de `Contextual Intelligence` ordena trazas por `step_order` y muestra metadata operativa por tool para depuracion del ciclo agentico
 - primera ejecucion generada de `interview_brief` se registra en conversacion como mensaje de asistente del perfil activo
 - `request_traces` endurecido con saneo de payload: redaccion automatica de secretos (api_key/token/password/authorization) y truncamiento seguro por cap de tamano
 - frontend agrupa trazas por `run_id`, habilita navegacion bidireccional `request <-> response` y muestra vista unificada por ejecucion
+- `request_traces` ahora persiste `response_payload` saneado (ademas de `request_payload`) para depurar respuestas reales de tools/proveedores, incluyendo Tavily
+- UI `Contextual Intelligence` ahora muestra `Ver response exacto` por traza, junto a `Ver request exacto`
+- `ai_runtime_config` incorpora `interview_research_mode` (`guided`/`adaptive`) y `interview_research_max_steps` para controlar autonomia de entrevista
+- `interview_brief` soporta modo `adaptive`: planifica queries dinamicas con OpenAI (`task_interview_research_plan`) y luego ejecuta Tavily con presupuesto de pasos
+- admin UI expone `modo de investigacion entrevista` y `max steps` junto con `top_k` semantico
+- `target_sources` en flows Tavily deja de ser obligatorio: backend/admin/frontend ahora aceptan lista vacia para busqueda sin restriccion por fuentes
 - arquitectura documenta politica de ventana de contexto y cantidad de mensajes por flujo OpenAI (`chat`, `analyze`, `interview_brief`, `prepare`, legacy combinado)
 - README incluye resumen operativo de reglas de contexto OpenAI V1 y referencia al detalle normativo
 - API agrega acciones separadas de analisis: `POST .../analyze/profile-match` y `POST .../analyze/cultural-fit`

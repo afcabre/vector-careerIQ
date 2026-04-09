@@ -114,6 +114,7 @@ Flujo `search_jobs_tavily`:
   - `{skills}`
   - `{person_location}`
   - `{target_sources}` (inyectado desde lista de fuentes objetivo configuradas)
+  - nota: `target_sources` puede quedar vacio
 
 Flujo `search_culture_tavily`:
 - requerido:
@@ -123,15 +124,21 @@ Flujo `search_culture_tavily`:
   - `{target_roles}`
   - `{person_location}`
   - `{target_sources}` (inyectado desde lista de fuentes objetivo configuradas)
+  - nota: `target_sources` puede quedar vacio
 
 Flujo `search_interview_tavily`:
 - requerido:
   - `{company}`
 - disponibles:
+  - `{query}`
   - `{roles}`
   - `{target_roles}`
   - `{person_location}`
+  - `{research_topic}`
+  - `{topic_query_hint}`
+  - `{topic_key}`
   - `{target_sources}` (inyectado desde lista de fuentes objetivo configuradas)
+  - nota: `target_sources` puede quedar vacio
 
 Flujo `system_identity`:
 - requerido:
@@ -147,11 +154,12 @@ Flujo `task_chat`:
   - `{cv_context_source}`
   - `{cv_context}`
 
-Flujos `task_analyze_profile_match`, `task_analyze_cultural_fit`, `task_interview_brief`, `task_prepare_guidance`, `task_prepare_cover_letter`, `task_prepare_experience_summary`:
+Flujos `task_analyze_profile_match`, `task_analyze_cultural_fit`, `task_interview_research_plan`, `task_interview_brief`, `task_prepare_guidance`, `task_prepare_cover_letter`, `task_prepare_experience_summary`:
 - requeridos:
   - `{person_context}`
   - `{opportunity_context}`
 - disponibles segun flujo:
+  - `{max_steps}` (planner de entrevista)
   - `{semantic_evidence_context}`
   - `{cultural_evidence_context}`
   - `{interview_evidence_context}`
@@ -179,8 +187,8 @@ Mapa rapido endpoint -> flow:
 - `POST /api/admin/prompt-configs/{flow_key}/rollback`: restaurar una version previa del flow
 - `GET /api/admin/search-providers`: listar habilitacion por proveedor de busqueda
 - `PATCH /api/admin/search-providers/{provider_key}`: habilitar/deshabilitar proveedor (`adzuna`, `remotive`, `tavily`)
-- `GET /api/admin/ai-runtime-config`: ver parametros globales de ejecucion IA (incluye `top_k` semantico por contexto)
-- `PATCH /api/admin/ai-runtime-config`: actualizar `top_k_semantic_analysis` y/o `top_k_semantic_interview`
+- `GET /api/admin/ai-runtime-config`: ver parametros globales de ejecucion IA (incluye `top_k` y modo de investigacion de entrevista)
+- `PATCH /api/admin/ai-runtime-config`: actualizar `top_k_semantic_analysis`, `top_k_semantic_interview`, `interview_research_mode`, `interview_research_max_steps`
 - `POST /api/persons/{person_id}/search`: `search_jobs_tavily`
 - senales culturales en `analyze_cultural_fit`: `search_culture_tavily`
 - contexto pre-entrevista en `interview_brief`: `search_interview_tavily`
@@ -190,6 +198,9 @@ Reglas de contexto OpenAI (resumen V1):
 - `analyze` (profile/cultural y streams): `2` mensajes fijos (`system + user`) por accion; no usa historial de chat.
 - `analyze` y `prepare` usan evidencia semantica con `top_k` configurable desde admin (`/api/admin/ai-runtime-config`), default V1 `12` para analisis/preparacion.
 - `interview brief` usa evidencia semantica con `top_k_semantic_interview` configurable desde admin (default V1 `8`) y evidencia externa de Tavily.
+- `interview brief` soporta modo dual:
+  - `guided`: queries por temas fijos
+  - `adaptive`: planner OpenAI (`task_interview_research_plan`) + ejecucion Tavily acotada por `interview_research_max_steps`
 - `prepare/prepare-stream`: `2` mensajes por target seleccionado (`guidance`, `cover_letter`, `experience_summary`) con evidencia semantica por target.
 
 Detalle normativo completo (endpoint -> composicion -> variables):
@@ -210,3 +221,55 @@ Credenciales demo por defecto:
   - `npm install`
 - ejecutar app:
   - `npm run dev`
+
+## Configuracion Operativa V1 (Paso a Paso)
+### 1) Backend `.env`
+Configurar:
+- `PERSISTENCE_BACKEND=memory` o `firestore`
+- `TUTOR_USERNAME`
+- `TUTOR_PASSWORD_HASH`
+- `SESSION_SECRET`
+- `OPENAI_API_KEY`
+- `OPENAI_CHAT_MODEL=gpt-4o-mini`
+- `OPENAI_EMBEDDING_MODEL=text-embedding-3-small`
+- `TAVILY_API_KEY`
+- `RAPIDAPI_KEY`
+- `RAPIDAPI_ADZUNA_HOST`
+- `PINECONE_API_KEY`
+- `PINECONE_INDEX_NAME`
+- `PINECONE_INDEX_HOST`
+
+Si usas Firestore:
+- `FIREBASE_CREDENTIALS_FILE` o (`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`)
+
+### 2) Frontend `.env`
+Configurar:
+- `VITE_API_BASE_URL` (ejemplo local: `http://localhost:8000/api`)
+
+### 3) Admin UI: Proveedores
+En `Administracion global` -> `Administracion de proveedores de busqueda`:
+- habilitar/deshabilitar `Tavily`, `Adzuna`, `Remotive`
+
+### 4) Admin UI: Runtime IA
+En `Administracion global` -> `Administracion de retrieval semantico (global V1)`:
+- `top_k semantico para analisis/preparacion`
+- `top_k semantico para entrevista`
+- `Modo de investigacion de entrevista`:
+  - `guided` (pasos fijos)
+  - `adaptive` (plan dinamico con LLM + tools)
+- `max steps de investigacion entrevista` (`3` a `8`)
+
+### 5) Admin UI: Prompts relevantes para entrevista
+Revisar/ajustar:
+- `search_interview_tavily`
+- `task_interview_research_plan`
+- `task_interview_brief`
+
+### 6) Verificacion rapida
+1. Login tutor.
+2. Seleccionar persona.
+3. Guardar una oportunidad.
+4. En `Analisis`, ejecutar `Entrevista`.
+5. En `Contextual Intelligence`, validar:
+   - `Historial IA`
+   - `Trazas tecnicas` con `Ver request exacto` y `Ver response exacto`.
