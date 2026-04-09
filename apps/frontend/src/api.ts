@@ -222,6 +222,25 @@ export type SearchProviderConfig = {
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
 
+function buildNetworkErrorMessage() {
+  const currentOrigin =
+    typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : "desconocido";
+  return `No se pudo conectar con la API (${API_BASE}) desde origen ${currentOrigin}. Verifica backend activo y CORS_ALLOW_ORIGINS.`;
+}
+
+async function safeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error(buildNetworkErrorMessage());
+    }
+    throw error;
+  }
+}
+
 async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let message = `Request failed: ${response.status}`;
@@ -239,7 +258,7 @@ async function parseResponse<T>(response: Response): Promise<T> {
 }
 
 export async function getSession(): Promise<Session> {
-  const response = await fetch(`${API_BASE}/auth/session`, {
+  const response = await safeFetch(`${API_BASE}/auth/session`, {
     method: "GET",
     credentials: "include"
   });
@@ -247,7 +266,7 @@ export async function getSession(): Promise<Session> {
 }
 
 export async function login(username: string, password: string): Promise<Session> {
-  const response = await fetch(`${API_BASE}/auth/login`, {
+  const response = await safeFetch(`${API_BASE}/auth/login`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -257,7 +276,7 @@ export async function login(username: string, password: string): Promise<Session
 }
 
 export async function logout(): Promise<void> {
-  const response = await fetch(`${API_BASE}/auth/logout`, {
+  const response = await safeFetch(`${API_BASE}/auth/logout`, {
     method: "POST",
     credentials: "include"
   });
@@ -267,7 +286,7 @@ export async function logout(): Promise<void> {
 }
 
 export async function listPersons(): Promise<Person[]> {
-  const response = await fetch(`${API_BASE}/persons`, {
+  const response = await safeFetch(`${API_BASE}/persons`, {
     method: "GET",
     credentials: "include"
   });
@@ -293,7 +312,7 @@ export async function listRequestTraces(
     query.set("limit", String(Math.max(1, Math.min(200, Math.trunc(params.limit)))));
   }
   const suffix = query.toString() ? `?${query.toString()}` : "";
-  const response = await fetch(`${API_BASE}/persons/${personId}/request-traces${suffix}`, {
+  const response = await safeFetch(`${API_BASE}/persons/${personId}/request-traces${suffix}`, {
     method: "GET",
     credentials: "include"
   });
@@ -302,7 +321,7 @@ export async function listRequestTraces(
 }
 
 export async function listSearchProviderConfigs(): Promise<SearchProviderConfig[]> {
-  const response = await fetch(`${API_BASE}/admin/search-providers`, {
+  const response = await safeFetch(`${API_BASE}/admin/search-providers`, {
     method: "GET",
     credentials: "include"
   });
@@ -314,7 +333,7 @@ export async function updateSearchProviderConfig(
   providerKey: "adzuna" | "remotive" | "tavily",
   isEnabled: boolean
 ): Promise<SearchProviderConfig> {
-  const response = await fetch(`${API_BASE}/admin/search-providers/${providerKey}`, {
+  const response = await safeFetch(`${API_BASE}/admin/search-providers/${providerKey}`, {
     method: "PATCH",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -330,7 +349,7 @@ export async function createPerson(payload: {
   years_experience: number;
   skills: string[];
 }): Promise<Person> {
-  const response = await fetch(`${API_BASE}/persons`, {
+  const response = await safeFetch(`${API_BASE}/persons`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -352,7 +371,7 @@ export async function updatePerson(
     culture_preferences_notes?: string;
   }
 ): Promise<Person> {
-  const response = await fetch(`${API_BASE}/persons/${personId}`, {
+  const response = await safeFetch(`${API_BASE}/persons/${personId}`, {
     method: "PATCH",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -362,7 +381,7 @@ export async function updatePerson(
 }
 
 export async function listPromptConfigs(): Promise<PromptConfig[]> {
-  const response = await fetch(`${API_BASE}/admin/prompt-configs`, {
+  const response = await safeFetch(`${API_BASE}/admin/prompt-configs`, {
     method: "GET",
     credentials: "include"
   });
@@ -378,7 +397,7 @@ export async function updatePromptConfig(
     is_active?: boolean;
   }
 ): Promise<PromptConfig> {
-  const response = await fetch(`${API_BASE}/admin/prompt-configs/${flowKey}`, {
+  const response = await safeFetch(`${API_BASE}/admin/prompt-configs/${flowKey}`, {
     method: "PATCH",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -393,7 +412,7 @@ export async function listPromptConfigVersions(
 ): Promise<PromptConfigVersion[]> {
   const params = new URLSearchParams();
   params.set("limit", String(Math.max(1, Math.min(100, Math.trunc(limit)))));
-  const response = await fetch(
+  const response = await safeFetch(
     `${API_BASE}/admin/prompt-configs/${flowKey}/versions?${params.toString()}`,
     {
       method: "GET",
@@ -408,7 +427,7 @@ export async function rollbackPromptConfig(
   flowKey: string,
   versionId: string
 ): Promise<PromptConfig> {
-  const response = await fetch(`${API_BASE}/admin/prompt-configs/${flowKey}/rollback`, {
+  const response = await safeFetch(`${API_BASE}/admin/prompt-configs/${flowKey}/rollback`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -418,7 +437,7 @@ export async function rollbackPromptConfig(
 }
 
 export async function getActiveCV(personId: string): Promise<ActiveCV | null> {
-  const response = await fetch(`${API_BASE}/persons/${personId}/cv/active`, {
+  const response = await safeFetch(`${API_BASE}/persons/${personId}/cv/active`, {
     method: "GET",
     credentials: "include"
   });
@@ -431,7 +450,7 @@ export async function getActiveCV(personId: string): Promise<ActiveCV | null> {
 export async function uploadCV(personId: string, file: File): Promise<ActiveCV> {
   const form = new FormData();
   form.append("file", file);
-  const response = await fetch(`${API_BASE}/persons/${personId}/cv`, {
+  const response = await safeFetch(`${API_BASE}/persons/${personId}/cv`, {
     method: "POST",
     credentials: "include",
     body: form
@@ -440,7 +459,7 @@ export async function uploadCV(personId: string, file: File): Promise<ActiveCV> 
 }
 
 export async function getActiveCVText(personId: string): Promise<ActiveCVText> {
-  const response = await fetch(`${API_BASE}/persons/${personId}/cv/active/text`, {
+  const response = await safeFetch(`${API_BASE}/persons/${personId}/cv/active/text`, {
     method: "GET",
     credentials: "include"
   });
@@ -448,7 +467,7 @@ export async function getActiveCVText(personId: string): Promise<ActiveCVText> {
 }
 
 export async function getConversation(personId: string): Promise<Conversation> {
-  const response = await fetch(`${API_BASE}/persons/${personId}/chat/conversation`, {
+  const response = await safeFetch(`${API_BASE}/persons/${personId}/chat/conversation`, {
     method: "GET",
     credentials: "include"
   });
@@ -459,7 +478,7 @@ export async function sendMessage(
   personId: string,
   message: string
 ): Promise<Conversation> {
-  const response = await fetch(`${API_BASE}/persons/${personId}/chat`, {
+  const response = await safeFetch(`${API_BASE}/persons/${personId}/chat`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -524,7 +543,7 @@ export async function sendMessageStream(
   message: string,
   onDelta: (delta: string) => void
 ): Promise<Conversation> {
-  const response = await fetch(`${API_BASE}/persons/${personId}/chat/stream`, {
+  const response = await safeFetch(`${API_BASE}/persons/${personId}/chat/stream`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -588,7 +607,7 @@ export async function searchOpportunities(
   query: string,
   maxResults = 6
 ): Promise<{ items: SearchResult[]; warnings: string[]; provider_status: SearchProviderStatus[] }> {
-  const response = await fetch(`${API_BASE}/persons/${personId}/search`, {
+  const response = await safeFetch(`${API_BASE}/persons/${personId}/search`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -605,7 +624,7 @@ export async function saveOpportunityFromSearch(
   personId: string,
   result: SearchResult
 ): Promise<{ item: Opportunity; created: boolean }> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${API_BASE}/persons/${personId}/opportunities/from-search`,
     {
       method: "POST",
@@ -626,7 +645,7 @@ export async function saveOpportunityFromSearch(
 }
 
 export async function listOpportunities(personId: string): Promise<Opportunity[]> {
-  const response = await fetch(`${API_BASE}/persons/${personId}/opportunities`, {
+  const response = await safeFetch(`${API_BASE}/persons/${personId}/opportunities`, {
     method: "GET",
     credentials: "include"
   });
@@ -639,7 +658,7 @@ export async function updateOpportunity(
   opportunityId: string,
   payload: { status?: string; notes?: string }
 ): Promise<Opportunity> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${API_BASE}/persons/${personId}/opportunities/${opportunityId}`,
     {
       method: "PATCH",
@@ -655,7 +674,7 @@ export async function analyzeOpportunity(
   personId: string,
   opportunityId: string
 ): Promise<AnalyzeOpportunityPayload> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/analyze`,
     {
       method: "POST",
@@ -670,7 +689,7 @@ export async function analyzeProfileMatch(
   opportunityId: string,
   forceRecompute: boolean
 ): Promise<AnalyzeProfileMatchPayload> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/analyze/profile-match`,
     {
       method: "POST",
@@ -687,7 +706,7 @@ export async function analyzeCulturalFit(
   opportunityId: string,
   forceRecompute: boolean
 ): Promise<AnalyzeCulturalFitPayload> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/analyze/cultural-fit`,
     {
       method: "POST",
@@ -704,7 +723,7 @@ export async function prepareOpportunity(
   opportunityId: string,
   payload: { targets: Array<"guidance_text" | "cover_letter" | "experience_summary">; force_recompute: boolean }
 ): Promise<PrepareOpportunityPayload> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/prepare`,
     {
       method: "POST",
@@ -721,7 +740,7 @@ export async function analyzeOpportunityStream(
   opportunityId: string,
   onDelta: (delta: string) => void
 ): Promise<AnalyzeOpportunityPayload> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/analyze/stream`,
     {
       method: "POST",
@@ -794,7 +813,7 @@ export async function analyzeProfileMatchStream(
   forceRecompute: boolean,
   onDelta: (delta: string) => void
 ): Promise<AnalyzeProfileMatchPayload> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/analyze/profile-match/stream`,
     {
       method: "POST",
@@ -868,7 +887,7 @@ export async function analyzeCulturalFitStream(
   forceRecompute: boolean,
   onDelta: (delta: string) => void
 ): Promise<AnalyzeCulturalFitPayload> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/analyze/cultural-fit/stream`,
     {
       method: "POST",
@@ -942,7 +961,7 @@ export async function prepareOpportunityStream(
   payload: { targets: Array<"guidance_text" | "cover_letter" | "experience_summary">; force_recompute: boolean },
   onDelta: (channel: "guidance_text" | "cover_letter" | "experience_summary", delta: string) => void
 ): Promise<PrepareOpportunityPayload> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/prepare/stream`,
     {
       method: "POST",
@@ -1027,7 +1046,7 @@ export async function listOpportunityArtifacts(
   personId: string,
   opportunityId: string
 ): Promise<ApplicationArtifact[]> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/artifacts`,
     {
       method: "GET",
@@ -1048,7 +1067,7 @@ export async function listOpportunityAiRuns(
     params.set("action_key", actionKey.trim());
   }
   const querySuffix = params.toString() ? `?${params.toString()}` : "";
-  const response = await fetch(
+  const response = await safeFetch(
     `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/ai-runs${querySuffix}`,
     {
       method: "GET",
@@ -1069,7 +1088,7 @@ export async function importOpportunityByUrl(
     raw_text: string;
   }
 ): Promise<{ item: Opportunity; created: boolean }> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${API_BASE}/persons/${personId}/opportunities/import-url`,
     {
       method: "POST",
@@ -1090,7 +1109,7 @@ export async function importOpportunityByText(
     raw_text: string;
   }
 ): Promise<Opportunity> {
-  const response = await fetch(
+  const response = await safeFetch(
     `${API_BASE}/persons/${personId}/opportunities/import-text`,
     {
       method: "POST",
