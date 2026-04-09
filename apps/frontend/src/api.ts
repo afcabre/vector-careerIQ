@@ -220,6 +220,15 @@ export type SearchProviderConfig = {
   updated_at: string;
 };
 
+export type AIRuntimeConfig = {
+  config_key: string;
+  top_k_semantic_analysis: number;
+  top_k_semantic_interview: number;
+  updated_by: string;
+  created_at: string;
+  updated_at: string;
+};
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
 
 function buildNetworkErrorMessage() {
@@ -340,6 +349,27 @@ export async function updateSearchProviderConfig(
     body: JSON.stringify({ is_enabled: isEnabled })
   });
   return parseResponse<SearchProviderConfig>(response);
+}
+
+export async function getAiRuntimeConfig(): Promise<AIRuntimeConfig> {
+  const response = await safeFetch(`${API_BASE}/admin/ai-runtime-config`, {
+    method: "GET",
+    credentials: "include"
+  });
+  return parseResponse<AIRuntimeConfig>(response);
+}
+
+export async function updateAiRuntimeConfig(payload: {
+  top_k_semantic_analysis?: number;
+  top_k_semantic_interview?: number;
+}): Promise<AIRuntimeConfig> {
+  const response = await safeFetch(`${API_BASE}/admin/ai-runtime-config`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  return parseResponse<AIRuntimeConfig>(response);
 }
 
 export async function createPerson(payload: {

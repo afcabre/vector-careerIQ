@@ -2,9 +2,9 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `Ajuste fino UX Analisis: acciones por bloque con SSE visible, origen de oportunidad, rail contextual colapsable y correcciones de layout`
+- checkpoint_actual: `Control global de retrieval semantico en administracion: top_k separado por contexto (analisis/preparacion y entrevista reservado)`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
-- ultima_actualizacion: `2026-04-08`
+- ultima_actualizacion: `2026-04-09`
 
 ## Progreso Por Fase
 - `Fase 0`: completada
@@ -51,6 +51,7 @@
 - backend expone endpoints admin `GET /api/admin/prompt-configs`, `GET /api/admin/prompt-configs/{flow_key}` y `PATCH /api/admin/prompt-configs/{flow_key}`
 - backend agrega historial de versiones en `prompt_config_versions` y endpoints admin `GET /api/admin/prompt-configs/{flow_key}/versions` + `POST /api/admin/prompt-configs/{flow_key}/rollback`
 - backend agrega configuracion global por proveedor de busqueda en `search_provider_configs` y endpoints admin `GET /api/admin/search-providers` + `PATCH /api/admin/search-providers/{provider_key}`
+- backend agrega configuracion global de runtime IA en `ai_runtime_configs` y endpoint admin `GET/PATCH /api/admin/ai-runtime-config`
 - busqueda Tavily de vacantes usa construccion de query configurable via `prompt_configs` (`search_jobs_tavily`)
 - busqueda de vacantes respeta habilitacion por proveedor (`tavily`, `adzuna`, `remotive`) definida en admin UI/API
 - query de Tavily para vacantes se recorta a maximo `400` caracteres para evitar `HTTP 400` por longitud
@@ -61,6 +62,8 @@
 - frontend consume endpoints admin de prompt configs y aplica validaciones basicas antes de guardar
 - frontend de admin prompts permite consultar versiones por flow y restaurar una version previa (rollback)
 - frontend incorpora seccion de administracion de proveedores de busqueda con checkboxes para habilitar/deshabilitar ejecucion por proveedor
+- frontend incorpora seccion de administracion de retrieval semantico con `top_k` separado para `analisis/preparacion` y `entrevista` (reservado)
+- `analyze` y `prepare` consumen `top_k_semantic_analysis` configurable (default V1 `12`) en lugar de valor hardcodeado
 - frontend de busqueda muestra panel de diagnostico por proveedor usando `provider_status` de la ultima ejecucion
 - frontend de busqueda muestra motivo amigable, `HTTP status` (si aplica), detalle tecnico y boton de copia por proveedor para depuracion rapida
 - backend endurece `provider_status` para errores de proveedor con `reason` estable + `reason_detail` + `http_status` + `error_class`
@@ -263,6 +266,8 @@
 - suite backend revalidada con hardening de trazas y versionado/rollback de prompts: `67 tests` en `OK` (`skipped=1`)
 - suite backend revalidada con admin de proveedores y guard de longitud Tavily: `72 tests` en `OK` (`skipped=1`)
 - contratos focalizados revalidados: `test_search_provider_admin` + `test_api_error_and_fallbacks` en `OK` (`28 tests`)
+- suite backend revalidada tras admin de runtime IA y top_k configurable: `80 tests` en `OK` (`skipped=1`)
+- build frontend revalidado tras integracion de controles `top_k` en administracion: `npm run build` en `OK`
 
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada de CV a Markdown (PyMuPDF/LlamaIndex) para mejorar jerarquia semantica
@@ -283,5 +288,5 @@
 - decidir cierre de alcance UI V1 y preparar corte de estabilizacion (QA visual + smoke test funcional)
 
 ## Ajustes Post-UI Confirmados
-- hacer `semantic_evidence` colapsable por defecto en la vista de `analysis`
-- mover `top_k` de evidencia semantica a parametro configurable desde administracion (con persistencia)
+- `semantic_evidence` colapsable por defecto en la vista de `analysis` (implementado)
+- `top_k` de evidencia semantica configurable desde administracion con persistencia global (implementado)

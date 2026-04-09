@@ -28,6 +28,7 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
 - hardening de `request_traces` aplicado: redaccion automatica de secretos y cap de tamano de payload con truncamiento seguro
 - frontend agrupa trazas por `run_id` y habilita navegacion bidireccional `request <-> response` con vista unificada por ejecucion
 - administracion de busqueda agrega switches por proveedor (`Tavily`, `Adzuna`, `Remotive`) para habilitar/deshabilitar ejecucion por UI
+- administracion IA agrega control global de retrieval semantico con `top_k` separado por contexto (`analisis/preparacion` y `entrevista` reservado)
 - busqueda Tavily aplica cap de query a `400` caracteres para evitar `HTTP 400` por longitud
 - respuesta de busqueda incluye `provider_status` por ejecucion (estado por proveedor, razon y conteo) y frontend lo muestra en el panel de busqueda
 - importacion manual de vacantes por URL y texto pegado desde frontend
@@ -164,13 +165,16 @@ Mapa rapido endpoint -> flow:
 - `POST /api/admin/prompt-configs/{flow_key}/rollback`: restaurar una version previa del flow
 - `GET /api/admin/search-providers`: listar habilitacion por proveedor de busqueda
 - `PATCH /api/admin/search-providers/{provider_key}`: habilitar/deshabilitar proveedor (`adzuna`, `remotive`, `tavily`)
+- `GET /api/admin/ai-runtime-config`: ver parametros globales de ejecucion IA (incluye `top_k` semantico por contexto)
+- `PATCH /api/admin/ai-runtime-config`: actualizar `top_k_semantic_analysis` y/o `top_k_semantic_interview`
 - `POST /api/persons/{person_id}/search`: `search_jobs_tavily`
 - senales culturales en `analyze_cultural_fit`: `search_culture_tavily`
 
 Reglas de contexto OpenAI (resumen V1):
 - `chat/chat-stream`: `1 system + hasta 12` mensajes de historial reciente (max `13`); incluye contexto CV semantico (`top_k=24`) y limites de texto para contexto (`7000` chars) con fallback preview (`1600` chars).
 - `analyze` (profile/cultural y streams): `2` mensajes fijos (`system + user`) por accion; no usa historial de chat.
-- `prepare/prepare-stream`: `2` mensajes por target seleccionado (`guidance`, `cover_letter`, `experience_summary`), con evidencia semantica de CV (`top_k=24`).
+- `analyze` y `prepare` usan evidencia semantica con `top_k` configurable desde admin (`/api/admin/ai-runtime-config`), default V1 `12` para analisis/preparacion.
+- `prepare/prepare-stream`: `2` mensajes por target seleccionado (`guidance`, `cover_letter`, `experience_summary`) con evidencia semantica por target.
 
 Detalle normativo completo (endpoint -> composicion -> variables):
 - `.specify/03.Arquitectura-y-Plan.md`

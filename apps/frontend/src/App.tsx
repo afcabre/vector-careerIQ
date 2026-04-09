@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
 
 import {
+  AIRuntimeConfig,
   AIRun,
   ActiveCV,
   ApplicationArtifact,
@@ -21,6 +22,7 @@ import {
   analyzeCulturalFit,
   analyzeProfileMatch,
   createPerson,
+  getAiRuntimeConfig,
   getConversation,
   getActiveCV,
   getActiveCVText,
@@ -43,6 +45,7 @@ import {
   sendMessage,
   sendMessageStream,
   rollbackPromptConfig as rollbackPromptConfigApi,
+  updateAiRuntimeConfig as updateAiRuntimeConfigApi,
   updateSearchProviderConfig as updateSearchProviderConfigApi,
   updatePromptConfig as updatePromptConfigApi,
   updatePerson as updatePersonProfile,
@@ -207,6 +210,8 @@ const SEARCH_PROVIDER_LABELS: Record<string, string> = {
   remotive: "Remotive",
   tavily: "Tavily"
 };
+const AI_RUNTIME_TOP_K_MIN = 4;
+const AI_RUNTIME_TOP_K_MAX = 30;
 const CHAT_QUICK_STARTS = [
   "Resume el perfil actual en fortalezas y posibles brechas para postulacion.",
   "Que 3 vacantes deberia priorizar primero y por que?",
@@ -622,6 +627,11 @@ export default function App() {
   const [searchProviderConfigs, setSearchProviderConfigs] = useState<SearchProviderConfig[]>([]);
   const [isLoadingSearchProviderConfigs, setIsLoadingSearchProviderConfigs] = useState(false);
   const [savingSearchProviderKey, setSavingSearchProviderKey] = useState<string | null>(null);
+  const [aiRuntimeConfig, setAiRuntimeConfig] = useState<AIRuntimeConfig | null>(null);
+  const [aiRuntimeTopKAnalysisInput, setAiRuntimeTopKAnalysisInput] = useState("");
+  const [aiRuntimeTopKInterviewInput, setAiRuntimeTopKInterviewInput] = useState("");
+  const [isLoadingAiRuntimeConfig, setIsLoadingAiRuntimeConfig] = useState(false);
+  const [isSavingAiRuntimeConfig, setIsSavingAiRuntimeConfig] = useState(false);
   const [promptVersionsByFlow, setPromptVersionsByFlow] = useState<
     Record<string, PromptConfigVersion[]>
   >({});
@@ -813,6 +823,12 @@ export default function App() {
   useEffect(() => {
     const loadPromptConfigs = async () => {
       if (view !== "workspace") {
+        setIsLoadingPromptConfigs(false);
+        setIsLoadingSearchProviderConfigs(false);
+        setIsLoadingAiRuntimeConfig(false);
+        setAiRuntimeConfig(null);
+        setAiRuntimeTopKAnalysisInput("");
+        setAiRuntimeTopKInterviewInput("");
         setSearchProviderConfigs([]);
         setPromptConfigs([]);
         setPromptConfigDrafts({});
@@ -822,15 +838,20 @@ export default function App() {
       }
       setIsLoadingPromptConfigs(true);
       setIsLoadingSearchProviderConfigs(true);
+      setIsLoadingAiRuntimeConfig(true);
       setErrorMessage(null);
       try {
-        const [items, providerItems] = await Promise.all([
+        const [items, providerItems, runtimeConfig] = await Promise.all([
           listPromptConfigs(),
-          listSearchProviderConfigs()
+          listSearchProviderConfigs(),
+          getAiRuntimeConfig()
         ]);
         setPromptConfigs(items);
         setPromptConfigDrafts(buildPromptConfigDrafts(items));
         setSearchProviderConfigs(providerItems);
+        setAiRuntimeConfig(runtimeConfig);
+        setAiRuntimeTopKAnalysisInput(String(runtimeConfig.top_k_semantic_analysis));
+        setAiRuntimeTopKInterviewInput(String(runtimeConfig.top_k_semantic_interview));
       } catch (error) {
         const message =
           error instanceof Error
@@ -840,6 +861,7 @@ export default function App() {
       } finally {
         setIsLoadingPromptConfigs(false);
         setIsLoadingSearchProviderConfigs(false);
+        setIsLoadingAiRuntimeConfig(false);
       }
     };
     void loadPromptConfigs();
@@ -886,7 +908,7 @@ export default function App() {
   const currentPageTitle = showCandidatesPage
     ? "Selecciona un perfil para abrir su contexto."
     : showAdminPromptsPage
-      ? "Ajusta prompts globales y proveedores de busqueda."
+      ? "Ajusta prompts globales, proveedores y control de retrieval semantico."
       : showProfilePage
         ? "Gestiona perfil y CV del perfil activo."
         : showOpportunitiesPage
@@ -1567,6 +1589,54 @@ export default function App() {
       setErrorMessage(message);
     } finally {
       setSavingSearchProviderKey((current) => (current === providerKey ? null : current));
+    }
+  }
+
+  async function handleSaveAiRuntimeConfig() {
+    if (isSavingAiRuntimeConfig) {
+      return;
+    }
+
+    const parsedAnalysis = Number.parseInt(aiRuntimeTopKAnalysisInput, 10);
+    const parsedInterview = Number.parseInt(aiRuntimeTopKInterviewInput, 10);
+
+    if (
+      !Number.isFinite(parsedAnalysis) ||
+      parsedAnalysis < AI_RUNTIME_TOP_K_MIN ||
+      parsedAnalysis > AI_RUNTIME_TOP_K_MAX
+    ) {
+      setErrorMessage(
+        `top_k análisis debe estar entre ${AI_RUNTIME_TOP_K_MIN} y ${AI_RUNTIME_TOP_K_MAX}.`
+      );
+      return;
+    }
+    if (
+      !Number.isFinite(parsedInterview) ||
+      parsedInterview < AI_RUNTIME_TOP_K_MIN ||
+      parsedInterview > AI_RUNTIME_TOP_K_MAX
+    ) {
+      setErrorMessage(
+        `top_k entrevista debe estar entre ${AI_RUNTIME_TOP_K_MIN} y ${AI_RUNTIME_TOP_K_MAX}.`
+      );
+      return;
+    }
+
+    setIsSavingAiRuntimeConfig(true);
+    setErrorMessage(null);
+    try {
+      const updated = await updateAiRuntimeConfigApi({
+        top_k_semantic_analysis: parsedAnalysis,
+        top_k_semantic_interview: parsedInterview
+      });
+      setAiRuntimeConfig(updated);
+      setAiRuntimeTopKAnalysisInput(String(updated.top_k_semantic_analysis));
+      setAiRuntimeTopKInterviewInput(String(updated.top_k_semantic_interview));
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo guardar configuracion IA";
+      setErrorMessage(message);
+    } finally {
+      setIsSavingAiRuntimeConfig(false);
     }
   }
 
@@ -2783,7 +2853,9 @@ export default function App() {
           </div>
           <button
             className="ghostButton"
-            disabled={isLoadingSearchProviderConfigs || isLoadingPromptConfigs}
+            disabled={
+              isLoadingSearchProviderConfigs || isLoadingPromptConfigs || isLoadingAiRuntimeConfig
+            }
             onClick={() => setPromptConfigReloadToken((current) => current + 1)}
             type="button"
           >
@@ -2827,6 +2899,71 @@ export default function App() {
             })}
           </div>
         )}
+        </section>
+      ) : null}
+
+      {showAdminPromptsPage ? (
+        <section className="panel selectedPanel">
+          <header className="panelHeader">
+            <div>
+              <h2>Administracion de retrieval semantico (global V1)</h2>
+              <p>
+                Controla top_k por contexto: analisis/preparacion en produccion y entrevista
+                (preconfigurado para proxima fase).
+              </p>
+            </div>
+          </header>
+          {isLoadingAiRuntimeConfig ? (
+            <p className="metaText">Cargando configuracion de IA...</p>
+          ) : !aiRuntimeConfig ? (
+            <p className="metaText">No hay configuracion de IA disponible.</p>
+          ) : (
+            <div className="promptConfigGrid">
+              <article className="manualCard">
+                <p className="chatRole">Control de top_k semantico</p>
+                <p className="metaText">
+                  Rango permitido: {AI_RUNTIME_TOP_K_MIN} a {AI_RUNTIME_TOP_K_MAX}
+                </p>
+                <label className="field">
+                  top_k semantico para analisis/preparacion
+                  <input
+                    disabled={isSavingAiRuntimeConfig}
+                    max={AI_RUNTIME_TOP_K_MAX}
+                    min={AI_RUNTIME_TOP_K_MIN}
+                    onChange={(event) => setAiRuntimeTopKAnalysisInput(event.target.value)}
+                    step={1}
+                    type="number"
+                    value={aiRuntimeTopKAnalysisInput}
+                  />
+                </label>
+                <label className="field">
+                  top_k semantico para entrevista (reservado)
+                  <input
+                    disabled={isSavingAiRuntimeConfig}
+                    max={AI_RUNTIME_TOP_K_MAX}
+                    min={AI_RUNTIME_TOP_K_MIN}
+                    onChange={(event) => setAiRuntimeTopKInterviewInput(event.target.value)}
+                    step={1}
+                    type="number"
+                    value={aiRuntimeTopKInterviewInput}
+                  />
+                </label>
+                <p className="metaText">
+                  Ultima actualizacion: {new Date(aiRuntimeConfig.updated_at).toLocaleString()} por{" "}
+                  {aiRuntimeConfig.updated_by}
+                </p>
+                <div className="cardActions">
+                  <button
+                    disabled={isSavingAiRuntimeConfig}
+                    onClick={() => void handleSaveAiRuntimeConfig()}
+                    type="button"
+                  >
+                    {isSavingAiRuntimeConfig ? "Guardando..." : "Guardar configuracion IA"}
+                  </button>
+                </div>
+              </article>
+            </div>
+          )}
         </section>
       ) : null}
 
