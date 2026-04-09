@@ -975,26 +975,221 @@ button:disabled {
   gap: 12px;
 }
 
-.artifactList {
+.analysisResultTabs {
+  display: flex;
+  gap: 8px;
+}
+
+.analysisBubbleHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.analysisLayoutGrid {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(480px, 1.45fr) minmax(250px, 0.72fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.analysisRail,
+.analysisCenterColumn {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  min-width: 0;
+}
+
+.analysisColumnHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.analysisColumnHeader h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.analysisCenterHeader {
+  display: grid;
+  gap: 4px;
+}
+
+.analysisOpportunityMeta {
+  margin: 0;
+}
+
+.analysisOpportunityList {
+  display: grid;
+  gap: 12px;
+}
+
+.analysisOpportunityCard {
+  gap: 8px;
+  padding: 14px 14px 12px;
+  border-color: var(--border-subtle) !important;
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+}
+
+.analysisOpportunityCard:hover {
+  border-color: color-mix(in srgb, var(--accent) 44%, var(--border-subtle));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
+  background: color-mix(in srgb, var(--surface-soft) 32%, var(--surface-card));
+}
+
+.analysisOpportunityCardActive {
+  border-color: color-mix(in srgb, var(--accent) 86%, white) !important;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 34%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-card));
+}
+
+.analysisOpportunityCompany {
+  color: #c8d4e3;
+}
+
+.iconOnlyButton {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 58%, var(--border-subtle));
+  background: color-mix(in srgb, var(--surface-card) 88%, #0f172a);
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font-size: 0.84rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.iconOnlyButton:hover {
+  border-color: color-mix(in srgb, var(--accent) 86%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.analysisActiveCard {
+  gap: 14px;
+}
+
+.analysisStatusRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.analysisStatusField {
+  margin: 0;
+}
+
+.analysisNotesRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.analysisEmptyCard {
+  min-height: 96px;
+  align-content: center;
+}
+
+.resultBlockList {
   display: grid;
   gap: 10px;
 }
 
-.artifactItem {
-  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border-subtle));
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--surface-card) 80%, #0f172a);
-  padding: 10px;
+.resultBlockCard {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-card) 86%, #0f172a);
+  padding: 11px;
   display: grid;
+  gap: 8px;
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+}
+
+.resultBlockCard:hover {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border-subtle));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.resultBlockCardActive {
+  border-color: color-mix(in srgb, var(--accent) 72%, white);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.resultBlockTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.resultBlockPager {
+  display: flex;
+  align-items: center;
   gap: 8px;
 }
 
-.artifactContent {
-  max-height: 280px;
-  overflow-y: auto;
-  padding-right: 4px;
-  font-size: 0.95rem;
-  line-height: 1.52;
+.resultBlockToggleRow {
+  justify-content: flex-end;
+}
+
+.compactActionButton {
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: 0.74rem;
+}
+
+.resultBlockContent {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--text-primary) 84%, #dbe3f2);
+}
+
+.analysisContextSection {
+  padding: 12px;
+  min-width: 0;
+}
+
+.analysisOpportunityOps {
+  padding: 10px 12px;
+}
+
+.analysisRailRight {
+  position: sticky;
+  top: 84px;
+  overflow-x: hidden;
+}
+
+.analysisRailRight .payloadPre {
+  max-width: 100%;
+  overflow: auto;
+}
+
+.analysisRailRight .manualRow {
+  grid-template-columns: 1fr;
+}
+
+.analysisTraceHeader {
+  display: grid;
+  gap: 10px;
 }
 
 .manualCard input,
@@ -1178,6 +1373,7 @@ button:disabled {
   gap: 10px;
   padding: 18px 20px;
   border: 1px solid color-mix(in srgb, var(--accent) 52%, var(--border-subtle));
+  border-radius: var(--radius-md);
   background:
     linear-gradient(
       120deg,
@@ -1265,6 +1461,14 @@ button:disabled {
   .profileSplitGrid {
     grid-template-columns: 1fr;
   }
+
+  .analysisLayoutGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .analysisRailRight {
+    position: static;
+  }
 }
 
 @media (max-width: 720px) {
@@ -1328,5 +1532,9 @@ button:disabled {
 
   .iconActionGroup {
     justify-content: flex-end;
+  }
+
+  .analysisStatusRow {
+    grid-template-columns: 1fr;
   }
 }

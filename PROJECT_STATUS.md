@@ -2,9 +2,9 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `Ajuste UX oportunidades: tab Busqueda + CTA Cargar + guardadas diferenciadas y navegacion contextual renombrada a Analisis`
+- checkpoint_actual: `Ajuste UX Analisis: tabs de resultados, hidratacion de persistidos, acciones IA simplificadas y alineacion visual de cards`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, importacion manual, CV activo y capa semantica basica`
-- ultima_actualizacion: `2026-04-07`
+- ultima_actualizacion: `2026-04-08`
 
 ## Progreso Por Fase
 - `Fase 0`: completada
@@ -141,6 +141,24 @@
 - composicion de busqueda refinada: etiqueta `Buscar oportunidades, roles o empresas`, chips de roles en cabecera y boton `Buscar` full-width en el bloque superior
 - carga manual integrada como segundo tab (`Carga manual`) manteniendo formulario unificado por URL, snapshot obligatorio y CTA `Cargar`
 - `Oportunidades guardadas` ajustado en jerarquia visual: heading con mayor presencia, cards con tipografia/espaciado refinado y sin acciones redundantes dentro de la vista de busqueda
+- pantalla `Analisis` replanteada a composicion de 3 columnas: izquierda oportunidades guardadas con acciones IA, centro oportunidad activa + resultados, derecha `Contextual Intelligence`
+- `Historial IA` y `Trazas tecnicas` integrados en el rail derecho de `Analisis`, eliminando la separacion previa en un segundo panel inferior
+- lista de oportunidades de `Analisis` alineada visualmente a la familia de cards de oportunidades guardadas, conservando barra de acciones por fila
+- bloque central de `Analisis` reorganizado: estado, notas, `Forzar recalculo IA`, seleccion de materiales y panel de resultados/artefactos en una sola columna principal
+- pasada fina UX en `Analisis`: columnas reequilibradas, barra de acciones por oportunidad compactada y rail derecho fijado en desktop para mantener contexto visible
+- interaccion en cards de `Analisis` refinada: seleccion por click en tarjeta (sin boton `Seleccionar`) con marco activo y controles compactos
+- acciones por oportunidad simplificadas a `Analizar` y `Artefactos` con icono+texto, dejando el recalc mediante icono `refresh` dentro del panel de resultados
+- bloque de ejecucion central ahora es modal por accion (`Analizar`/`Artefactos`) con checkboxes y boton de lanzamiento por flujo
+- botones `Copiar` en artefactos reemplazados por iconos discretos para reducir ruido visual
+- panel central de `Resultados` reorganizado con tabs `Analisis` y `Artefactos`
+- recalc movido al lugar correcto: icono `refresh` en cada bloque de analisis y en cada artefacto generado
+- seleccion de oportunidad ahora hidrata resultados persistidos (`ai_runs` + artefactos actuales) para evitar vacios en oportunidades ya `analyzed`
+- rail derecho de contexto ajustado para evitar desborde horizontal de contenido tecnico
+- cards de oportunidades guardadas en `Analisis` alineadas visualmente con bordes redondeados consistentes con el resto de la interfaz
+- `Analisis` cambia a seleccion explicita: ingreso sin oportunidad activa seleccionada y toggle de seleccion/deseleccion por click en card
+- acciones IA removidas de las cards de oportunidades; ejecucion se centraliza por bloque en `Resultados` (`Analisis` y `Artefactos`)
+- cada bloque de resultado soporta estado `sin generar/generado`, `refresh`, vista previa de `7` lineas con `Ver mas` y paginacion por historico de `run_id`
+- columna derecha de `Contextual Intelligence` queda filtrada al bloque/run activo (request+response vinculados) y se vacia cuando no hay seleccion activa
 - build frontend revalidado tras hardening visual de contraste: `npm run build` en `OK`
 - contratos API de `search` reforzados para validar `provider_status` (fallo total, degradacion parcial y config faltante)
 - contratos API/admin de `search-providers` reforzados para `GET`/`PATCH` y manejo `404` en proveedor desconocido

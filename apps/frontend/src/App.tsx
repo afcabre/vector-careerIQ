@@ -124,22 +124,39 @@ const AI_RUN_ACTION_LABELS: Record<string, string> = {
   prepare_experience_summary: "Preparar resumen de experiencia"
 };
 
-const AI_RUN_ACTION_FILTERS: Array<{ value: string; label: string }> = [
-  { value: "", label: "Todas las acciones" },
-  { value: "analyze_profile_match", label: "Analizar perfil-vacante" },
-  { value: "analyze_cultural_fit", label: "Analizar ajuste cultural" },
-  { value: "prepare_guidance_text", label: "Preparar guia de perfil" },
-  { value: "prepare_cover_letter", label: "Preparar carta de presentacion" },
-  { value: "prepare_experience_summary", label: "Preparar resumen de experiencia" }
+type AnalysisResultBlockId =
+  | "analysis_profile_match"
+  | "analysis_cultural_fit"
+  | "artifact_guidance_text"
+  | "artifact_cover_letter"
+  | "artifact_experience_summary";
+
+const ANALYSIS_BLOCK_ORDER: AnalysisResultBlockId[] = [
+  "analysis_profile_match",
+  "analysis_cultural_fit"
 ];
 
-const TRACE_DESTINATION_FILTERS: Array<{ value: string; label: string }> = [
-  { value: "", label: "Todos los destinos" },
-  { value: "openai", label: "OpenAI" },
-  { value: "tavily", label: "Tavily" },
-  { value: "adzuna", label: "Adzuna" },
-  { value: "remotive", label: "Remotive" }
+const ARTIFACT_BLOCK_ORDER: AnalysisResultBlockId[] = [
+  "artifact_guidance_text",
+  "artifact_cover_letter",
+  "artifact_experience_summary"
 ];
+
+const BLOCK_RUN_ACTION_BY_ID: Record<AnalysisResultBlockId, string> = {
+  analysis_profile_match: "analyze_profile_match",
+  analysis_cultural_fit: "analyze_cultural_fit",
+  artifact_guidance_text: "prepare_guidance_text",
+  artifact_cover_letter: "prepare_cover_letter",
+  artifact_experience_summary: "prepare_experience_summary"
+};
+
+const BLOCK_LABEL_BY_ID: Record<AnalysisResultBlockId, string> = {
+  analysis_profile_match: "Alineacion perfil-vacante",
+  analysis_cultural_fit: "Fit cultural",
+  artifact_guidance_text: "Guia de perfil",
+  artifact_cover_letter: "Carta de presentacion",
+  artifact_experience_summary: "Resumen adaptado"
+};
 
 const PROMPT_FLOW_LABELS: Record<string, string> = {
   search_jobs_tavily: "Busqueda de vacantes (Tavily)",
@@ -332,6 +349,27 @@ function getAiRunPreviewText(run: AIRun): string {
   return "";
 }
 
+function buildContentLinePreview(content: string, maxLines: number, expanded: boolean) {
+  const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  if (expanded) {
+    return {
+      previewText: normalized,
+      truncated: false
+    };
+  }
+  const lines = normalized.split("\n");
+  if (lines.length <= maxLines) {
+    return {
+      previewText: normalized,
+      truncated: false
+    };
+  }
+  return {
+    previewText: lines.slice(0, maxLines).join("\n"),
+    truncated: true
+  };
+}
+
 function formatAiRunTimestamp(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -522,47 +560,6 @@ function appendArtifactDelta(
   ];
 }
 
-type RequestTraceGroup = {
-  group_id: string;
-  run_id: string;
-  items: RequestTrace[];
-  latest_created_at: string;
-  opportunity_id: string;
-};
-
-function groupRequestTracesByRunId(items: RequestTrace[]): RequestTraceGroup[] {
-  const grouped = new Map<string, RequestTraceGroup>();
-  for (const trace of items) {
-    const runId = trace.run_id.trim();
-    const key = runId || "__no_run_id__";
-    const current = grouped.get(key);
-    if (!current) {
-      grouped.set(key, {
-        group_id: key,
-        run_id: runId,
-        items: [trace],
-        latest_created_at: trace.created_at,
-        opportunity_id: trace.opportunity_id
-      });
-      continue;
-    }
-    current.items.push(trace);
-    if (trace.created_at > current.latest_created_at) {
-      current.latest_created_at = trace.created_at;
-    }
-    if (!current.opportunity_id && trace.opportunity_id) {
-      current.opportunity_id = trace.opportunity_id;
-    }
-  }
-
-  const groups = Array.from(grouped.values());
-  for (const group of groups) {
-    group.items.sort((a, b) => b.created_at.localeCompare(a.created_at));
-  }
-  groups.sort((a, b) => b.latest_created_at.localeCompare(a.latest_created_at));
-  return groups;
-}
-
 export default function App() {
   const [view, setView] = useState<ViewState>("checking");
   const [currentPath, setCurrentPath] = useState<string>(() => {
@@ -637,7 +634,9 @@ export default function App() {
   const [isLoadingOpportunities, setIsLoadingOpportunities] = useState(false);
   const [savingResultId, setSavingResultId] = useState<string | null>(null);
   const [selectedOpportunityId, setSelectedOpportunityId] = useState<string | null>(null);
-  const [analysisText, setAnalysisText] = useState("");
+  const [, setAnalysisText] = useState("");
+  const [profileAnalysisText, setProfileAnalysisText] = useState("");
+  const [cultureAnalysisText, setCultureAnalysisText] = useState("");
   const [culturalConfidence, setCulturalConfidence] = useState("");
   const [culturalWarnings, setCulturalWarnings] = useState<string[]>([]);
   const [culturalSignals, setCulturalSignals] = useState<CulturalSignal[]>([]);
@@ -646,21 +645,34 @@ export default function App() {
   const [artifacts, setArtifacts] = useState<ApplicationArtifact[]>([]);
   const [aiRuns, setAiRuns] = useState<AIRun[]>([]);
   const [isLoadingAiRuns, setIsLoadingAiRuns] = useState(false);
-  const [aiRunActionFilter, setAiRunActionFilter] = useState("");
   const [requestTraces, setRequestTraces] = useState<RequestTrace[]>([]);
   const [isLoadingRequestTraces, setIsLoadingRequestTraces] = useState(false);
-  const [traceDestinationFilter, setTraceDestinationFilter] = useState("");
-  const [traceOnlyActiveOpportunity, setTraceOnlyActiveOpportunity] = useState(false);
-  const [traceRunIdFilter, setTraceRunIdFilter] = useState("");
   const [focusedRunId, setFocusedRunId] = useState("");
   const [isAnalyzingProfile, setIsAnalyzingProfile] = useState(false);
   const [isAnalyzingCultural, setIsAnalyzingCultural] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
   const [isLoadingArtifacts, setIsLoadingArtifacts] = useState(false);
-  const [forceRecomputeAi, setForceRecomputeAi] = useState(false);
-  const [prepareGuidanceSelected, setPrepareGuidanceSelected] = useState(true);
-  const [prepareCoverSelected, setPrepareCoverSelected] = useState(true);
-  const [prepareSummarySelected, setPrepareSummarySelected] = useState(true);
+  const forceRecomputeAi = false;
+  const [resultsPanelTab, setResultsPanelTab] = useState<"analysis" | "artifacts">("analysis");
+  const [selectedResultBlockId, setSelectedResultBlockId] = useState<AnalysisResultBlockId | "">(
+    ""
+  );
+  const [runCursorByAction, setRunCursorByAction] = useState<Record<string, number>>({});
+  const [expandedResultBlocks, setExpandedResultBlocks] = useState<
+    Record<AnalysisResultBlockId, boolean>
+  >({
+    analysis_profile_match: false,
+    analysis_cultural_fit: false,
+    artifact_guidance_text: false,
+    artifact_cover_letter: false,
+    artifact_experience_summary: false
+  });
+  const [, setAnalyzeExecutedByOpportunity] = useState<
+    Record<string, boolean>
+  >({});
+  const [, setArtifactsExecutedByOpportunity] = useState<
+    Record<string, boolean>
+  >({});
   const [opportunityNotes, setOpportunityNotes] = useState("");
   const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [opportunityStatus, setOpportunityStatus] = useState<string>("detected");
@@ -925,6 +937,8 @@ export default function App() {
         setSavedOpportunities([]);
         setSelectedOpportunityId(null);
         setAnalysisText("");
+        setProfileAnalysisText("");
+        setCultureAnalysisText("");
         setCulturalConfidence("");
         setCulturalWarnings([]);
         setCulturalSignals([]);
@@ -932,14 +946,15 @@ export default function App() {
         setGuidanceText("");
         setArtifacts([]);
         setAiRuns([]);
-        setAiRunActionFilter("");
         setRequestTraces([]);
-        setTraceDestinationFilter("");
-        setTraceOnlyActiveOpportunity(false);
-        setTraceRunIdFilter("");
         setFocusedRunId("");
-        setOpportunityNotes("");
-        setOpportunityStatus("detected");
+        setSelectedResultBlockId("");
+        setRunCursorByAction({});
+      setOpportunityNotes("");
+      setOpportunityStatus("detected");
+        setAnalyzeExecutedByOpportunity({});
+        setArtifactsExecutedByOpportunity({});
+        setResultsPanelTab("analysis");
         return;
       }
       setIsLoadingOpportunities(true);
@@ -983,13 +998,6 @@ export default function App() {
   }, [selectedPersonId, view]);
 
   useEffect(() => {
-    if (!showAnalysisPage || selectedOpportunityId || savedOpportunities.length === 0) {
-      return;
-    }
-    setSelectedOpportunityId(savedOpportunities[0].opportunity_id);
-  }, [showAnalysisPage, savedOpportunities, selectedOpportunityId]);
-
-  useEffect(() => {
     if (showConversationSection && selectedPersonId) {
       return;
     }
@@ -998,40 +1006,183 @@ export default function App() {
 
   const selectedOpportunity =
     savedOpportunities.find((item) => item.opportunity_id === selectedOpportunityId) ?? null;
+
+  function asStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return value.map((item) => String(item)).filter((item) => item.trim().length > 0);
+  }
+
+  function asCulturalSignals(value: unknown): CulturalSignal[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    const signals: CulturalSignal[] = [];
+    for (const item of value) {
+      if (!item || typeof item !== "object") {
+        continue;
+      }
+      const raw = item as Record<string, unknown>;
+      signals.push({
+        source_provider: String(raw.source_provider ?? ""),
+        source_url: String(raw.source_url ?? ""),
+        title: String(raw.title ?? ""),
+        snippet: String(raw.snippet ?? ""),
+        captured_at: String(raw.captured_at ?? "")
+      });
+    }
+    return signals;
+  }
+
+  useEffect(() => {
+    if (!selectedOpportunityId || isAnalyzingProfile || isAnalyzingCultural || isPreparing) {
+      return;
+    }
+
+    const byAction = new Map<string, AIRun>();
+    for (const run of aiRuns) {
+      if (!byAction.has(run.action_key) || run.is_current) {
+        byAction.set(run.action_key, run);
+      }
+    }
+
+    const profileRun = byAction.get("analyze_profile_match");
+    const culturalRun = byAction.get("analyze_cultural_fit");
+    const guidanceRun = byAction.get("prepare_guidance_text");
+    const profilePayload = (profileRun?.result_payload ?? {}) as Record<string, unknown>;
+    const culturalPayload = (culturalRun?.result_payload ?? {}) as Record<string, unknown>;
+    const guidancePayload = (guidanceRun?.result_payload ?? {}) as Record<string, unknown>;
+
+    setProfileAnalysisText(String(profilePayload.analysis_text ?? "").trim());
+    setCultureAnalysisText(String(culturalPayload.analysis_text ?? "").trim());
+    setCulturalConfidence(String(culturalPayload.cultural_confidence ?? "").trim());
+    setCulturalWarnings(asStringArray(culturalPayload.cultural_warnings));
+    setCulturalSignals(asCulturalSignals(culturalPayload.cultural_signals));
+
+    const profileEvidence = profilePayload.semantic_evidence;
+    const guidanceEvidence = guidancePayload.semantic_evidence;
+    if (profileEvidence && typeof profileEvidence === "object") {
+      setSemanticEvidence(profileEvidence as SemanticEvidence);
+    } else if (guidanceEvidence && typeof guidanceEvidence === "object") {
+      setSemanticEvidence(guidanceEvidence as SemanticEvidence);
+    }
+
+    const guidanceText = String(guidancePayload.content ?? "").trim();
+    if (guidanceText) {
+      setGuidanceText(guidanceText);
+    }
+  }, [aiRuns, selectedOpportunityId, isAnalyzingProfile, isAnalyzingCultural, isPreparing]);
   const aiRunsById = new Map(aiRuns.map((item) => [item.run_id, item] as const));
-  const requestTraceGroups = groupRequestTracesByRunId(requestTraces);
-  const focusedRun = focusedRunId ? aiRunsById.get(focusedRunId) ?? null : null;
-  const focusedRunRequestTraces = focusedRunId
-    ? requestTraces.filter((item) => item.run_id === focusedRunId)
-    : [];
+  const aiRunsByAction = new Map<string, AIRun[]>();
+  for (const run of aiRuns) {
+    const actionRuns = aiRunsByAction.get(run.action_key) ?? [];
+    actionRuns.push(run);
+    aiRunsByAction.set(run.action_key, actionRuns);
+  }
+  for (const actionRuns of aiRunsByAction.values()) {
+    actionRuns.sort((left, right) => right.updated_at.localeCompare(left.updated_at));
+  }
+
+  const getRunsForBlock = (blockId: AnalysisResultBlockId) =>
+    aiRunsByAction.get(BLOCK_RUN_ACTION_BY_ID[blockId]) ?? [];
+
+  const getSelectedRunForBlock = (blockId: AnalysisResultBlockId): AIRun | null => {
+    const runs = getRunsForBlock(blockId);
+    if (runs.length === 0) {
+      return null;
+    }
+    const cursor = runCursorByAction[BLOCK_RUN_ACTION_BY_ID[blockId]] ?? 0;
+    const safeCursor = Math.min(Math.max(cursor, 0), runs.length - 1);
+    return runs[safeCursor] ?? null;
+  };
+
+  const selectedBlockRun =
+    selectedResultBlockId ? getSelectedRunForBlock(selectedResultBlockId) : null;
+  const focusedRun = selectedBlockRun ?? (focusedRunId ? aiRunsById.get(focusedRunId) ?? null : null);
+  const focusedRunRequestTraces = requestTraces;
 
   useEffect(() => {
     if (!selectedPersonId || !selectedOpportunityId) {
       setAiRuns([]);
       return;
     }
-    void refreshAiRunsFor(selectedPersonId, selectedOpportunityId, aiRunActionFilter);
-  }, [selectedPersonId, selectedOpportunityId, aiRunActionFilter]);
+    void refreshAiRunsFor(selectedPersonId, selectedOpportunityId);
+  }, [selectedPersonId, selectedOpportunityId]);
 
   useEffect(() => {
-    if (!selectedPersonId) {
+    if (!selectedPersonId || !selectedOpportunityId) {
+      setArtifacts([]);
+      setGuidanceText("");
+      return;
+    }
+    void refreshArtifacts(selectedOpportunityId);
+  }, [selectedPersonId, selectedOpportunityId]);
+
+  useEffect(() => {
+    if (!selectedOpportunityId) {
+      setRunCursorByAction({});
+      setSelectedResultBlockId("");
+      setFocusedRunId("");
       setRequestTraces([]);
       return;
     }
-    void refreshRequestTracesFor(
-      selectedPersonId,
-      traceDestinationFilter,
-      traceOnlyActiveOpportunity,
-      selectedOpportunityId,
-      traceRunIdFilter
-    );
-  }, [
-    selectedPersonId,
-    selectedOpportunityId,
-    traceDestinationFilter,
-    traceOnlyActiveOpportunity,
-    traceRunIdFilter
-  ]);
+    setExpandedResultBlocks({
+      analysis_profile_match: false,
+      analysis_cultural_fit: false,
+      artifact_guidance_text: false,
+      artifact_cover_letter: false,
+      artifact_experience_summary: false
+    });
+  }, [selectedOpportunityId]);
+
+  useEffect(() => {
+    setRunCursorByAction((current) => {
+      const next = { ...current };
+      for (const blockId of [...ANALYSIS_BLOCK_ORDER, ...ARTIFACT_BLOCK_ORDER]) {
+        const actionKey = BLOCK_RUN_ACTION_BY_ID[blockId];
+        const runs = getRunsForBlock(blockId);
+        if (runs.length === 0) {
+          next[actionKey] = 0;
+          continue;
+        }
+        const currentCursor = current[actionKey] ?? 0;
+        next[actionKey] = Math.min(Math.max(currentCursor, 0), runs.length - 1);
+      }
+      return next;
+    });
+  }, [aiRuns, selectedOpportunityId]);
+
+  useEffect(() => {
+    if (!selectedOpportunityId) {
+      return;
+    }
+    const blockOrder = resultsPanelTab === "analysis" ? ANALYSIS_BLOCK_ORDER : ARTIFACT_BLOCK_ORDER;
+    setSelectedResultBlockId((current) => {
+      if (current && blockOrder.includes(current)) {
+        return current;
+      }
+      const firstWithRun = blockOrder.find((blockId) => getRunsForBlock(blockId).length > 0);
+      return firstWithRun ?? blockOrder[0];
+    });
+  }, [resultsPanelTab, selectedOpportunityId, aiRuns]);
+
+  useEffect(() => {
+    if (!selectedOpportunityId || !selectedResultBlockId) {
+      setFocusedRunId("");
+      return;
+    }
+    const selectedRun = getSelectedRunForBlock(selectedResultBlockId);
+    setFocusedRunId(selectedRun?.run_id ?? "");
+  }, [selectedOpportunityId, selectedResultBlockId, aiRuns, runCursorByAction]);
+
+  useEffect(() => {
+    if (!selectedPersonId || !selectedOpportunityId || !focusedRunId) {
+      setRequestTraces([]);
+      return;
+    }
+    void refreshRequestTracesFor(selectedPersonId, selectedOpportunityId, focusedRunId);
+  }, [selectedPersonId, selectedOpportunityId, focusedRunId]);
 
   useEffect(() => {
     setSearchQuery("");
@@ -1054,12 +1205,6 @@ export default function App() {
     }
     setSelectedSearchResultId(null);
   }, [searchResults, selectedSearchResultId]);
-
-  useEffect(() => {
-    if (!selectedOpportunityId && traceOnlyActiveOpportunity) {
-      setTraceOnlyActiveOpportunity(false);
-    }
-  }, [selectedOpportunityId, traceOnlyActiveOpportunity]);
 
   useEffect(() => {
     setOpportunityNotes(selectedOpportunity?.notes ?? "");
@@ -1180,17 +1325,11 @@ export default function App() {
     setCulturalWarnings([]);
     setCulturalSignals([]);
     setSemanticEvidence(null);
-    setForceRecomputeAi(false);
-    setPrepareGuidanceSelected(true);
-    setPrepareCoverSelected(true);
-    setPrepareSummarySelected(true);
     setAiRuns([]);
-    setAiRunActionFilter("");
     setRequestTraces([]);
-    setTraceDestinationFilter("");
-    setTraceOnlyActiveOpportunity(false);
-    setTraceRunIdFilter("");
     setFocusedRunId("");
+    setSelectedResultBlockId("");
+    setRunCursorByAction({});
     setActiveCv(null);
     setActiveCvFullText("");
     setSelectedCvFile(null);
@@ -1443,26 +1582,12 @@ export default function App() {
       );
       setConversation(updatedConversation);
       setChatInput("");
-      await refreshRequestTracesFor(
-        personId,
-        traceDestinationFilter,
-        traceOnlyActiveOpportunity,
-        selectedOpportunityId,
-        traceRunIdFilter
-      );
     } catch (error) {
       if (!streamedAnyDelta) {
         try {
           const updatedConversation = await sendMessage(personId, messageToSend);
           setConversation(updatedConversation);
           setChatInput("");
-          await refreshRequestTracesFor(
-            personId,
-            traceDestinationFilter,
-            traceOnlyActiveOpportunity,
-            selectedOpportunityId,
-            traceRunIdFilter
-          );
           setErrorMessage("Streaming no disponible. Se uso envio sin streaming como respaldo.");
           return;
         } catch {
@@ -1504,13 +1629,6 @@ export default function App() {
       setSearchWarnings(payload.warnings);
       setSearchProviderStatus(payload.provider_status ?? []);
       setSelectedSearchResultId(null);
-      await refreshRequestTracesFor(
-        selectedPersonId,
-        traceDestinationFilter,
-        traceOnlyActiveOpportunity,
-        selectedOpportunityId,
-        traceRunIdFilter
-      );
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "No se pudo ejecutar la busqueda";
@@ -1669,18 +1787,10 @@ export default function App() {
     });
   }
 
-  async function refreshAiRunsFor(
-    personId: string,
-    opportunityId: string,
-    actionKey: string
-  ) {
+  async function refreshAiRunsFor(personId: string, opportunityId: string) {
     setIsLoadingAiRuns(true);
     try {
-      const items = await listOpportunityAiRuns(
-        personId,
-        opportunityId,
-        actionKey || undefined
-      );
+      const items = await listOpportunityAiRuns(personId, opportunityId);
       setAiRuns(items);
     } catch (error) {
       const message =
@@ -1693,20 +1803,14 @@ export default function App() {
 
   async function refreshRequestTracesFor(
     personId: string,
-    destination: string,
-    onlyActiveOpportunity: boolean,
-    selectedOpportunityForScope: string | null,
-    runId: string = ""
+    selectedOpportunityForScope: string,
+    runId: string
   ) {
     setIsLoadingRequestTraces(true);
     try {
       const items = await listRequestTraces(personId, {
-        destination: destination || undefined,
-        opportunityId:
-          onlyActiveOpportunity && selectedOpportunityForScope
-            ? selectedOpportunityForScope
-            : undefined,
-        runId: runId || undefined,
+        opportunityId: selectedOpportunityForScope,
+        runId,
         limit: 60
       });
       setRequestTraces(items);
@@ -1716,26 +1820,6 @@ export default function App() {
       setErrorMessage(message);
     } finally {
       setIsLoadingRequestTraces(false);
-    }
-  }
-
-  function handleFocusRunTrace(runId: string, opportunityId: string) {
-    setFocusedRunId(runId);
-    setTraceRunIdFilter(runId);
-    if (opportunityId) {
-      setSelectedOpportunityId(opportunityId);
-      setTraceOnlyActiveOpportunity(true);
-    }
-  }
-
-  function handleFocusRunResponse(runId: string, opportunityId: string) {
-    if (!runId) {
-      return;
-    }
-    setFocusedRunId(runId);
-    setAiRunActionFilter("");
-    if (opportunityId) {
-      setSelectedOpportunityId(opportunityId);
     }
   }
 
@@ -1752,15 +1836,19 @@ export default function App() {
     }
   }
 
-  async function handleAnalyzeProfileMatch(opportunityId: string) {
+  async function handleAnalyzeProfileMatch(opportunityId: string, forceOverride?: boolean) {
     if (!selectedPersonId) {
       return;
     }
     const personId = selectedPersonId;
+    const forceRecompute = forceOverride ?? forceRecomputeAi;
     setSelectedOpportunityId(opportunityId);
+    setResultsPanelTab("analysis");
+    setSelectedResultBlockId("analysis_profile_match");
     setIsAnalyzingProfile(true);
     setErrorMessage(null);
     setAnalysisText("");
+    setProfileAnalysisText("");
     setCulturalConfidence("");
     setCulturalWarnings([]);
     setCulturalSignals([]);
@@ -1768,40 +1856,36 @@ export default function App() {
       const payload = await analyzeProfileMatchStream(
         personId,
         opportunityId,
-        forceRecomputeAi,
+        forceRecompute,
         (delta) => {
           setAnalysisText((current) => `${current}${delta}`);
         }
       );
       setAnalysisText(payload.analysis_text);
+      setProfileAnalysisText(payload.analysis_text);
       setSemanticEvidence(payload.semantic_evidence);
+      setAnalyzeExecutedByOpportunity((current) => ({
+        ...current,
+        [opportunityId]: true
+      }));
       const items = await listOpportunities(personId);
       setSavedOpportunities(items);
       setSelectedOpportunityId(opportunityId);
-      await refreshAiRunsFor(personId, opportunityId, aiRunActionFilter);
-      await refreshRequestTracesFor(
-        personId,
-        traceDestinationFilter,
-        traceOnlyActiveOpportunity,
-        opportunityId,
-        traceRunIdFilter
-      );
+      await refreshAiRunsFor(personId, opportunityId);
     } catch (error) {
       try {
-        const payload = await analyzeProfileMatch(personId, opportunityId, forceRecomputeAi);
+        const payload = await analyzeProfileMatch(personId, opportunityId, forceRecompute);
         setAnalysisText(payload.analysis_text);
+        setProfileAnalysisText(payload.analysis_text);
         setSemanticEvidence(payload.semantic_evidence);
+        setAnalyzeExecutedByOpportunity((current) => ({
+          ...current,
+          [opportunityId]: true
+        }));
         const items = await listOpportunities(personId);
         setSavedOpportunities(items);
         setSelectedOpportunityId(opportunityId);
-        await refreshAiRunsFor(personId, opportunityId, aiRunActionFilter);
-        await refreshRequestTracesFor(
-          personId,
-          traceDestinationFilter,
-          traceOnlyActiveOpportunity,
-          opportunityId,
-          traceRunIdFilter
-        );
+        await refreshAiRunsFor(personId, opportunityId);
         setErrorMessage(
           "Streaming de analisis no disponible. Se uso endpoint sin streaming como respaldo."
         );
@@ -1815,61 +1899,61 @@ export default function App() {
     }
   }
 
-  async function handleAnalyzeCulturalFit(opportunityId: string) {
+  async function handleAnalyzeCulturalFit(opportunityId: string, forceOverride?: boolean) {
     if (!selectedPersonId) {
       return;
     }
     const personId = selectedPersonId;
+    const forceRecompute = forceOverride ?? forceRecomputeAi;
     setSelectedOpportunityId(opportunityId);
+    setResultsPanelTab("analysis");
+    setSelectedResultBlockId("analysis_cultural_fit");
     setIsAnalyzingCultural(true);
     setErrorMessage(null);
     setCulturalConfidence("");
     setCulturalWarnings([]);
     setCulturalSignals([]);
     setAnalysisText("");
+    setCultureAnalysisText("");
     setSemanticEvidence(null);
     try {
       const payload = await analyzeCulturalFitStream(
         personId,
         opportunityId,
-        forceRecomputeAi,
+        forceRecompute,
         (delta) => {
           setAnalysisText((current) => `${current}${delta}`);
         }
       );
       setAnalysisText(payload.analysis_text);
+      setCultureAnalysisText(payload.analysis_text);
       setCulturalConfidence(payload.cultural_confidence);
       setCulturalWarnings(payload.cultural_warnings);
       setCulturalSignals(payload.cultural_signals);
+      setAnalyzeExecutedByOpportunity((current) => ({
+        ...current,
+        [opportunityId]: true
+      }));
       const items = await listOpportunities(personId);
       setSavedOpportunities(items);
       setSelectedOpportunityId(opportunityId);
-      await refreshAiRunsFor(personId, opportunityId, aiRunActionFilter);
-      await refreshRequestTracesFor(
-        personId,
-        traceDestinationFilter,
-        traceOnlyActiveOpportunity,
-        opportunityId,
-        traceRunIdFilter
-      );
+      await refreshAiRunsFor(personId, opportunityId);
     } catch (error) {
       try {
-        const payload = await analyzeCulturalFit(personId, opportunityId, forceRecomputeAi);
+        const payload = await analyzeCulturalFit(personId, opportunityId, forceRecompute);
         setAnalysisText(payload.analysis_text);
+        setCultureAnalysisText(payload.analysis_text);
         setCulturalConfidence(payload.cultural_confidence);
         setCulturalWarnings(payload.cultural_warnings);
         setCulturalSignals(payload.cultural_signals);
+        setAnalyzeExecutedByOpportunity((current) => ({
+          ...current,
+          [opportunityId]: true
+        }));
         const items = await listOpportunities(personId);
         setSavedOpportunities(items);
         setSelectedOpportunityId(opportunityId);
-        await refreshAiRunsFor(personId, opportunityId, aiRunActionFilter);
-        await refreshRequestTracesFor(
-          personId,
-          traceDestinationFilter,
-          traceOnlyActiveOpportunity,
-          opportunityId,
-          traceRunIdFilter
-        );
+        await refreshAiRunsFor(personId, opportunityId);
         setErrorMessage(
           "Streaming de analisis no disponible. Se uso endpoint sin streaming como respaldo."
         );
@@ -1882,31 +1966,39 @@ export default function App() {
     }
   }
 
-  async function handlePrepare(opportunityId: string) {
+  async function handlePrepare(
+    opportunityId: string,
+    forceOverride?: boolean,
+    explicitTargets?: Array<"guidance_text" | "cover_letter" | "experience_summary">
+  ) {
     if (!selectedPersonId) {
       return;
     }
     const personId = selectedPersonId;
-    const targets: Array<"guidance_text" | "cover_letter" | "experience_summary"> = [];
-    if (prepareGuidanceSelected) {
-      targets.push("guidance_text");
-    }
-    if (prepareCoverSelected) {
-      targets.push("cover_letter");
-    }
-    if (prepareSummarySelected) {
-      targets.push("experience_summary");
-    }
+    const forceRecompute = forceOverride ?? forceRecomputeAi;
+    const targets: Array<"guidance_text" | "cover_letter" | "experience_summary"> =
+      explicitTargets && explicitTargets.length > 0
+        ? [...explicitTargets]
+        : ["guidance_text", "cover_letter", "experience_summary"];
     if (targets.length === 0) {
       setErrorMessage("Selecciona al menos un material para preparar.");
       return;
     }
 
     setSelectedOpportunityId(opportunityId);
+    setResultsPanelTab("artifacts");
+    if (targets.length === 1) {
+      const target = targets[0];
+      setSelectedResultBlockId(
+        target === "guidance_text"
+          ? "artifact_guidance_text"
+          : target === "cover_letter"
+            ? "artifact_cover_letter"
+            : "artifact_experience_summary"
+      );
+    }
     setIsPreparing(true);
     setErrorMessage(null);
-    setGuidanceText("");
-    setArtifacts([]);
 
     try {
       const payload = await prepareOpportunityStream(
@@ -1914,7 +2006,7 @@ export default function App() {
         opportunityId,
         {
           targets,
-          force_recompute: forceRecomputeAi
+          force_recompute: forceRecompute
         },
         (channel, delta) => {
           if (channel === "guidance_text") {
@@ -1949,17 +2041,14 @@ export default function App() {
       setGuidanceText(payload.guidance_text);
       setArtifacts(payload.artifacts);
       setSemanticEvidence(payload.semantic_evidence);
+      setArtifactsExecutedByOpportunity((current) => ({
+        ...current,
+        [opportunityId]: true
+      }));
       const items = await listOpportunities(personId);
       setSavedOpportunities(items);
       setSelectedOpportunityId(opportunityId);
-      await refreshAiRunsFor(personId, opportunityId, aiRunActionFilter);
-      await refreshRequestTracesFor(
-        personId,
-        traceDestinationFilter,
-        traceOnlyActiveOpportunity,
-        opportunityId,
-        traceRunIdFilter
-      );
+      await refreshAiRunsFor(personId, opportunityId);
     } catch (error) {
       try {
         const payload = await prepareOpportunity(
@@ -1967,23 +2056,20 @@ export default function App() {
           opportunityId,
           {
             targets,
-            force_recompute: forceRecomputeAi
+            force_recompute: forceRecompute
           }
         );
         setGuidanceText(payload.guidance_text);
         setArtifacts(payload.artifacts);
         setSemanticEvidence(payload.semantic_evidence);
+        setArtifactsExecutedByOpportunity((current) => ({
+          ...current,
+          [opportunityId]: true
+        }));
         const items = await listOpportunities(personId);
         setSavedOpportunities(items);
         setSelectedOpportunityId(opportunityId);
-        await refreshAiRunsFor(personId, opportunityId, aiRunActionFilter);
-        await refreshRequestTracesFor(
-          personId,
-          traceDestinationFilter,
-          traceOnlyActiveOpportunity,
-          opportunityId,
-          traceRunIdFilter
-        );
+        await refreshAiRunsFor(personId, opportunityId);
         setErrorMessage(
           "Streaming de preparacion no disponible. Se uso endpoint sin streaming como respaldo."
         );
@@ -1995,6 +2081,10 @@ export default function App() {
     } finally {
       setIsPreparing(false);
     }
+  }
+
+  function handleSelectOpportunityCard(opportunityId: string) {
+    setSelectedOpportunityId((current) => (current === opportunityId ? null : opportunityId));
   }
 
   async function handleSaveNotes() {
@@ -2134,6 +2224,109 @@ export default function App() {
       };
     });
   }
+
+  function handleSwitchResultsTab(nextTab: "analysis" | "artifacts") {
+    setResultsPanelTab(nextTab);
+    setSelectedResultBlockId("");
+  }
+
+  function handleSelectResultBlock(blockId: AnalysisResultBlockId) {
+    setSelectedResultBlockId(blockId);
+  }
+
+  function handleToggleResultBlockPreview(blockId: AnalysisResultBlockId) {
+    setExpandedResultBlocks((current) => ({
+      ...current,
+      [blockId]: !current[blockId]
+    }));
+  }
+
+  function getCurrentRunIndexForBlock(blockId: AnalysisResultBlockId) {
+    const actionKey = BLOCK_RUN_ACTION_BY_ID[blockId];
+    const runs = getRunsForBlock(blockId);
+    if (runs.length === 0) {
+      return 0;
+    }
+    const cursor = runCursorByAction[actionKey] ?? 0;
+    return Math.min(Math.max(cursor, 0), runs.length - 1);
+  }
+
+  function handleMoveRunCursor(blockId: AnalysisResultBlockId, delta: number) {
+    const actionKey = BLOCK_RUN_ACTION_BY_ID[blockId];
+    const runs = getRunsForBlock(blockId);
+    if (runs.length === 0) {
+      return;
+    }
+    setRunCursorByAction((current) => {
+      const cursor = current[actionKey] ?? 0;
+      const nextCursor = Math.min(Math.max(cursor + delta, 0), runs.length - 1);
+      return {
+        ...current,
+        [actionKey]: nextCursor
+      };
+    });
+    setSelectedResultBlockId(blockId);
+  }
+
+  function getArtifactFallbackContent(artifactType: "cover_letter" | "experience_summary") {
+    const artifact = artifacts.find((item) => item.artifact_type === artifactType);
+    return artifact?.content?.trim() ?? "";
+  }
+
+  const profileRun = getSelectedRunForBlock("analysis_profile_match");
+  const culturalRun = getSelectedRunForBlock("analysis_cultural_fit");
+  const guidanceRun = getSelectedRunForBlock("artifact_guidance_text");
+  const coverRun = getSelectedRunForBlock("artifact_cover_letter");
+  const summaryRun = getSelectedRunForBlock("artifact_experience_summary");
+  const profileRuns = getRunsForBlock("analysis_profile_match");
+  const culturalRuns = getRunsForBlock("analysis_cultural_fit");
+  const guidanceRuns = getRunsForBlock("artifact_guidance_text");
+  const coverRuns = getRunsForBlock("artifact_cover_letter");
+  const summaryRuns = getRunsForBlock("artifact_experience_summary");
+  const getRunPreview = (run: AIRun | null) => (run ? getAiRunPreviewText(run) : "");
+
+  const profileContent =
+    getRunPreview(profileRun) || (isAnalyzingProfile ? profileAnalysisText : "");
+  const culturalContent =
+    getRunPreview(culturalRun) || (isAnalyzingCultural ? cultureAnalysisText : "");
+  const guidanceContent =
+    getRunPreview(guidanceRun) || guidanceText;
+  const coverContent =
+    getRunPreview(coverRun) || getArtifactFallbackContent("cover_letter");
+  const summaryContent =
+    getRunPreview(summaryRun) || getArtifactFallbackContent("experience_summary");
+
+  const profilePreview = buildContentLinePreview(
+    profileContent,
+    7,
+    expandedResultBlocks.analysis_profile_match
+  );
+  const culturalPreview = buildContentLinePreview(
+    culturalContent,
+    7,
+    expandedResultBlocks.analysis_cultural_fit
+  );
+  const guidancePreview = buildContentLinePreview(
+    guidanceContent,
+    7,
+    expandedResultBlocks.artifact_guidance_text
+  );
+  const coverPreview = buildContentLinePreview(
+    coverContent,
+    7,
+    expandedResultBlocks.artifact_cover_letter
+  );
+  const summaryPreview = buildContentLinePreview(
+    summaryContent,
+    7,
+    expandedResultBlocks.artifact_experience_summary
+  );
+  const culturalConfidenceView = culturalRun
+    ? String(culturalRun.result_payload["cultural_confidence"] ?? "").trim()
+    : culturalConfidence;
+  const culturalWarningsView = culturalRun
+    ? asStringArray(culturalRun.result_payload["cultural_warnings"])
+    : culturalWarnings;
 
   if (view === "checking") {
     return (
@@ -3330,551 +3523,934 @@ export default function App() {
       ) : null}
       {showAnalysisPage ? (
         <section className="panel selectedPanel">
-        <h2>Analisis y artefactos</h2>
-        <h3 className="subheading">Oportunidades guardadas (acciones IA)</h3>
-        {isLoadingOpportunities ? (
-          <p className="metaText">Cargando oportunidades...</p>
-        ) : savedOpportunities.length === 0 ? (
-          <p className="metaText">No hay oportunidades guardadas para este perfil.</p>
-        ) : (
-          <div className="chatList">
-            {savedOpportunities.map((item) => (
-              <article className="chatBubble chatBubbleUser" key={`analysis-${item.opportunity_id}`}>
-                <p className="chatRole">{item.status}</p>
-                <p className="chatContent">{item.title}</p>
-                <div className="metaChips">
-                  <span className="metaChip">{item.company || "Empresa no identificada"}</span>
-                  <span className="metaChip">{item.location || "Ubicacion no especificada"}</span>
-                </div>
-                <p className="metaText">
-                  <ExternalUrlText url={item.source_url} />
-                </p>
-                <div className="cardActions">
-                  <button
-                    className={
-                      selectedOpportunityId === item.opportunity_id ? "activeButton" : ""
-                    }
-                    onClick={() => setSelectedOpportunityId(item.opportunity_id)}
-                    type="button"
-                  >
-                    {selectedOpportunityId === item.opportunity_id ? "Seleccionada" : "Seleccionar"}
-                  </button>
-                  <button
-                    disabled={isAnalyzingProfile}
-                    onClick={() => void handleAnalyzeProfileMatch(item.opportunity_id)}
-                    type="button"
-                  >
-                    {isAnalyzingProfile && selectedOpportunityId === item.opportunity_id
-                      ? "Analizando perfil..."
-                      : "Analizar perfil"}
-                  </button>
-                  <button
-                    disabled={isAnalyzingCultural}
-                    onClick={() => void handleAnalyzeCulturalFit(item.opportunity_id)}
-                    type="button"
-                  >
-                    {isAnalyzingCultural && selectedOpportunityId === item.opportunity_id
-                      ? "Analizando cultura..."
-                      : "Analizar cultura"}
-                  </button>
-                  <button
-                    disabled={isPreparing}
-                    onClick={() => void handlePrepare(item.opportunity_id)}
-                    type="button"
-                  >
-                    {isPreparing && selectedOpportunityId === item.opportunity_id
-                      ? "Preparando..."
-                      : "Preparar seleccion"}
-                  </button>
-                  <button
-                    disabled={isLoadingArtifacts}
-                    onClick={() => void refreshArtifacts(item.opportunity_id)}
-                    type="button"
-                  >
-                    {isLoadingArtifacts && selectedOpportunityId === item.opportunity_id
-                      ? "Cargando..."
-                      : "Artefactos"}
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-        {selectedOpportunity ? (
-          <div className="cvCard">
-            <p className="metaText">
-              Oportunidad activa: <strong>{selectedOpportunity.title}</strong>
-            </p>
-            <label className="field">
-              Estado (V1)
-              <select
-                disabled={isSavingStatus}
-                onChange={(event) => setOpportunityStatus(event.target.value)}
-                value={opportunityStatus}
-              >
-                {OPPORTUNITY_STATUSES.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="cardActions">
-              <button
-                disabled={isSavingStatus}
-                onClick={() => void handleSaveStatus()}
-                type="button"
-              >
-                {isSavingStatus ? "Guardando estado..." : "Guardar estado"}
-              </button>
-            </div>
-            <label className="field">
-              Notas operativas (V1)
-              <textarea
-                disabled={isSavingNotes}
-                onChange={(event) => setOpportunityNotes(event.target.value)}
-                rows={4}
-                value={opportunityNotes}
-              />
-            </label>
-            <div className="cardActions">
-              <button
-                disabled={isSavingNotes}
-                onClick={() => void handleSaveNotes()}
-                type="button"
-              >
-                {isSavingNotes ? "Guardando notas..." : "Guardar notas"}
-              </button>
-            </div>
-            <label className="checkboxRow">
-              <input
-                checked={forceRecomputeAi}
-                onChange={(event) => setForceRecomputeAi(event.target.checked)}
-                type="checkbox"
-              />
-              <span>Forzar recalculo IA (si no, usa ultimo persistido)</span>
-            </label>
-            <p className="metaText">Preparar materiales: selecciona lo que quieres generar.</p>
-            <div className="optionList">
-              <label className="checkboxRow">
-                <input
-                  checked={prepareGuidanceSelected}
-                  onChange={(event) => setPrepareGuidanceSelected(event.target.checked)}
-                  type="checkbox"
-                />
-                <span>Ayuda textual</span>
-              </label>
-              <label className="checkboxRow">
-                <input
-                  checked={prepareCoverSelected}
-                  onChange={(event) => setPrepareCoverSelected(event.target.checked)}
-                  type="checkbox"
-                />
-                <span>Carta de presentacion</span>
-              </label>
-              <label className="checkboxRow">
-                <input
-                  checked={prepareSummarySelected}
-                  onChange={(event) => setPrepareSummarySelected(event.target.checked)}
-                  type="checkbox"
-                />
-                <span>Resumen adaptado</span>
-              </label>
-            </div>
-            <div className="manualRow">
-              <label className="field">
-                Filtro historico IA
-                <select
-                  onChange={(event) => setAiRunActionFilter(event.target.value)}
-                  value={aiRunActionFilter}
-                >
-                  {AI_RUN_ACTION_FILTERS.map((item) => (
-                    <option key={item.value || "all"} value={item.value}>
-                      {item.label}
-                    </option>
+          <div className="analysisLayoutGrid">
+            <aside className="analysisRail analysisRailLeft">
+              <header className="analysisColumnHeader">
+                <h3>Oportunidades guardadas</h3>
+              </header>
+              {isLoadingOpportunities ? (
+                <p className="metaText">Cargando oportunidades...</p>
+              ) : savedOpportunities.length === 0 ? (
+                <p className="metaText">No hay oportunidades guardadas para este perfil.</p>
+              ) : (
+                <div className="analysisOpportunityList">
+                  {savedOpportunities.map((item) => (
+                    <article
+                      className={
+                        selectedOpportunityId === item.opportunity_id
+                          ? "savedOpportunityCard analysisOpportunityCard analysisOpportunityCardActive"
+                          : "savedOpportunityCard analysisOpportunityCard"
+                      }
+                      onClick={() => handleSelectOpportunityCard(item.opportunity_id)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          handleSelectOpportunityCard(item.opportunity_id);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      key={`analysis-${item.opportunity_id}`}
+                    >
+                      <p className="chatRole savedOpportunityStatus">{item.status.toUpperCase()}</p>
+                      <p className="chatContent savedOpportunityTitle">{item.title}</p>
+                      <p className="metaText analysisOpportunityCompany">
+                        {item.company || "Empresa no identificada"}
+                      </p>
+                      <p className="metaText savedOpportunityLink">
+                        <ExternalUrlText url={item.source_url} />
+                      </p>
+                    </article>
                   ))}
-                </select>
-              </label>
-              <div className="cardActions alignEnd">
-                <button
-                  disabled={isLoadingAiRuns}
-                  onClick={() =>
-                    selectedPersonId && selectedOpportunity
-                      ? void refreshAiRunsFor(
-                          selectedPersonId,
-                          selectedOpportunity.opportunity_id,
-                          aiRunActionFilter
-                        )
-                      : undefined
-                  }
-                  type="button"
-                >
-                  {isLoadingAiRuns ? "Cargando historico..." : "Refrescar historico IA"}
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <p className="metaText">
-            Selecciona una oportunidad guardada para analizar y preparar postulacion.
-          </p>
-        )}
-        <article className="manualCard analysisResultsPanel">
-          <p className="chatRole">Resultados</p>
-          {!analysisText &&
-          !culturalConfidence &&
-          culturalWarnings.length === 0 &&
-          culturalSignals.length === 0 &&
-          !semanticEvidence &&
-          !guidanceText &&
-          artifacts.length === 0 ? (
-            <p className="metaText">
-              Todavia no hay resultados generados para la oportunidad activa.
-            </p>
-          ) : null}
-          {analysisText ? (
-            <article className="chatBubble chatBubbleAssistant">
-              <p className="chatRole">Analisis</p>
-              <p className="chatContent">{analysisText}</p>
-            </article>
-          ) : null}
-          {culturalConfidence ? (
-            <p className="metaText">
-              Confianza fit cultural: <strong>{culturalConfidence}</strong>
-            </p>
-          ) : null}
-          {culturalWarnings.length > 0 ? (
-            <article className="chatBubble chatBubbleAssistant">
-              <p className="chatRole">Advertencias culturales</p>
-              <p className="chatContent">{culturalWarnings.join("\n")}</p>
-            </article>
-          ) : null}
-          {culturalSignals.length > 0 ? (
-            <details className="collapsibleSection">
-              <summary>Senales culturales ({culturalSignals.length})</summary>
-              <div className="chatList">
-                {culturalSignals.map((signal) => (
-                  <article
-                    className="chatBubble chatBubbleAssistant"
-                    key={`${signal.source_url}|${signal.title}`}
-                  >
-                    <p className="chatRole">{signal.source_provider}</p>
-                    <p className="chatContent">{signal.title}</p>
-                    <p className="metaText">
-                      <ExternalUrlText noValueText="URL no disponible" url={signal.source_url} />
+                </div>
+              )}
+            </aside>
+
+            <div className="analysisCenterColumn">
+              <header className="analysisColumnHeader">
+                <div className="analysisCenterHeader">
+                  <h3>
+                    Oportunidad activa:{" "}
+                    {selectedOpportunity ? selectedOpportunity.title : "sin seleccionar"}
+                  </h3>
+                  {selectedOpportunity ? (
+                    <p className="metaText analysisOpportunityMeta">
+                      Estado: {opportunityStatus} · Notas: {opportunityNotes.trim().length}
                     </p>
-                    <p className="metaText">{signal.snippet}</p>
-                  </article>
-                ))}
-              </div>
-            </details>
-          ) : null}
-          {semanticEvidence ? (
-            <details className="collapsibleSection">
-              <summary>Evidencia semantica CV ({semanticEvidence.source})</summary>
-              <article className="chatBubble chatBubbleAssistant">
-                <p className="metaText">top_k: {semanticEvidence.top_k}</p>
-                <p className="metaText">{semanticEvidence.query}</p>
-                {semanticEvidence.snippets.length > 0 ? (
-                  <div className="chatList">
-                    {semanticEvidence.snippets.map((snippet, index) => (
-                      <article
-                        className="chatBubble chatBubbleUser semanticSnippetBubble"
-                        key={`cv-snippet-${index}`}
+                  ) : null}
+                </div>
+              </header>
+
+              {selectedOpportunity ? (
+                <>
+                  <article className="manualCard analysisResultsPanel">
+                    <h3 className="subheading subheadingCompact">Resultados</h3>
+                    <div className="analysisResultTabs">
+                      <button
+                        className={
+                          resultsPanelTab === "analysis"
+                            ? "workspaceTabButton workspaceTabButtonActive"
+                            : "workspaceTabButton"
+                        }
+                        onClick={() => handleSwitchResultsTab("analysis")}
+                        type="button"
                       >
-                        <p className="chatRole">CV-{index + 1}</p>
-                        <p className="chatContent">{snippet}</p>
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="chatContent">No hay snippets disponibles para esta oportunidad.</p>
-                )}
-              </article>
-            </details>
-          ) : null}
-          <article className="manualCard artifactPanel">
-            <p className="chatRole">Panel de artefactos (V1)</p>
-            {!guidanceText && artifacts.length === 0 ? (
-              <p className="metaText">
-                Aun no hay materiales generados para esta oportunidad.
-              </p>
-            ) : (
-              <div className="artifactList">
-                {guidanceText ? (
-                  <article className="artifactItem">
-                    <div className="panelHeader">
-                      <div>
-                        <p className="chatRole">Guia de perfil</p>
-                        <p className="metaText">Ayuda textual contextual</p>
-                      </div>
-                      <div className="cardActions">
-                        <button
-                          onClick={() =>
-                            void handleCopyArtifactContent("guidance_text", guidanceText)
-                          }
-                          type="button"
-                        >
-                          {copiedArtifactKey === "guidance_text" ? "Copiado" : "Copiar"}
-                        </button>
-                      </div>
+                        Analisis
+                      </button>
+                      <button
+                        className={
+                          resultsPanelTab === "artifacts"
+                            ? "workspaceTabButton workspaceTabButtonActive"
+                            : "workspaceTabButton"
+                        }
+                        onClick={() => handleSwitchResultsTab("artifacts")}
+                        type="button"
+                      >
+                        Artefactos
+                      </button>
                     </div>
-                    <p className="chatContent artifactContent">{guidanceText}</p>
-                  </article>
-                ) : null}
-                {artifacts.map((artifact) => {
-                  const copyKey = `${artifact.artifact_type}:${artifact.artifact_id}`;
-                  return (
-                    <article className="artifactItem" key={artifact.artifact_id}>
-                      <div className="panelHeader">
-                        <div>
-                          <p className="chatRole">{getArtifactTypeLabel(artifact.artifact_type)}</p>
-                          <p className="metaText">artifact_id: {artifact.artifact_id}</p>
-                        </div>
-                        <div className="cardActions">
-                          <button
-                            onClick={() =>
-                              void handleCopyArtifactContent(copyKey, artifact.content)
+
+                    {resultsPanelTab === "analysis" ? (
+                      <div className="resultBlockList">
+                        <article
+                          className={
+                            selectedResultBlockId === "analysis_profile_match"
+                              ? "resultBlockCard resultBlockCardActive"
+                              : "resultBlockCard"
+                          }
+                          onClick={() => handleSelectResultBlock("analysis_profile_match")}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              handleSelectResultBlock("analysis_profile_match");
                             }
+                          }}
+                          role="button"
+                          tabIndex={0}
+                        >
+                          <div className="resultBlockTop">
+                            <div>
+                              <p className="chatRole">{BLOCK_LABEL_BY_ID.analysis_profile_match}</p>
+                              <p className="metaText">
+                                {profileRun
+                                  ? `Generado · ${formatAiRunTimestamp(profileRun.updated_at)}`
+                                  : "Sin generar"}
+                              </p>
+                            </div>
+                            <div className="cardActions">
+                              {profileRun ? (
+                                <button
+                                  aria-label="Recalcular alineacion perfil-vacante"
+                                  className="iconOnlyButton"
+                                  disabled={isAnalyzingProfile}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    selectedOpportunity
+                                      ? void handleAnalyzeProfileMatch(
+                                          selectedOpportunity.opportunity_id,
+                                          true
+                                        )
+                                      : undefined;
+                                  }}
+                                  title="Recalcular"
+                                  type="button"
+                                >
+                                  ↻
+                                </button>
+                              ) : (
+                                <button
+                                  aria-label="Generar alineacion perfil-vacante"
+                                  className="iconOnlyButton"
+                                  disabled={isAnalyzingProfile}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    selectedOpportunity
+                                      ? void handleAnalyzeProfileMatch(
+                                          selectedOpportunity.opportunity_id
+                                        )
+                                      : undefined;
+                                  }}
+                                  title="Generar"
+                                  type="button"
+                                >
+                                  {isAnalyzingProfile ? "…" : "▶"}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          {profileRuns.length > 1 ? (
+                            <div className="resultBlockPager">
+                              <button
+                                className="ghostButton compactActionButton"
+                                disabled={getCurrentRunIndexForBlock("analysis_profile_match") === 0}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleMoveRunCursor("analysis_profile_match", -1);
+                                }}
+                                type="button"
+                              >
+                                ◀
+                              </button>
+                              <span className="metaText">
+                                {getCurrentRunIndexForBlock("analysis_profile_match") + 1}/
+                                {profileRuns.length}
+                              </span>
+                              <button
+                                className="ghostButton compactActionButton"
+                                disabled={
+                                  getCurrentRunIndexForBlock("analysis_profile_match") >=
+                                  profileRuns.length - 1
+                                }
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleMoveRunCursor("analysis_profile_match", 1);
+                                }}
+                                type="button"
+                              >
+                                ▶
+                              </button>
+                            </div>
+                          ) : null}
+                          {profilePreview.previewText ? (
+                            <p className="chatContent resultBlockContent">{profilePreview.previewText}</p>
+                          ) : null}
+                          {profileContent &&
+                          (profilePreview.truncated ||
+                            expandedResultBlocks.analysis_profile_match) ? (
+                            <div className="cardActions resultBlockToggleRow">
+                              <button
+                                aria-label={
+                                  expandedResultBlocks.analysis_profile_match
+                                    ? "Contraer contenido"
+                                    : "Expandir contenido"
+                                }
+                                className="iconOnlyButton"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleToggleResultBlockPreview("analysis_profile_match");
+                                }}
+                                title={
+                                  expandedResultBlocks.analysis_profile_match
+                                    ? "Contraer"
+                                    : "Expandir"
+                                }
+                                type="button"
+                              >
+                                {expandedResultBlocks.analysis_profile_match ? "▴" : "▾"}
+                              </button>
+                            </div>
+                          ) : null}
+                        </article>
+
+                        <article
+                          className={
+                            selectedResultBlockId === "analysis_cultural_fit"
+                              ? "resultBlockCard resultBlockCardActive"
+                              : "resultBlockCard"
+                          }
+                          onClick={() => handleSelectResultBlock("analysis_cultural_fit")}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              handleSelectResultBlock("analysis_cultural_fit");
+                            }
+                          }}
+                          role="button"
+                          tabIndex={0}
+                        >
+                          <div className="resultBlockTop">
+                            <div>
+                              <p className="chatRole">{BLOCK_LABEL_BY_ID.analysis_cultural_fit}</p>
+                              <p className="metaText">
+                                {culturalRun
+                                  ? `Generado · ${formatAiRunTimestamp(culturalRun.updated_at)}`
+                                  : "Sin generar"}
+                              </p>
+                            </div>
+                            <div className="cardActions">
+                              {culturalRun ? (
+                                <button
+                                  aria-label="Recalcular fit cultural"
+                                  className="iconOnlyButton"
+                                  disabled={isAnalyzingCultural}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    selectedOpportunity
+                                      ? void handleAnalyzeCulturalFit(
+                                          selectedOpportunity.opportunity_id,
+                                          true
+                                        )
+                                      : undefined;
+                                  }}
+                                  title="Recalcular"
+                                  type="button"
+                                >
+                                  ↻
+                                </button>
+                              ) : (
+                                <button
+                                  aria-label="Generar fit cultural"
+                                  className="iconOnlyButton"
+                                  disabled={isAnalyzingCultural}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    selectedOpportunity
+                                      ? void handleAnalyzeCulturalFit(
+                                          selectedOpportunity.opportunity_id
+                                        )
+                                      : undefined;
+                                  }}
+                                  title="Generar"
+                                  type="button"
+                                >
+                                  {isAnalyzingCultural ? "…" : "▶"}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          {culturalRuns.length > 1 ? (
+                            <div className="resultBlockPager">
+                              <button
+                                className="ghostButton compactActionButton"
+                                disabled={getCurrentRunIndexForBlock("analysis_cultural_fit") === 0}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleMoveRunCursor("analysis_cultural_fit", -1);
+                                }}
+                                type="button"
+                              >
+                                ◀
+                              </button>
+                              <span className="metaText">
+                                {getCurrentRunIndexForBlock("analysis_cultural_fit") + 1}/
+                                {culturalRuns.length}
+                              </span>
+                              <button
+                                className="ghostButton compactActionButton"
+                                disabled={
+                                  getCurrentRunIndexForBlock("analysis_cultural_fit") >=
+                                  culturalRuns.length - 1
+                                }
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleMoveRunCursor("analysis_cultural_fit", 1);
+                                }}
+                                type="button"
+                              >
+                                ▶
+                              </button>
+                            </div>
+                          ) : null}
+                          {culturalPreview.previewText ? (
+                            <p className="chatContent resultBlockContent">{culturalPreview.previewText}</p>
+                          ) : null}
+                          {culturalConfidenceView ? (
+                            <p className="metaText">
+                              Confianza: <strong>{culturalConfidenceView}</strong>
+                            </p>
+                          ) : null}
+                          {culturalWarningsView.length > 0 ? (
+                            <p className="metaText">
+                              Advertencias: {culturalWarningsView.length}
+                            </p>
+                          ) : null}
+                          {culturalContent &&
+                          (culturalPreview.truncated ||
+                            expandedResultBlocks.analysis_cultural_fit) ? (
+                            <div className="cardActions resultBlockToggleRow">
+                              <button
+                                aria-label={
+                                  expandedResultBlocks.analysis_cultural_fit
+                                    ? "Contraer contenido"
+                                    : "Expandir contenido"
+                                }
+                                className="iconOnlyButton"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleToggleResultBlockPreview("analysis_cultural_fit");
+                                }}
+                                title={
+                                  expandedResultBlocks.analysis_cultural_fit
+                                    ? "Contraer"
+                                    : "Expandir"
+                                }
+                                type="button"
+                              >
+                                {expandedResultBlocks.analysis_cultural_fit ? "▴" : "▾"}
+                              </button>
+                            </div>
+                          ) : null}
+                        </article>
+                      </div>
+                    ) : (
+                      <div className="resultBlockList">
+                        <article
+                          className={
+                            selectedResultBlockId === "artifact_guidance_text"
+                              ? "resultBlockCard resultBlockCardActive"
+                              : "resultBlockCard"
+                          }
+                          onClick={() => handleSelectResultBlock("artifact_guidance_text")}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              handleSelectResultBlock("artifact_guidance_text");
+                            }
+                          }}
+                          role="button"
+                          tabIndex={0}
+                        >
+                          <div className="resultBlockTop">
+                            <div>
+                              <p className="chatRole">{BLOCK_LABEL_BY_ID.artifact_guidance_text}</p>
+                              <p className="metaText">
+                                {guidanceRun
+                                  ? `Generado · ${formatAiRunTimestamp(guidanceRun.updated_at)}`
+                                  : "Sin generar"}
+                              </p>
+                            </div>
+                            <div className="cardActions">
+                              {guidanceRun ? (
+                                <button
+                                  aria-label="Recalcular guia de perfil"
+                                  className="iconOnlyButton"
+                                  disabled={isPreparing}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    selectedOpportunity
+                                      ? void handlePrepare(
+                                          selectedOpportunity.opportunity_id,
+                                          true,
+                                          ["guidance_text"]
+                                        )
+                                      : undefined;
+                                  }}
+                                  title="Recalcular"
+                                  type="button"
+                                >
+                                  ↻
+                                </button>
+                              ) : (
+                                <button
+                                  aria-label="Generar guia de perfil"
+                                  className="iconOnlyButton"
+                                  disabled={isPreparing}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    selectedOpportunity
+                                      ? void handlePrepare(
+                                          selectedOpportunity.opportunity_id,
+                                          undefined,
+                                          ["guidance_text"]
+                                        )
+                                      : undefined;
+                                  }}
+                                  title="Generar"
+                                  type="button"
+                                >
+                                  {isPreparing ? "…" : "▶"}
+                                </button>
+                              )}
+                              {guidanceContent ? (
+                                <button
+                                  aria-label="Copiar guia de perfil"
+                                  className="iconOnlyButton"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void handleCopyArtifactContent("guidance_text", guidanceContent);
+                                  }}
+                                  title={copiedArtifactKey === "guidance_text" ? "Copiado" : "Copiar"}
+                                  type="button"
+                                >
+                                  {copiedArtifactKey === "guidance_text" ? "✓" : "⧉"}
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                          {guidanceRuns.length > 1 ? (
+                            <div className="resultBlockPager">
+                              <button
+                                className="ghostButton compactActionButton"
+                                disabled={getCurrentRunIndexForBlock("artifact_guidance_text") === 0}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleMoveRunCursor("artifact_guidance_text", -1);
+                                }}
+                                type="button"
+                              >
+                                ◀
+                              </button>
+                              <span className="metaText">
+                                {getCurrentRunIndexForBlock("artifact_guidance_text") + 1}/
+                                {guidanceRuns.length}
+                              </span>
+                              <button
+                                className="ghostButton compactActionButton"
+                                disabled={
+                                  getCurrentRunIndexForBlock("artifact_guidance_text") >=
+                                  guidanceRuns.length - 1
+                                }
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleMoveRunCursor("artifact_guidance_text", 1);
+                                }}
+                                type="button"
+                              >
+                                ▶
+                              </button>
+                            </div>
+                          ) : null}
+                          {guidancePreview.previewText ? (
+                            <p className="chatContent resultBlockContent">{guidancePreview.previewText}</p>
+                          ) : null}
+                          {guidanceContent &&
+                          (guidancePreview.truncated ||
+                            expandedResultBlocks.artifact_guidance_text) ? (
+                            <div className="cardActions resultBlockToggleRow">
+                              <button
+                                aria-label={
+                                  expandedResultBlocks.artifact_guidance_text
+                                    ? "Contraer contenido"
+                                    : "Expandir contenido"
+                                }
+                                className="iconOnlyButton"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleToggleResultBlockPreview("artifact_guidance_text");
+                                }}
+                                title={
+                                  expandedResultBlocks.artifact_guidance_text
+                                    ? "Contraer"
+                                    : "Expandir"
+                                }
+                                type="button"
+                              >
+                                {expandedResultBlocks.artifact_guidance_text ? "▴" : "▾"}
+                              </button>
+                            </div>
+                          ) : null}
+                        </article>
+
+                        <article
+                          className={
+                            selectedResultBlockId === "artifact_cover_letter"
+                              ? "resultBlockCard resultBlockCardActive"
+                              : "resultBlockCard"
+                          }
+                          onClick={() => handleSelectResultBlock("artifact_cover_letter")}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              handleSelectResultBlock("artifact_cover_letter");
+                            }
+                          }}
+                          role="button"
+                          tabIndex={0}
+                        >
+                          <div className="resultBlockTop">
+                            <div>
+                              <p className="chatRole">{BLOCK_LABEL_BY_ID.artifact_cover_letter}</p>
+                              <p className="metaText">
+                                {coverRun
+                                  ? `Generado · ${formatAiRunTimestamp(coverRun.updated_at)}`
+                                  : "Sin generar"}
+                              </p>
+                            </div>
+                            <div className="cardActions">
+                              {coverRun ? (
+                                <button
+                                  aria-label="Recalcular carta de presentacion"
+                                  className="iconOnlyButton"
+                                  disabled={isPreparing}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    selectedOpportunity
+                                      ? void handlePrepare(
+                                          selectedOpportunity.opportunity_id,
+                                          true,
+                                          ["cover_letter"]
+                                        )
+                                      : undefined;
+                                  }}
+                                  title="Recalcular"
+                                  type="button"
+                                >
+                                  ↻
+                                </button>
+                              ) : (
+                                <button
+                                  aria-label="Generar carta de presentacion"
+                                  className="iconOnlyButton"
+                                  disabled={isPreparing}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    selectedOpportunity
+                                      ? void handlePrepare(
+                                          selectedOpportunity.opportunity_id,
+                                          undefined,
+                                          ["cover_letter"]
+                                        )
+                                      : undefined;
+                                  }}
+                                  title="Generar"
+                                  type="button"
+                                >
+                                  {isPreparing ? "…" : "▶"}
+                                </button>
+                              )}
+                              {coverContent ? (
+                                <button
+                                  aria-label="Copiar carta de presentacion"
+                                  className="iconOnlyButton"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void handleCopyArtifactContent("cover_letter", coverContent);
+                                  }}
+                                  title={copiedArtifactKey === "cover_letter" ? "Copiado" : "Copiar"}
+                                  type="button"
+                                >
+                                  {copiedArtifactKey === "cover_letter" ? "✓" : "⧉"}
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                          {coverRuns.length > 1 ? (
+                            <div className="resultBlockPager">
+                              <button
+                                className="ghostButton compactActionButton"
+                                disabled={getCurrentRunIndexForBlock("artifact_cover_letter") === 0}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleMoveRunCursor("artifact_cover_letter", -1);
+                                }}
+                                type="button"
+                              >
+                                ◀
+                              </button>
+                              <span className="metaText">
+                                {getCurrentRunIndexForBlock("artifact_cover_letter") + 1}/
+                                {coverRuns.length}
+                              </span>
+                              <button
+                                className="ghostButton compactActionButton"
+                                disabled={
+                                  getCurrentRunIndexForBlock("artifact_cover_letter") >=
+                                  coverRuns.length - 1
+                                }
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleMoveRunCursor("artifact_cover_letter", 1);
+                                }}
+                                type="button"
+                              >
+                                ▶
+                              </button>
+                            </div>
+                          ) : null}
+                          {coverPreview.previewText ? (
+                            <p className="chatContent resultBlockContent">{coverPreview.previewText}</p>
+                          ) : null}
+                          {coverContent &&
+                          (coverPreview.truncated || expandedResultBlocks.artifact_cover_letter) ? (
+                            <div className="cardActions resultBlockToggleRow">
+                              <button
+                                aria-label={
+                                  expandedResultBlocks.artifact_cover_letter
+                                    ? "Contraer contenido"
+                                    : "Expandir contenido"
+                                }
+                                className="iconOnlyButton"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleToggleResultBlockPreview("artifact_cover_letter");
+                                }}
+                                title={
+                                  expandedResultBlocks.artifact_cover_letter
+                                    ? "Contraer"
+                                    : "Expandir"
+                                }
+                                type="button"
+                              >
+                                {expandedResultBlocks.artifact_cover_letter ? "▴" : "▾"}
+                              </button>
+                            </div>
+                          ) : null}
+                        </article>
+
+                        <article
+                          className={
+                            selectedResultBlockId === "artifact_experience_summary"
+                              ? "resultBlockCard resultBlockCardActive"
+                              : "resultBlockCard"
+                          }
+                          onClick={() => handleSelectResultBlock("artifact_experience_summary")}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              handleSelectResultBlock("artifact_experience_summary");
+                            }
+                          }}
+                          role="button"
+                          tabIndex={0}
+                        >
+                          <div className="resultBlockTop">
+                            <div>
+                              <p className="chatRole">{BLOCK_LABEL_BY_ID.artifact_experience_summary}</p>
+                              <p className="metaText">
+                                {summaryRun
+                                  ? `Generado · ${formatAiRunTimestamp(summaryRun.updated_at)}`
+                                  : "Sin generar"}
+                              </p>
+                            </div>
+                            <div className="cardActions">
+                              {summaryRun ? (
+                                <button
+                                  aria-label="Recalcular resumen adaptado"
+                                  className="iconOnlyButton"
+                                  disabled={isPreparing}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    selectedOpportunity
+                                      ? void handlePrepare(
+                                          selectedOpportunity.opportunity_id,
+                                          true,
+                                          ["experience_summary"]
+                                        )
+                                      : undefined;
+                                  }}
+                                  title="Recalcular"
+                                  type="button"
+                                >
+                                  ↻
+                                </button>
+                              ) : (
+                                <button
+                                  aria-label="Generar resumen adaptado"
+                                  className="iconOnlyButton"
+                                  disabled={isPreparing}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    selectedOpportunity
+                                      ? void handlePrepare(
+                                          selectedOpportunity.opportunity_id,
+                                          undefined,
+                                          ["experience_summary"]
+                                        )
+                                      : undefined;
+                                  }}
+                                  title="Generar"
+                                  type="button"
+                                >
+                                  {isPreparing ? "…" : "▶"}
+                                </button>
+                              )}
+                              {summaryContent ? (
+                                <button
+                                  aria-label="Copiar resumen adaptado"
+                                  className="iconOnlyButton"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void handleCopyArtifactContent(
+                                      "experience_summary",
+                                      summaryContent
+                                    );
+                                  }}
+                                  title={copiedArtifactKey === "experience_summary" ? "Copiado" : "Copiar"}
+                                  type="button"
+                                >
+                                  {copiedArtifactKey === "experience_summary" ? "✓" : "⧉"}
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                          {summaryRuns.length > 1 ? (
+                            <div className="resultBlockPager">
+                              <button
+                                className="ghostButton compactActionButton"
+                                disabled={getCurrentRunIndexForBlock("artifact_experience_summary") === 0}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleMoveRunCursor("artifact_experience_summary", -1);
+                                }}
+                                type="button"
+                              >
+                                ◀
+                              </button>
+                              <span className="metaText">
+                                {getCurrentRunIndexForBlock("artifact_experience_summary") + 1}/
+                                {summaryRuns.length}
+                              </span>
+                              <button
+                                className="ghostButton compactActionButton"
+                                disabled={
+                                  getCurrentRunIndexForBlock("artifact_experience_summary") >=
+                                  summaryRuns.length - 1
+                                }
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleMoveRunCursor("artifact_experience_summary", 1);
+                                }}
+                                type="button"
+                              >
+                                ▶
+                              </button>
+                            </div>
+                          ) : null}
+                          {summaryPreview.previewText ? (
+                            <p className="chatContent resultBlockContent">{summaryPreview.previewText}</p>
+                          ) : null}
+                          {summaryContent &&
+                          (summaryPreview.truncated ||
+                            expandedResultBlocks.artifact_experience_summary) ? (
+                            <div className="cardActions resultBlockToggleRow">
+                              <button
+                                aria-label={
+                                  expandedResultBlocks.artifact_experience_summary
+                                    ? "Contraer contenido"
+                                    : "Expandir contenido"
+                                }
+                                className="iconOnlyButton"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  handleToggleResultBlockPreview("artifact_experience_summary");
+                                }}
+                                title={
+                                  expandedResultBlocks.artifact_experience_summary
+                                    ? "Contraer"
+                                    : "Expandir"
+                                }
+                                type="button"
+                              >
+                                {expandedResultBlocks.artifact_experience_summary ? "▴" : "▾"}
+                              </button>
+                            </div>
+                          ) : null}
+                        </article>
+                      </div>
+                    )}
+                  </article>
+
+                  <details className="collapsibleSection analysisOpportunityOps">
+                    <summary>Gestion de oportunidad</summary>
+                    <article className="manualCard analysisActiveCard">
+                      <div className="analysisStatusRow">
+                        <label className="field analysisStatusField">
+                          Estado (V1)
+                          <select
+                            disabled={isSavingStatus}
+                            onChange={(event) => setOpportunityStatus(event.target.value)}
+                            value={opportunityStatus}
+                          >
+                            {OPPORTUNITY_STATUSES.map((status) => (
+                              <option key={status} value={status}>
+                                {status}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <div className="cardActions alignEnd">
+                          <button
+                            className="primaryButton"
+                            disabled={isSavingStatus}
+                            onClick={() => void handleSaveStatus()}
                             type="button"
                           >
-                            {copiedArtifactKey === copyKey ? "Copiado" : "Copiar"}
+                            {isSavingStatus ? "Guardando estado..." : "Guardar estado"}
                           </button>
                         </div>
                       </div>
-                      <p className="chatContent artifactContent">{artifact.content}</p>
+
+                      <label className="field">
+                        Notas operativas (V1)
+                        <textarea
+                          disabled={isSavingNotes}
+                          onChange={(event) => setOpportunityNotes(event.target.value)}
+                          rows={4}
+                          value={opportunityNotes}
+                        />
+                      </label>
+
+                      <div className="analysisNotesRow">
+                        <div className="cardActions">
+                          <button
+                            className="primaryButton"
+                            disabled={isSavingNotes}
+                            onClick={() => void handleSaveNotes()}
+                            type="button"
+                          >
+                            {isSavingNotes ? "Guardando notas..." : "Guardar notas"}
+                          </button>
+                        </div>
+                      </div>
                     </article>
-                  );
-                })}
-              </div>
-            )}
-          </article>
-        </article>
-        {selectedOpportunity ? (
-          <details className="collapsibleSection">
-            <summary>Historico IA (persistido)</summary>
-            <article className="manualCard">
-              {isLoadingAiRuns ? (
-                <p className="metaText">Cargando ejecuciones...</p>
-              ) : aiRuns.length === 0 ? (
-                <p className="metaText">
-                  No hay ejecuciones para el filtro seleccionado.
-                </p>
+                  </details>
+                </>
               ) : (
-                <div className="chatList">
-                  {aiRuns.map((run) => {
-                    const previewText = getAiRunPreviewText(run);
-                    const isFocused = focusedRunId === run.run_id;
-                    return (
-                      <article
-                        className={
-                          isFocused
-                            ? "chatBubble chatBubbleAssistant searchResultCard searchResultCardActive"
-                            : "chatBubble chatBubbleAssistant"
-                        }
-                        key={run.run_id}
-                      >
+                <article className="manualCard analysisEmptyCard">
+                  <p className="metaText">
+                    Sin oportunidad activa.
+                  </p>
+                </article>
+              )}
+            </div>
+
+            <aside className="analysisRail analysisRailRight">
+              <header className="analysisColumnHeader">
+                <h3>Contextual Intelligence</h3>
+              </header>
+
+              {!selectedOpportunity ? (
+                <article className="manualCard analysisEmptyCard">
+                  <p className="metaText">Sin oportunidad activa.</p>
+                </article>
+              ) : (
+                <>
+                  <details className="collapsibleSection analysisContextSection" open>
+                    <summary>Historial IA</summary>
+                    {!focusedRun ? (
+                      <p className="metaText">
+                        Selecciona un bloque de resultados para ver su ejecucion.
+                      </p>
+                    ) : (
+                      <article className="manualCard">
                         <p className="chatRole">
-                          {AI_RUN_ACTION_LABELS[run.action_key] ?? run.action_key}
+                          {selectedResultBlockId
+                            ? BLOCK_LABEL_BY_ID[selectedResultBlockId]
+                            : AI_RUN_ACTION_LABELS[focusedRun.action_key] ?? focusedRun.action_key}
                         </p>
                         <p className="metaText">
-                          run_id: {run.run_id} · actualizado:{" "}
-                          {formatAiRunTimestamp(run.updated_at)}
-                          {run.is_current ? " · vigente" : ""}
+                          run_id: {focusedRun.run_id} · actualizado:{" "}
+                          {formatAiRunTimestamp(focusedRun.updated_at)}
                         </p>
-                        <div className="cardActions">
-                          <button
-                            onClick={() =>
-                              handleFocusRunTrace(run.run_id, run.opportunity_id)
-                            }
-                            type="button"
-                          >
-                            Ver request exacto
-                          </button>
-                          <button
-                            onClick={() =>
-                              handleFocusRunResponse(run.run_id, run.opportunity_id)
-                            }
-                            type="button"
-                          >
-                            Ver request + response
-                          </button>
-                        </div>
-                        {previewText ? (
-                          <p className="chatContent">{previewText}</p>
-                        ) : (
-                          <p className="metaText">
-                            Sin resumen textual directo. Revisa payload estructurado.
-                          </p>
-                        )}
                         <details className="payloadDetails">
-                          <summary>Ver payload</summary>
+                          <summary>Ver response payload persistido</summary>
                           <pre className="payloadPre">
-                            {JSON.stringify(run.result_payload, null, 2)}
+                            {JSON.stringify(focusedRun.result_payload, null, 2)}
                           </pre>
                         </details>
                       </article>
-                    );
-                  })}
-                </div>
-              )}
-            </article>
-          </details>
-        ) : null}
-        </section>
-      ) : null}
-      {showAnalysisPage ? (
-        <section className="panel selectedPanel">
-        <header className="panelHeader">
-          <div>
-            <h2>Trazas de requests IA/API</h2>
-            <p>
-              Guarda y muestra el request exacto enviado a OpenAI, Tavily y proveedores
-              de busqueda.
-            </p>
-          </div>
-          <button
-            className="ghostButton"
-            disabled={!selectedPersonId || isLoadingRequestTraces}
-            onClick={() =>
-              selectedPersonId
-                ? void refreshRequestTracesFor(
-                    selectedPersonId,
-                    traceDestinationFilter,
-                    traceOnlyActiveOpportunity,
-                    selectedOpportunityId,
-                    traceRunIdFilter
-                  )
-                : undefined
-            }
-            type="button"
-          >
-            {isLoadingRequestTraces ? "Refrescando..." : "Refrescar trazas"}
-          </button>
-        </header>
-        <details className="collapsibleSection">
-          <summary>Trazas IA/API</summary>
-          {!selectedPersonId ? (
-            <p className="metaText">Selecciona una persona para consultar trazas.</p>
-          ) : (
-            <>
-            <div className="manualRow">
-              <label className="field">
-                Destino
-                <select
-                  onChange={(event) => setTraceDestinationFilter(event.target.value)}
-                  value={traceDestinationFilter}
-                >
-                  {TRACE_DESTINATION_FILTERS.map((item) => (
-                    <option key={item.value || "all"} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="checkboxRow alignEnd">
-                <input
-                  checked={traceOnlyActiveOpportunity}
-                  disabled={!selectedOpportunityId}
-                  onChange={(event) => setTraceOnlyActiveOpportunity(event.target.checked)}
-                  type="checkbox"
-                />
-                <span>Solo oportunidad activa</span>
-              </label>
-            </div>
-            {traceRunIdFilter ? (
-              <div className="cardActions">
-                <p className="metaText">Filtro run_id activo: {traceRunIdFilter}</p>
-                <button
-                  onClick={() => {
-                    setTraceRunIdFilter("");
-                    setFocusedRunId("");
-                  }}
-                  type="button"
-                >
-                  Limpiar filtro run_id
-                </button>
-              </div>
-            ) : null}
-            {focusedRunId ? (
-              <article className="manualCard">
-                <p className="chatRole">Vista unificada por run_id</p>
-                <p className="metaText">
-                  run_id: {focusedRunId} · requests: {focusedRunRequestTraces.length}
-                </p>
-                {focusedRun ? (
-                  <>
-                    <p className="metaText">
-                      accion:{" "}
-                      {AI_RUN_ACTION_LABELS[focusedRun.action_key] ?? focusedRun.action_key} ·
-                      actualizado: {formatAiRunTimestamp(focusedRun.updated_at)}
-                    </p>
-                    <details className="payloadDetails">
-                      <summary>Ver response payload persistido</summary>
-                      <pre className="payloadPre">
-                        {JSON.stringify(focusedRun.result_payload, null, 2)}
-                      </pre>
-                    </details>
-                  </>
-                ) : (
-                  <p className="metaText">
-                    La respuesta de este run no esta cargada en el panel actual.
-                  </p>
-                )}
-              </article>
-            ) : null}
-            {isLoadingRequestTraces ? (
-              <p className="metaText">Cargando trazas...</p>
-            ) : requestTraces.length === 0 ? (
-              <p className="metaText">No hay trazas para los filtros seleccionados.</p>
-            ) : (
-              <div className="chatList">
-                {requestTraceGroups.map((group) => {
-                  const linkedRun = group.run_id ? aiRunsById.get(group.run_id) ?? null : null;
-                  return (
-                    <article className="manualCard" key={group.group_id}>
-                      <p className="chatRole">
-                        {group.run_id ? `run_id: ${group.run_id}` : "run_id: N/A"}
-                      </p>
+                    )}
+                  </details>
+
+                  <details className="collapsibleSection analysisContextSection" open>
+                    <summary>Trazas tecnicas</summary>
+                    {!focusedRunId ? (
+                      <p className="metaText">No hay run activo para mostrar trazas.</p>
+                    ) : isLoadingRequestTraces ? (
+                      <p className="metaText">Cargando trazas...</p>
+                    ) : requestTraces.length === 0 ? (
                       <p className="metaText">
-                        {group.run_id
-                          ? linkedRun
-                            ? `accion: ${AI_RUN_ACTION_LABELS[linkedRun.action_key] ?? linkedRun.action_key}`
-                            : "accion: sin respuesta cargada"
-                          : "trazas sin enlace a ejecucion IA persistida"}
-                        {" · "}
-                        total requests: {group.items.length}
+                        No hay trazas disponibles para el run seleccionado.
                       </p>
-                      {group.run_id ? (
-                        <div className="cardActions">
-                          <button
-                            onClick={() =>
-                              handleFocusRunResponse(group.run_id, group.opportunity_id)
-                            }
-                            type="button"
-                          >
-                            Ver response asociada
-                          </button>
-                          <button
-                            onClick={() =>
-                              handleFocusRunTrace(group.run_id, group.opportunity_id)
-                            }
-                            type="button"
-                          >
-                            Filtrar requests de este run
-                          </button>
-                        </div>
-                      ) : null}
+                    ) : (
                       <div className="chatList">
-                        {group.items.map((trace) => (
+                        {focusedRunRequestTraces.map((trace) => (
                           <article className="chatBubble chatBubbleAssistant" key={trace.trace_id}>
                             <p className="chatRole">
                               {trace.destination.toUpperCase()} · {trace.flow_key}
                             </p>
                             <p className="metaText">
-                              trace_id: {trace.trace_id} · oportunidad:{" "}
-                              {trace.opportunity_id || "N/A"} · run_id:{" "}
-                              {trace.run_id || "N/A"} · fecha:{" "}
+                              trace_id: {trace.trace_id} · run_id: {trace.run_id || "N/A"} · fecha:{" "}
                               {formatRequestTraceTimestamp(trace.created_at)}
                             </p>
                             <details className="payloadDetails">
@@ -3886,14 +4462,12 @@ export default function App() {
                           </article>
                         ))}
                       </div>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-            </>
-          )}
-        </details>
+                    )}
+                  </details>
+                </>
+              )}
+            </aside>
+          </div>
         </section>
       ) : null}
       {errorMessage ? <p className="errorText">{errorMessage}</p> : null}
