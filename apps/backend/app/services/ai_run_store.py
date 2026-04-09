@@ -86,7 +86,15 @@ def _list_for_scope(person_id: str, opportunity_id: str) -> list[AIRunRecord]:
             items = [item for item in _ai_runs.values() if item["person_id"] == person_id]
 
     filtered = [item for item in items if item["opportunity_id"] == opportunity_id]
-    return sorted(filtered, key=lambda item: item["updated_at"], reverse=True)
+    return sorted(
+        filtered,
+        key=lambda item: (
+            bool(item.get("is_current", False)),
+            str(item.get("updated_at", "")),
+            str(item.get("created_at", "")),
+        ),
+        reverse=True,
+    )
 
 
 def list_ai_runs(
