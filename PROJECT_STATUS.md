@@ -117,6 +117,8 @@
 - vista de candidatos refinada: `Agregar perfil` ahora abre/cierra el formulario de alta bajo demanda; cuando no hay registros el formulario se abre automaticamente
 - copy UX ajustado en candidatos para foco en `perfil` (labels de alto nivel) manteniendo el modelo de datos por `person_id`
 - seleccion de candidato ajustada a patron interactivo de cards: se elimina boton interno, no hay preseleccion en `/candidates`, seleccion por click en tarjeta y estado visual `hover/active`
+- contraste visual de seleccion reforzado en cards interactivas (`candidatos`, `opportunidades`, `resultados`): borde activo mas fuerte, halo ampliado y fondo activo mas distinguible
+- correccion de seleccion en `/candidates`: se elimina reset reactivo de `selectedPersonId` que anulaba el click sobre cards
 - preferencias culturales simplificadas: seleccion directa de opciones por campo; se elimina criticidad explicita en UI V1
 - bloque `CV activo` compactado: resumen en chips de estado, boton `Subir CV` mas compacto y vista previa en seccion colapsable
 - estilo global de botones compactado (menos redondeo, menor alto/padding) para reducir peso visual
@@ -278,6 +280,10 @@
 - contratos focalizados revalidados: `test_search_provider_admin` + `test_api_error_and_fallbacks` en `OK` (`28 tests`)
 - suite backend revalidada tras admin de runtime IA y top_k configurable: `80 tests` en `OK` (`skipped=1`)
 - suite backend revalidada tras activar `interview_brief` (cache + SSE + trazabilidad): `83 tests` en `OK` (`skipped=1`)
+- hardening anti-duplicado en `interview_brief`: backend evita append repetido si el ultimo mensaje del chat ya coincide con la misma respuesta de asistente
+- pruebas backend ampliadas para deduplicacion de entrevista (`tests/test_interview_brief.py`)
+- suite backend revalidada tras hardening de deduplicacion en entrevista: `84 tests` en `OK` (`skipped=1`)
+- fix UX/SSE en entrevista (frontend): durante `isInterviewing` se bloquea hidratacion desde `ai_runs` para no pisar deltas en vivo; fallback decide recálculo/cache segun llegada de deltas
 - build frontend revalidado tras integracion de controles `top_k` en administracion: `npm run build` en `OK`
 
 ## Mejoras Identificadas (Diferidas)

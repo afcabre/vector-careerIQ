@@ -22,7 +22,7 @@ from app.services.ai_run_store import (
     upsert_current_ai_run,
 )
 from app.services.artifact_store import ARTIFACT_TYPES, list_current_artifacts, upsert_current_artifact
-from app.services.conversation_store import append_message
+from app.services.conversation_store import append_message, get_or_create_conversation
 from app.services.opportunity_ai_service import (
     PREPARE_TARGET_COVER_LETTER,
     PREPARE_TARGET_EXPERIENCE_SUMMARY,
@@ -283,6 +283,25 @@ def _as_cultural_signals(payload: Any) -> list[dict[str, str]]:
             }
         )
     return items
+
+
+def _append_assistant_message_dedup(person_id: str, content: str) -> str:
+    normalized = content.strip()
+    if not normalized:
+        return ""
+    conversation = get_or_create_conversation(person_id)
+    messages = conversation.get("messages", [])
+    if messages:
+        last = messages[-1]
+        if (
+            str(last.get("role", "")).strip() == "assistant"
+            and str(last.get("content", "")).strip() == normalized
+        ):
+            return str(last.get("message_id", ""))
+    updated = append_message(person_id, "assistant", normalized)
+    if not updated.get("messages"):
+        return ""
+    return str(updated["messages"][-1].get("message_id", ""))
 
 
 @router.post("/from-search")
@@ -656,8 +675,10 @@ def interview_brief_action(
             "semantic_evidence": result["semantic_evidence"],
         },
     )
-    appended = append_message(person_id, "assistant", result["analysis_text"])
-    assistant_message_id = appended["messages"][-1]["message_id"] if appended["messages"] else ""
+    assistant_message_id = _append_assistant_message_dedup(
+        person_id,
+        result["analysis_text"],
+    )
     updated = update_saved_opportunity(
         person_id=person_id,
         opportunity_id=opportunity_id,
@@ -1081,8 +1102,10 @@ async def interview_brief_stream(
                     "semantic_evidence": semantic_evidence,
                 },
             )
-            appended = append_message(person_id, "assistant", analysis_text)
-            assistant_message_id = appended["messages"][-1]["message_id"] if appended["messages"] else ""
+            assistant_message_id = _append_assistant_message_dedup(
+                person_id,
+                analysis_text,
+            )
             updated = update_saved_opportunity(
                 person_id=person_id,
                 opportunity_id=opportunity_id,

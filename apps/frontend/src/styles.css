@@ -384,20 +384,24 @@ select:focus-visible {
 .candidateSelectionCard {
   cursor: pointer;
   transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+  border-left-color: color-mix(in srgb, var(--border-subtle) 88%, var(--accent));
 }
 
 .candidateSelectionCard:hover {
-  border-color: color-mix(in srgb, var(--accent) 46%, var(--border-subtle));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--border-subtle));
+  border-left-color: color-mix(in srgb, var(--accent) 78%, var(--border-subtle));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
   background: color-mix(in srgb, var(--surface-soft) 30%, var(--surface-card));
 }
 
 .candidateSelectionCardActive {
-  border-color: color-mix(in srgb, var(--accent) 82%, white);
+  border-color: color-mix(in srgb, var(--accent) 94%, white);
+  border-left-width: 6px;
+  border-left-color: color-mix(in srgb, var(--accent) 98%, white);
   box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent),
+    0 0 0 2px color-mix(in srgb, var(--accent) 42%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.03);
-  background: color-mix(in srgb, var(--accent) 10%, var(--surface-card));
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-card));
 }
 
 .cardHeader {
@@ -878,8 +882,8 @@ button:disabled {
 }
 
 .searchResultCardActive {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 96%, white);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 .inlineDetailCard {
@@ -1075,11 +1079,13 @@ button:disabled {
 }
 
 .analysisOpportunityCardActive {
-  border-color: color-mix(in srgb, var(--accent) 86%, white) !important;
+  border-color: color-mix(in srgb, var(--accent) 96%, white) !important;
+  border-left-width: 6px;
+  border-left-color: color-mix(in srgb, var(--accent) 98%, white);
   box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--accent) 34%, transparent),
+    0 0 0 2px color-mix(in srgb, var(--accent) 44%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.03);
-  background: color-mix(in srgb, var(--accent) 10%, var(--surface-card));
+  background: color-mix(in srgb, var(--accent) 13%, var(--surface-card));
 }
 
 .analysisOpportunityCompany {
@@ -1237,10 +1243,11 @@ button:disabled {
 }
 
 .resultBlockCardActive {
-  border-color: color-mix(in srgb, var(--accent) 72%, white);
+  border-color: color-mix(in srgb, var(--accent) 92%, white);
   box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent),
+    0 0 0 2px color-mix(in srgb, var(--accent) 36%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  background: color-mix(in srgb, var(--accent) 11%, var(--surface-card));
 }
 
 .resultBlockTop {

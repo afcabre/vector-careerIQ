@@ -849,16 +849,6 @@ export default function App() {
   }, [view, currentPath, people, selectedPersonId]);
 
   useEffect(() => {
-    if (view !== "workspace") {
-      return;
-    }
-    const route = parseWorkspacePath(currentPath);
-    if (route.page === "candidates" && selectedPersonId !== null) {
-      setSelectedPersonId(null);
-    }
-  }, [view, currentPath, selectedPersonId]);
-
-  useEffect(() => {
     const loadPromptConfigs = async () => {
       if (view !== "workspace") {
         setIsLoadingPromptConfigs(false);
@@ -1147,7 +1137,13 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (!selectedOpportunityId || isAnalyzingProfile || isAnalyzingCultural || isPreparing) {
+    if (
+      !selectedOpportunityId ||
+      isAnalyzingProfile ||
+      isAnalyzingCultural ||
+      isInterviewing ||
+      isPreparing
+    ) {
       return;
     }
 
@@ -2178,12 +2174,14 @@ export default function App() {
     setErrorMessage(null);
     setAnalysisText("");
     setInterviewBriefText("");
+    let receivedInterviewDelta = false;
     try {
       const payload = await interviewBriefStream(
         personId,
         opportunityId,
         forceRecompute,
         (delta) => {
+          receivedInterviewDelta = true;
           setAnalysisText((current) => `${current}${delta}`);
           setInterviewBriefText((current) => `${current}${delta}`);
         }
@@ -2205,8 +2203,10 @@ export default function App() {
       await refreshAiRunsFor(personId, opportunityId);
     } catch (error) {
       try {
-        // Fallback defensivo: evita doble generacion/append si el stream ya alcanzo a persistir.
-        const payload = await interviewBrief(personId, opportunityId, false);
+        // Si no llego ningun delta y se solicito refresco, fallback mantiene recálculo.
+        // Si ya hubo deltas (o no era refresh), fallback prioriza cache para evitar duplicados.
+        const fallbackForceRecompute = forceRecompute && !receivedInterviewDelta;
+        const payload = await interviewBrief(personId, opportunityId, fallbackForceRecompute);
         setAnalysisText(payload.analysis_text);
         setInterviewBriefText(payload.analysis_text);
         setSemanticEvidence(payload.semantic_evidence);

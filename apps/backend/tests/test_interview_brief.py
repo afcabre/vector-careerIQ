@@ -160,6 +160,46 @@ class InterviewBriefTests(unittest.TestCase):
         self.assertEqual(conversation["messages"][-1]["role"], "assistant")
         self.assertEqual(conversation["messages"][-1]["content"], "Brief generado")
 
+    def test_interview_brief_dedups_same_last_assistant_message(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="QA Engineer",
+            company="Acme",
+            location="Remote",
+            raw_text="Quality automation and testing role.",
+        )
+        opportunity_id = created["opportunity_id"]
+        conversation_store.append_message("p-001", "assistant", "Brief generado")
+
+        with patch.object(
+            opportunities_api,
+            "interview_brief",
+            return_value={
+                "analysis_text": "Brief generado",
+                "interview_warnings": [],
+                "interview_sources": [],
+                "semantic_evidence": {
+                    "source": "semantic_retrieval",
+                    "query": "query",
+                    "top_k": 8,
+                    "snippets": ["snippet 1"],
+                },
+            },
+        ):
+            response = opportunities_api.interview_brief_action(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                payload=opportunities_api.ActionRequest(force_recompute=True),
+                _=self.session,
+                settings=get_settings(),
+            )
+
+        conversation = conversation_store.get_or_create_conversation("p-001")
+        assistant_messages = [m for m in conversation["messages"] if m["role"] == "assistant"]
+        self.assertEqual(len(assistant_messages), 1)
+        self.assertEqual(assistant_messages[0]["content"], "Brief generado")
+        self.assertEqual(response.assistant_message_id, assistant_messages[0]["message_id"])
+
     def test_interview_brief_stream_emits_and_persists(self) -> None:
         created = opportunity_store.import_text_opportunity(
             person_id="p-001",
