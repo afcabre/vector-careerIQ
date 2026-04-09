@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+import logging
 from threading import Lock
 from typing import Any, TypedDict
 import uuid
@@ -55,6 +56,7 @@ class _SafeDict(dict[str, str]):
 _store_lock = Lock()
 _prompt_configs: dict[str, PromptConfigRecord] = {}
 _prompt_config_versions: dict[str, list[PromptConfigVersionRecord]] = {}
+logger = logging.getLogger(__name__)
 
 
 def _now_iso() -> str:
@@ -297,7 +299,7 @@ def _default_configs() -> dict[str, PromptConfigRecord]:
             "template_text": (
                 "Planifica una estrategia de investigacion pre-entrevista para esta vacante.\n"
                 "Debes devolver JSON valido (sin markdown) con esta forma exacta:\n"
-                "{\"queries\":[{\"topic_key\":\"...\",\"topic_label\":\"...\",\"query\":\"...\"}]}\n"
+                "{{\"queries\":[{{\"topic_key\":\"...\",\"topic_label\":\"...\",\"query\":\"...\"}}]}}\n"
                 "Reglas:\n"
                 "- entre 3 y 5 queries\n"
                 "- cada query debe ser distinta y accionable\n"
@@ -743,7 +745,15 @@ def build_prompt_text(flow_key: str, context: dict[str, str], fallback: str) -> 
             "target_sources": " ".join(config["target_sources"]),
         }
     )
-    rendered = _compact_whitespace(template.format_map(render_context))
+    try:
+        rendered = _compact_whitespace(template.format_map(render_context))
+    except Exception as exc:
+        logger.warning(
+            "prompt template render failed flow_key=%s error=%s; using fallback",
+            flow_key,
+            exc,
+        )
+        return fallback_clean
     return rendered or fallback_clean
 
 

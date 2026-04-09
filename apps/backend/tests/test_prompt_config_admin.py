@@ -17,6 +17,8 @@ from app.services.person_store import get_person, seed_persons
 from app.services.prompt_config_store import (
     FLOW_SEARCH_CULTURE_TAVILY,
     FLOW_SEARCH_JOBS_TAVILY,
+    FLOW_TASK_INTERVIEW_RESEARCH_PLAN,
+    build_prompt_text,
     reset_prompt_configs,
     update_prompt_config,
 )
@@ -102,6 +104,28 @@ class PromptConfigAdminTests(unittest.TestCase):
         )
         self.assertEqual(updated.flow_key, FLOW_SEARCH_JOBS_TAVILY)
         self.assertEqual(updated.target_sources, [])
+
+    def test_invalid_template_format_falls_back_without_crash(self) -> None:
+        update_prompt_config(
+            flow_key=FLOW_TASK_INTERVIEW_RESEARCH_PLAN,
+            updated_by="tutor",
+            template_text=(
+                "Devuelve JSON: "
+                "{\"queries\":[{\"topic_key\":\"...\",\"topic_label\":\"...\",\"query\":\"...\"}]}\n"
+                "Persona:\n{person_context}\n\nVacante:\n{opportunity_context}"
+            ),
+            is_active=True,
+        )
+
+        rendered = build_prompt_text(
+            flow_key=FLOW_TASK_INTERVIEW_RESEARCH_PLAN,
+            context={
+                "person_context": "Persona X",
+                "opportunity_context": "Vacante Y",
+            },
+            fallback="fallback planner prompt",
+        )
+        self.assertEqual(rendered, "fallback planner prompt")
 
     def test_prompt_config_versions_endpoint_returns_previous_snapshots(self) -> None:
         prompt_admin_api.patch_config(
