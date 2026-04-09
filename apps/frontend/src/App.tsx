@@ -8,6 +8,7 @@ import {
   Conversation,
   CulturalFieldPreference,
   CulturalSignal,
+  InterviewIteration,
   Opportunity,
   Person,
   PromptConfig,
@@ -213,6 +214,7 @@ const PROMPT_FLOW_LABELS: Record<string, string> = {
   task_chat: "Prompt de tarea: Chat",
   task_analyze_profile_match: "Prompt de tarea: Analizar perfil-vacante",
   task_analyze_cultural_fit: "Prompt de tarea: Analizar ajuste cultural",
+  task_interview_research_plan: "Prompt de tarea: Plan de investigacion entrevista",
   task_interview_brief: "Prompt de tarea: Brief de entrevista",
   task_prepare_guidance: "Prompt de tarea: Preparar guia de perfil",
   task_prepare_cover_letter: "Prompt de tarea: Preparar carta",
@@ -228,6 +230,7 @@ const PROMPT_FLOW_ORDER: string[] = [
   "task_chat",
   "task_analyze_profile_match",
   "task_analyze_cultural_fit",
+  "task_interview_research_plan",
   "task_interview_brief",
   "task_prepare_guidance",
   "task_prepare_cover_letter",
@@ -245,6 +248,8 @@ const SEARCH_PROVIDER_LABELS: Record<string, string> = {
 };
 const AI_RUNTIME_TOP_K_MIN = 4;
 const AI_RUNTIME_TOP_K_MAX = 30;
+const AI_RUNTIME_INTERVIEW_STEPS_MIN = 3;
+const AI_RUNTIME_INTERVIEW_STEPS_MAX = 8;
 
 type PromptConfigDraft = {
   template_text: string;
@@ -454,6 +459,23 @@ function formatRequestTraceTimestamp(value: string): string {
   return formatAiRunTimestamp(value);
 }
 
+function getTraceStatusLabel(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "ok") {
+    return "ok";
+  }
+  if (normalized === "error") {
+    return "error";
+  }
+  if (normalized === "empty") {
+    return "sin resultados";
+  }
+  if (normalized === "skipped") {
+    return "omitido";
+  }
+  return normalized || "n/a";
+}
+
 type SearchProviderDiagnostic = {
   statusLabel: string;
   reasonLabel: string;
@@ -658,6 +680,10 @@ export default function App() {
   const [aiRuntimeConfig, setAiRuntimeConfig] = useState<AIRuntimeConfig | null>(null);
   const [aiRuntimeTopKAnalysisInput, setAiRuntimeTopKAnalysisInput] = useState("");
   const [aiRuntimeTopKInterviewInput, setAiRuntimeTopKInterviewInput] = useState("");
+  const [aiRuntimeInterviewResearchModeInput, setAiRuntimeInterviewResearchModeInput] = useState<
+    "guided" | "adaptive"
+  >("guided");
+  const [aiRuntimeInterviewMaxStepsInput, setAiRuntimeInterviewMaxStepsInput] = useState("");
   const [isLoadingAiRuntimeConfig, setIsLoadingAiRuntimeConfig] = useState(false);
   const [isSavingAiRuntimeConfig, setIsSavingAiRuntimeConfig] = useState(false);
   const [promptVersionsByFlow, setPromptVersionsByFlow] = useState<
@@ -857,6 +883,8 @@ export default function App() {
         setAiRuntimeConfig(null);
         setAiRuntimeTopKAnalysisInput("");
         setAiRuntimeTopKInterviewInput("");
+        setAiRuntimeInterviewResearchModeInput("guided");
+        setAiRuntimeInterviewMaxStepsInput("");
         setSearchProviderConfigs([]);
         setPromptConfigs([]);
         setPromptConfigDrafts({});
@@ -880,6 +908,8 @@ export default function App() {
         setAiRuntimeConfig(runtimeConfig);
         setAiRuntimeTopKAnalysisInput(String(runtimeConfig.top_k_semantic_analysis));
         setAiRuntimeTopKInterviewInput(String(runtimeConfig.top_k_semantic_interview));
+        setAiRuntimeInterviewResearchModeInput(runtimeConfig.interview_research_mode);
+        setAiRuntimeInterviewMaxStepsInput(String(runtimeConfig.interview_research_max_steps));
       } catch (error) {
         const message =
           error instanceof Error
@@ -1136,6 +1166,33 @@ export default function App() {
     return signals;
   }
 
+  function asInterviewIterations(value: unknown): InterviewIteration[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    const items: InterviewIteration[] = [];
+    for (const item of value) {
+      if (!item || typeof item !== "object") {
+        continue;
+      }
+      const raw = item as Record<string, unknown>;
+      const topUrlsRaw = raw.top_urls;
+      items.push({
+        step_order: Number.parseInt(String(raw.step_order ?? 0), 10) || 0,
+        topic_key: String(raw.topic_key ?? ""),
+        topic_label: String(raw.topic_label ?? ""),
+        query: String(raw.query ?? ""),
+        status: String(raw.status ?? ""),
+        results_count: Number.parseInt(String(raw.results_count ?? 0), 10) || 0,
+        top_urls: Array.isArray(topUrlsRaw)
+          ? topUrlsRaw.map((value) => String(value)).filter((value) => value.trim().length > 0)
+          : [],
+        warning: String(raw.warning ?? "")
+      });
+    }
+    return items;
+  }
+
   useEffect(() => {
     if (
       !selectedOpportunityId ||
@@ -1220,7 +1277,22 @@ export default function App() {
   const selectedBlockRun =
     selectedResultBlockId ? getSelectedRunForBlock(selectedResultBlockId) : null;
   const focusedRun = selectedBlockRun ?? (focusedRunId ? aiRunsById.get(focusedRunId) ?? null : null);
-  const focusedRunRequestTraces = requestTraces;
+  const focusedRunRequestTraces = [...requestTraces].sort((left, right) => {
+    const leftStep = Number.isFinite(left.step_order) ? left.step_order : 0;
+    const rightStep = Number.isFinite(right.step_order) ? right.step_order : 0;
+    if (leftStep > 0 || rightStep > 0) {
+      if (leftStep === 0) {
+        return 1;
+      }
+      if (rightStep === 0) {
+        return -1;
+      }
+      if (leftStep !== rightStep) {
+        return leftStep - rightStep;
+      }
+    }
+    return left.created_at.localeCompare(right.created_at);
+  });
 
   useEffect(() => {
     if (!showAnalysisPage) {
@@ -1572,10 +1644,6 @@ export default function App() {
       setErrorMessage("La plantilla de prompt no puede estar vacia.");
       return;
     }
-    if (PROMPT_SOURCE_FLOW_KEYS.has(flowKey) && targetSources.length === 0) {
-      setErrorMessage("Debes incluir al menos una fuente objetivo.");
-      return;
-    }
 
     setSavingPromptFlowKey(flowKey);
     setErrorMessage(null);
@@ -1640,6 +1708,7 @@ export default function App() {
 
     const parsedAnalysis = Number.parseInt(aiRuntimeTopKAnalysisInput, 10);
     const parsedInterview = Number.parseInt(aiRuntimeTopKInterviewInput, 10);
+    const parsedInterviewSteps = Number.parseInt(aiRuntimeInterviewMaxStepsInput, 10);
 
     if (
       !Number.isFinite(parsedAnalysis) ||
@@ -1661,17 +1730,39 @@ export default function App() {
       );
       return;
     }
+    if (
+      !Number.isFinite(parsedInterviewSteps) ||
+      parsedInterviewSteps < AI_RUNTIME_INTERVIEW_STEPS_MIN ||
+      parsedInterviewSteps > AI_RUNTIME_INTERVIEW_STEPS_MAX
+    ) {
+      setErrorMessage(
+        "max steps de entrevista debe estar entre "
+          + `${AI_RUNTIME_INTERVIEW_STEPS_MIN} y ${AI_RUNTIME_INTERVIEW_STEPS_MAX}.`
+      );
+      return;
+    }
+    if (
+      aiRuntimeInterviewResearchModeInput !== "guided"
+      && aiRuntimeInterviewResearchModeInput !== "adaptive"
+    ) {
+      setErrorMessage("Modo de investigacion de entrevista invalido.");
+      return;
+    }
 
     setIsSavingAiRuntimeConfig(true);
     setErrorMessage(null);
     try {
       const updated = await updateAiRuntimeConfigApi({
         top_k_semantic_analysis: parsedAnalysis,
-        top_k_semantic_interview: parsedInterview
+        top_k_semantic_interview: parsedInterview,
+        interview_research_mode: aiRuntimeInterviewResearchModeInput,
+        interview_research_max_steps: parsedInterviewSteps,
       });
       setAiRuntimeConfig(updated);
       setAiRuntimeTopKAnalysisInput(String(updated.top_k_semantic_analysis));
       setAiRuntimeTopKInterviewInput(String(updated.top_k_semantic_interview));
+      setAiRuntimeInterviewResearchModeInput(updated.interview_research_mode);
+      setAiRuntimeInterviewMaxStepsInput(String(updated.interview_research_max_steps));
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "No se pudo guardar configuracion IA";
@@ -3038,7 +3129,7 @@ export default function App() {
           ) : (
             <div className="promptConfigGrid">
               <article className="manualCard">
-                <p className="chatRole">Control de top_k semantico</p>
+                <p className="chatRole">Control de retrieval y modo agéntico</p>
                 <p className="metaText">
                   Rango permitido: {AI_RUNTIME_TOP_K_MIN} a {AI_RUNTIME_TOP_K_MAX}
                 </p>
@@ -3055,7 +3146,7 @@ export default function App() {
                   />
                 </label>
                 <label className="field">
-                  top_k semantico para entrevista (reservado)
+                  top_k semantico para entrevista
                   <input
                     disabled={isSavingAiRuntimeConfig}
                     max={AI_RUNTIME_TOP_K_MAX}
@@ -3066,6 +3157,36 @@ export default function App() {
                     value={aiRuntimeTopKInterviewInput}
                   />
                 </label>
+                <label className="field">
+                  Modo de investigacion de entrevista
+                  <select
+                    disabled={isSavingAiRuntimeConfig}
+                    onChange={(event) =>
+                      setAiRuntimeInterviewResearchModeInput(
+                        event.target.value as "guided" | "adaptive"
+                      )
+                    }
+                    value={aiRuntimeInterviewResearchModeInput}
+                  >
+                    <option value="guided">guided (pasos fijos)</option>
+                    <option value="adaptive">adaptive (plan dinamico)</option>
+                  </select>
+                </label>
+                <label className="field">
+                  max steps de investigacion entrevista
+                  <input
+                    disabled={isSavingAiRuntimeConfig}
+                    max={AI_RUNTIME_INTERVIEW_STEPS_MAX}
+                    min={AI_RUNTIME_INTERVIEW_STEPS_MIN}
+                    onChange={(event) => setAiRuntimeInterviewMaxStepsInput(event.target.value)}
+                    step={1}
+                    type="number"
+                    value={aiRuntimeInterviewMaxStepsInput}
+                  />
+                </label>
+                <p className="metaText">
+                  steps permitidos: {AI_RUNTIME_INTERVIEW_STEPS_MIN} a {AI_RUNTIME_INTERVIEW_STEPS_MAX}
+                </p>
                 <p className="metaText">
                   Ultima actualizacion: {new Date(aiRuntimeConfig.updated_at).toLocaleString()} por{" "}
                   {aiRuntimeConfig.updated_by}
@@ -3166,6 +3287,9 @@ export default function App() {
                         rows={5}
                         value={draft.target_sources_input}
                       />
+                      <small className="metaText">
+                        Opcional: puedes dejarlo vacio para buscar sin restringir fuentes.
+                      </small>
                     </label>
                   ) : (
                     <p className="metaText">Este flujo no usa fuentes objetivo.</p>
@@ -4405,6 +4529,10 @@ export default function App() {
                             <p className="metaText">
                               Fuentes:{" "}
                               {asCulturalSignals(interviewRun.result_payload["interview_sources"]).length} ·
+                              Pasos agente:{" "}
+                              {asInterviewIterations(
+                                interviewRun.result_payload["interview_iterations"]
+                              ).length} ·
                               Advertencias:{" "}
                               {asStringArray(interviewRun.result_payload["interview_warnings"]).length}
                             </p>
@@ -5040,16 +5168,41 @@ export default function App() {
                         {focusedRunRequestTraces.map((trace) => (
                           <article className="chatBubble chatBubbleAssistant" key={trace.trace_id}>
                             <p className="chatRole">
+                              {trace.step_order > 0 ? `Paso ${trace.step_order} · ` : ""}
                               {trace.destination.toUpperCase()} · {trace.flow_key}
                             </p>
                             <p className="metaText">
                               trace_id: {trace.trace_id} · run_id: {trace.run_id || "N/A"} · fecha:{" "}
                               {formatRequestTraceTimestamp(trace.created_at)}
                             </p>
+                            {(trace.tool_name || trace.stage || trace.status) && (
+                              <p className="metaText">
+                                tool: {trace.tool_name || "n/a"} · etapa: {trace.stage || "n/a"} · estado:{" "}
+                                {getTraceStatusLabel(trace.status)}
+                              </p>
+                            )}
+                            {trace.input_summary ? (
+                              <p className="metaText">input: {trace.input_summary}</p>
+                            ) : null}
+                            {trace.output_summary ? (
+                              <p className="metaText">output: {trace.output_summary}</p>
+                            ) : null}
+                            {(trace.started_at || trace.finished_at) && (
+                              <p className="metaText">
+                                inicio: {trace.started_at ? formatRequestTraceTimestamp(trace.started_at) : "n/a"} ·
+                                fin: {trace.finished_at ? formatRequestTraceTimestamp(trace.finished_at) : "n/a"}
+                              </p>
+                            )}
                             <details className="payloadDetails">
                               <summary>Ver request exacto</summary>
                               <pre className="payloadPre">
                                 {JSON.stringify(trace.request_payload, null, 2)}
+                              </pre>
+                            </details>
+                            <details className="payloadDetails">
+                              <summary>Ver response exacto</summary>
+                              <pre className="payloadPre">
+                                {JSON.stringify(trace.response_payload ?? {}, null, 2)}
                               </pre>
                             </details>
                           </article>

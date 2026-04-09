@@ -148,9 +148,21 @@ export type InterviewBriefPayload = {
   analysis_text: string;
   interview_warnings: string[];
   interview_sources: CulturalSignal[];
+  interview_iterations: InterviewIteration[];
   semantic_evidence: SemanticEvidence;
   served_from_cache: boolean;
   assistant_message_id: string;
+};
+
+export type InterviewIteration = {
+  step_order: number;
+  topic_key: string;
+  topic_label: string;
+  query: string;
+  status: string;
+  results_count: number;
+  top_urls: string[];
+  warning: string;
 };
 
 export type PrepareOpportunityPayload = {
@@ -218,7 +230,16 @@ export type RequestTrace = {
   run_id: string;
   destination: string;
   flow_key: string;
+  step_order: number;
+  tool_name: string;
+  stage: string;
+  status: string;
+  input_summary: string;
+  output_summary: string;
+  started_at: string;
+  finished_at: string;
   request_payload: Record<string, unknown>;
+  response_payload: Record<string, unknown>;
   created_at: string;
 };
 
@@ -234,6 +255,8 @@ export type AIRuntimeConfig = {
   config_key: string;
   top_k_semantic_analysis: number;
   top_k_semantic_interview: number;
+  interview_research_mode: "guided" | "adaptive";
+  interview_research_max_steps: number;
   updated_by: string;
   created_at: string;
   updated_at: string;
@@ -372,6 +395,8 @@ export async function getAiRuntimeConfig(): Promise<AIRuntimeConfig> {
 export async function updateAiRuntimeConfig(payload: {
   top_k_semantic_analysis?: number;
   top_k_semantic_interview?: number;
+  interview_research_mode?: "guided" | "adaptive";
+  interview_research_max_steps?: number;
 }): Promise<AIRuntimeConfig> {
   const response = await safeFetch(`${API_BASE}/admin/ai-runtime-config`, {
     method: "PATCH",
