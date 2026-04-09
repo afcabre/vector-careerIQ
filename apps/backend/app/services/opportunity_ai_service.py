@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from app.core.settings import Settings
+from app.services.ai_runtime_config_store import get_ai_runtime_config
 from app.services.cv_store import get_active_cv
 from app.services.cv_vector_service import query_cv_context
 from app.services.guardrail_service import (
@@ -116,6 +117,10 @@ PREPARE_TARGETS = [
     PREPARE_TARGET_COVER_LETTER,
     PREPARE_TARGET_EXPERIENCE_SUMMARY,
 ]
+
+
+def _semantic_top_k_analysis() -> int:
+    return int(get_ai_runtime_config()["top_k_semantic_analysis"])
 
 
 def _now_iso() -> str:
@@ -490,7 +495,12 @@ def build_analyze_prompt_bundle(
 ) -> AnalyzePromptBundle:
     signals, warnings = _tavily_culture_signals(person, opportunity, settings)
     confidence = _cultural_confidence(len(signals))
-    semantic_evidence = _build_semantic_evidence(person, opportunity, settings, top_k=24)
+    semantic_evidence = _build_semantic_evidence(
+        person,
+        opportunity,
+        settings,
+        top_k=_semantic_top_k_analysis(),
+    )
     system_prompt = _system_prompt_base(
         person,
         suspicious_input=_is_suspicious_opportunity_input(opportunity),
@@ -525,7 +535,12 @@ def build_prepare_prompt_bundle(
     opportunity: OpportunityRecord,
     settings: Settings,
 ) -> PreparePromptBundle:
-    semantic_evidence = _build_semantic_evidence(person, opportunity, settings, top_k=24)
+    semantic_evidence = _build_semantic_evidence(
+        person,
+        opportunity,
+        settings,
+        top_k=_semantic_top_k_analysis(),
+    )
     base_context = (
         f"{_person_context(person)}\n\n"
         f"{_opportunity_context(opportunity)}\n\n"
@@ -606,7 +621,12 @@ def stream_analyze_profile_match_text(
     settings: Settings,
     run_id: str = "",
 ):
-    semantic_evidence = _build_semantic_evidence(person, opportunity, settings, top_k=24)
+    semantic_evidence = _build_semantic_evidence(
+        person,
+        opportunity,
+        settings,
+        top_k=_semantic_top_k_analysis(),
+    )
     user_prompt = build_prompt_text(
         flow_key=FLOW_TASK_ANALYZE_PROFILE_MATCH,
         context={
@@ -731,7 +751,12 @@ def analyze_profile_match(
     settings: Settings,
     run_id: str = "",
 ) -> AnalyzeProfileMatchResult:
-    semantic_evidence = _build_semantic_evidence(person, opportunity, settings, top_k=24)
+    semantic_evidence = _build_semantic_evidence(
+        person,
+        opportunity,
+        settings,
+        top_k=_semantic_top_k_analysis(),
+    )
     user_prompt = build_prompt_text(
         flow_key=FLOW_TASK_ANALYZE_PROFILE_MATCH,
         context={

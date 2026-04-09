@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import router as api_router
+from app.services.ai_runtime_config_store import seed_ai_runtime_config
 from app.services.operator_store import seed_operator
 from app.services.person_store import seed_persons
 from app.services.prompt_config_store import seed_prompt_configs
@@ -29,6 +30,7 @@ app.include_router(api_router, prefix="/api")
 def startup() -> None:
     seed_operator()
     seed_persons()
+    seed_ai_runtime_config()
     seed_prompt_configs()
     seed_search_provider_configs()
 

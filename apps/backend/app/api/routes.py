@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api import (
+    ai_runtime_admin,
     auth,
     chat,
     cv,
@@ -15,6 +16,11 @@ from app.api import (
 
 router = APIRouter()
 router.include_router(auth.router, prefix="/auth", tags=["auth"])
+router.include_router(
+    ai_runtime_admin.router,
+    prefix="/admin/ai-runtime-config",
+    tags=["ai-runtime-admin"],
+)
 router.include_router(persons.router, prefix="/persons", tags=["persons"])
 router.include_router(cv.router, prefix="/persons/{person_id}/cv", tags=["cv"])
 router.include_router(chat.router, prefix="/persons/{person_id}/chat", tags=["chat"])
