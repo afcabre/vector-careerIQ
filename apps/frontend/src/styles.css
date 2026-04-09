@@ -381,6 +381,25 @@ select:focus-visible {
   min-height: 182px;
 }
 
+.candidateSelectionCard {
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+}
+
+.candidateSelectionCard:hover {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--border-subtle));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent);
+  background: color-mix(in srgb, var(--surface-soft) 30%, var(--surface-card));
+}
+
+.candidateSelectionCardActive {
+  border-color: color-mix(in srgb, var(--accent) 82%, white);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-card));
+}
+
 .cardHeader {
   display: flex;
   align-items: center;

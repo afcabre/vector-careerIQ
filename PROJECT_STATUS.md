@@ -116,6 +116,7 @@
 - pasada fina UX en header desktop/movil: legibilidad de tab largo, `nowrap`, scroll horizontal de tabs en pantallas pequenas y refinamiento visual del estado activo
 - vista de candidatos refinada: `Agregar perfil` ahora abre/cierra el formulario de alta bajo demanda; cuando no hay registros el formulario se abre automaticamente
 - copy UX ajustado en candidatos para foco en `perfil` (labels de alto nivel) manteniendo el modelo de datos por `person_id`
+- seleccion de candidato ajustada a patron interactivo de cards: se elimina boton interno, no hay preseleccion en `/candidates`, seleccion por click en tarjeta y estado visual `hover/active`
 - preferencias culturales simplificadas: seleccion directa de opciones por campo; se elimina criticidad explicita en UI V1
 - bloque `CV activo` compactado: resumen en chips de estado, boton `Subir CV` mas compacto y vista previa en seccion colapsable
 - estilo global de botones compactado (menos redondeo, menor alto/padding) para reducir peso visual

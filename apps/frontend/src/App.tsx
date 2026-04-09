@@ -801,9 +801,6 @@ export default function App() {
         setOperatorName(session.username);
         const items = await listPersons();
         setPeople(items);
-        if (items.length > 0) {
-          setSelectedPersonId(items[0].person_id);
-        }
         setView("workspace");
         if ((window.location.pathname || "/") === "/login") {
           navigateTo("/candidates", { replace: true });
@@ -850,6 +847,16 @@ export default function App() {
       setSelectedPersonId(route.personId);
     }
   }, [view, currentPath, people, selectedPersonId]);
+
+  useEffect(() => {
+    if (view !== "workspace") {
+      return;
+    }
+    const route = parseWorkspacePath(currentPath);
+    if (route.page === "candidates" && selectedPersonId !== null) {
+      setSelectedPersonId(null);
+    }
+  }, [view, currentPath, selectedPersonId]);
 
   useEffect(() => {
     const loadPromptConfigs = async () => {
@@ -2857,7 +2864,25 @@ export default function App() {
 
         <div className="cards">
           {people.map((person) => (
-            <article className="card" key={person.person_id}>
+            <article
+              className={
+                person.person_id === selectedPersonId
+                  ? "card candidateSelectionCard candidateSelectionCardActive"
+                  : "card candidateSelectionCard"
+              }
+              key={person.person_id}
+              onClick={() => {
+                setSelectedPersonId(person.person_id);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setSelectedPersonId(person.person_id);
+                }
+              }}
+              role="button"
+              tabIndex={0}
+            >
               <div className="cardHeader">
                 <div className="candidateAvatar">{getPersonInitials(person.full_name)}</div>
                 <div>
@@ -2869,22 +2894,6 @@ export default function App() {
               <p className="metaText">
                 {person.location} · {person.years_experience} años
               </p>
-              <div className="cardActions">
-                <button
-                  className={
-                    person.person_id === selectedPersonId ? "activeButton" : ""
-                  }
-                  onClick={() => {
-                    setSelectedPersonId(person.person_id);
-                    navigateTo(buildContextPath(person.person_id, "profile"));
-                  }}
-                  type="button"
-                >
-                  {person.person_id === selectedPersonId
-                    ? "Contexto activo"
-                    : "Abrir perfil"}
-                </button>
-              </div>
             </article>
           ))}
         </div>
