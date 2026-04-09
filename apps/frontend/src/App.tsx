@@ -131,6 +131,15 @@ function ContextPanelIcon() {
   );
 }
 
+function SpinnerIcon() {
+  return (
+    <svg aria-hidden="true" className="iconSpinner" focusable="false" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 3a9 9 0 0 1 9 9" />
+    </svg>
+  );
+}
+
 const OPPORTUNITY_STATUSES = [
   "detected",
   "analyzed",
@@ -1258,7 +1267,18 @@ export default function App() {
     aiRunsByAction.set(run.action_key, actionRuns);
   }
   for (const actionRuns of aiRunsByAction.values()) {
-    actionRuns.sort((left, right) => right.updated_at.localeCompare(left.updated_at));
+    actionRuns.sort((left, right) => {
+      const leftCurrent = left.is_current ? 1 : 0;
+      const rightCurrent = right.is_current ? 1 : 0;
+      if (leftCurrent !== rightCurrent) {
+        return rightCurrent - leftCurrent;
+      }
+      const updated = right.updated_at.localeCompare(left.updated_at);
+      if (updated !== 0) {
+        return updated;
+      }
+      return right.created_at.localeCompare(left.created_at);
+    });
   }
 
   const getRunsForBlock = (blockId: AnalysisResultBlockId) =>
@@ -2061,20 +2081,28 @@ export default function App() {
     });
   }
 
-  async function refreshAiRunsFor(personId: string, opportunityId: string) {
+  function waitMs(milliseconds: number) {
+    return new Promise<void>((resolve) => {
+      window.setTimeout(resolve, milliseconds);
+    });
+  }
+
+  async function refreshAiRunsFor(personId: string, opportunityId: string): Promise<AIRun[]> {
     setIsLoadingAiRuns(true);
     try {
       const items = await listOpportunityAiRuns(personId, opportunityId);
       setAiRuns(items);
+      return items;
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "No se pudo cargar el historico IA";
       if (message.includes("Opportunity not found")) {
         setAiRuns([]);
         setFocusedRunId("");
-        return;
+        return [];
       }
       setErrorMessage(message);
+      return [];
     } finally {
       setIsLoadingAiRuns(false);
     }
@@ -2257,6 +2285,9 @@ export default function App() {
     }
     const personId = selectedPersonId;
     const forceRecompute = forceOverride ?? forceRecomputeAi;
+    const previousInterviewCount = aiRuns.filter(
+      (item) => item.action_key === "interview_brief"
+    ).length;
     setSelectedOpportunityId(opportunityId);
     setResultsPanelTab("analysis");
     setSelectedResultBlockId("analysis_interview_brief");
@@ -2291,7 +2322,23 @@ export default function App() {
       setConversation(conversationPayload);
       setSavedOpportunities(items);
       setSelectedOpportunityId(opportunityId);
-      await refreshAiRunsFor(personId, opportunityId);
+      let latestRuns = await refreshAiRunsFor(personId, opportunityId);
+      if (forceRecompute) {
+        const expectedMinRuns = previousInterviewCount + 1;
+        let attempts = 0;
+        while (
+          latestRuns.filter((item) => item.action_key === "interview_brief").length < expectedMinRuns
+          && attempts < 4
+        ) {
+          attempts += 1;
+          await waitMs(300);
+          latestRuns = await refreshAiRunsFor(personId, opportunityId);
+        }
+      }
+      setRunCursorByAction((current) => ({
+        ...current,
+        interview_brief: 0
+      }));
     } catch (error) {
       try {
         // Si no llego ningun delta y se solicito refresco, fallback mantiene recálculo.
@@ -2312,7 +2359,24 @@ export default function App() {
         setConversation(conversationPayload);
         setSavedOpportunities(items);
         setSelectedOpportunityId(opportunityId);
-        await refreshAiRunsFor(personId, opportunityId);
+        let latestRuns = await refreshAiRunsFor(personId, opportunityId);
+        if (forceRecompute) {
+          const expectedMinRuns = previousInterviewCount + 1;
+          let attempts = 0;
+          while (
+            latestRuns.filter((item) => item.action_key === "interview_brief").length
+              < expectedMinRuns
+            && attempts < 4
+          ) {
+            attempts += 1;
+            await waitMs(300);
+            latestRuns = await refreshAiRunsFor(personId, opportunityId);
+          }
+        }
+        setRunCursorByAction((current) => ({
+          ...current,
+          interview_brief: 0
+        }));
         setErrorMessage(
           "Streaming de entrevista no disponible. Se uso endpoint sin streaming como respaldo."
         );
@@ -2714,6 +2778,25 @@ export default function App() {
   const culturalWarningsView = culturalRun
     ? asStringArray(culturalRun.result_payload["cultural_warnings"])
     : culturalWarnings;
+  const culturalSignalsView = culturalRun
+    ? asCulturalSignals(culturalRun.result_payload["cultural_signals"])
+    : culturalSignals;
+  const interviewSignalsView = interviewRun
+    ? asCulturalSignals(interviewRun.result_payload["interview_sources"])
+    : [];
+  const interviewIterationsView = interviewRun
+    ? asInterviewIterations(interviewRun.result_payload["interview_iterations"])
+    : [];
+  const interviewReferenceUrls = Array.from(
+    new Set(
+      [
+        ...interviewSignalsView.map((item) => item.source_url),
+        ...interviewIterationsView.flatMap((item) => item.top_urls),
+      ]
+        .map((value) => String(value ?? "").trim())
+        .filter((value) => value.length > 0)
+    )
+  );
 
   if (view === "checking") {
     return (
@@ -4007,16 +4090,17 @@ export default function App() {
                       <button
                         aria-label={isExpanded ? "Contraer descripcion" : "Expandir descripcion"}
                         className="iconOnlyButton"
-                        onClick={() =>
+                        onClick={(event) => {
+                          event.stopPropagation();
                           setExpandedSavedOpportunityPreview((current) => ({
                             ...current,
                             [item.opportunity_id]: !isExpanded
-                          }))
-                        }
+                          }));
+                        }}
                         title={isExpanded ? "Contraer" : "Ver mas"}
                         type="button"
                       >
-                        {isExpanded ? "▴" : "▾"}
+                        <ExpandCollapseIcon expanded={isExpanded} />
                       </button>
                     </div>
                   ) : null}
@@ -4192,7 +4276,7 @@ export default function App() {
                                   title="Recalcular"
                                   type="button"
                                 >
-                                  ↻
+                                  {isAnalyzingProfile ? <SpinnerIcon /> : "↻"}
                                 </button>
                               ) : (
                                 <button
@@ -4210,7 +4294,7 @@ export default function App() {
                                   title="Generar"
                                   type="button"
                                 >
-                                  {isAnalyzingProfile ? "…" : "▶"}
+                                  {isAnalyzingProfile ? <SpinnerIcon /> : "▶"}
                                 </button>
                               )}
                             </div>
@@ -4324,7 +4408,7 @@ export default function App() {
                                   title="Recalcular"
                                   type="button"
                                 >
-                                  ↻
+                                  {isAnalyzingCultural ? <SpinnerIcon /> : "↻"}
                                 </button>
                               ) : (
                                 <button
@@ -4342,7 +4426,7 @@ export default function App() {
                                   title="Generar"
                                   type="button"
                                 >
-                                  {isAnalyzingCultural ? "…" : "▶"}
+                                  {isAnalyzingCultural ? <SpinnerIcon /> : "▶"}
                                 </button>
                               )}
                             </div>
@@ -4392,6 +4476,24 @@ export default function App() {
                             <p className="metaText">
                               Advertencias: {culturalWarningsView.length}
                             </p>
+                          ) : null}
+                          {culturalSignalsView.length > 0 ? (
+                            <details
+                              className="resultSourcesDetails"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <summary>Fuentes referenciadas ({culturalSignalsView.length})</summary>
+                              <ul className="resultSourcesList">
+                                {culturalSignalsView.slice(0, 8).map((item, index) => (
+                                  <li className="resultSourcesItem" key={`${item.source_url}-${index}`}>
+                                    <ExternalUrlText
+                                      noValueText={item.title || "Fuente sin URL"}
+                                      url={item.source_url}
+                                    />
+                                  </li>
+                                ))}
+                              </ul>
+                            </details>
                           ) : null}
                           {culturalContent &&
                           (culturalPreview.truncated ||
@@ -4466,7 +4568,7 @@ export default function App() {
                                   title="Recalcular"
                                   type="button"
                                 >
-                                  ↻
+                                  {isInterviewing ? <SpinnerIcon /> : "↻"}
                                 </button>
                               ) : (
                                 <button
@@ -4484,7 +4586,7 @@ export default function App() {
                                   title="Generar"
                                   type="button"
                                 >
-                                  {isInterviewing ? "…" : "▶"}
+                                  {isInterviewing ? <SpinnerIcon /> : "▶"}
                                 </button>
                               )}
                             </div>
@@ -4528,14 +4630,27 @@ export default function App() {
                           {interviewRun ? (
                             <p className="metaText">
                               Fuentes:{" "}
-                              {asCulturalSignals(interviewRun.result_payload["interview_sources"]).length} ·
+                              {interviewSignalsView.length} ·
                               Pasos agente:{" "}
-                              {asInterviewIterations(
-                                interviewRun.result_payload["interview_iterations"]
-                              ).length} ·
+                              {interviewIterationsView.length} ·
                               Advertencias:{" "}
                               {asStringArray(interviewRun.result_payload["interview_warnings"]).length}
                             </p>
+                          ) : null}
+                          {interviewReferenceUrls.length > 0 ? (
+                            <details
+                              className="resultSourcesDetails"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <summary>Fuentes referenciadas ({interviewReferenceUrls.length})</summary>
+                              <ul className="resultSourcesList">
+                                {interviewReferenceUrls.slice(0, 10).map((url) => (
+                                  <li className="resultSourcesItem" key={url}>
+                                    <ExternalUrlText url={url} />
+                                  </li>
+                                ))}
+                              </ul>
+                            </details>
                           ) : null}
                           {interviewContent &&
                           (interviewPreview.truncated ||
@@ -4631,7 +4746,7 @@ export default function App() {
                                   title="Recalcular"
                                   type="button"
                                 >
-                                  ↻
+                                  {isPreparing ? <SpinnerIcon /> : "↻"}
                                 </button>
                               ) : (
                                 <button
@@ -4651,7 +4766,7 @@ export default function App() {
                                   title="Generar"
                                   type="button"
                                 >
-                                  {isPreparing ? "…" : "▶"}
+                                  {isPreparing ? <SpinnerIcon /> : "▶"}
                                 </button>
                               )}
                               {guidanceContent ? (
@@ -4780,7 +4895,7 @@ export default function App() {
                                   title="Recalcular"
                                   type="button"
                                 >
-                                  ↻
+                                  {isPreparing ? <SpinnerIcon /> : "↻"}
                                 </button>
                               ) : (
                                 <button
@@ -4800,7 +4915,7 @@ export default function App() {
                                   title="Generar"
                                   type="button"
                                 >
-                                  {isPreparing ? "…" : "▶"}
+                                  {isPreparing ? <SpinnerIcon /> : "▶"}
                                 </button>
                               )}
                               {coverContent ? (
@@ -4928,7 +5043,7 @@ export default function App() {
                                   title="Recalcular"
                                   type="button"
                                 >
-                                  ↻
+                                  {isPreparing ? <SpinnerIcon /> : "↻"}
                                 </button>
                               ) : (
                                 <button
@@ -4948,7 +5063,7 @@ export default function App() {
                                   title="Generar"
                                   type="button"
                                 >
-                                  {isPreparing ? "…" : "▶"}
+                                  {isPreparing ? <SpinnerIcon /> : "▶"}
                                 </button>
                               )}
                               {summaryContent ? (
