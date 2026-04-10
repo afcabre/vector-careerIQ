@@ -29,6 +29,7 @@ class AIRuntimeConfigRecord(TypedDict):
     top_k_semantic_interview: int
     interview_research_mode: str
     interview_research_max_steps: int
+    trace_truncation_enabled: bool
     updated_by: str
     created_at: str
     updated_at: str
@@ -55,6 +56,7 @@ def _default_config() -> AIRuntimeConfigRecord:
         top_k_semantic_interview=DEFAULT_TOP_K_SEMANTIC_INTERVIEW,
         interview_research_mode=DEFAULT_INTERVIEW_RESEARCH_MODE,
         interview_research_max_steps=DEFAULT_INTERVIEW_RESEARCH_MAX_STEPS,
+        trace_truncation_enabled=True,
         updated_by="system",
         created_at=now,
         updated_at=now,
@@ -108,6 +110,9 @@ def _normalize_firestore_record(payload: dict[str, Any] | None) -> AIRuntimeConf
         ),
         interview_research_mode=normalized_mode,
         interview_research_max_steps=max_steps,
+        trace_truncation_enabled=bool(
+            source.get("trace_truncation_enabled", base["trace_truncation_enabled"])
+        ),
         updated_by=str(source.get("updated_by", base["updated_by"])).strip() or "system",
         created_at=str(source.get("created_at", base["created_at"])).strip() or base["created_at"],
         updated_at=str(source.get("updated_at", base["updated_at"])).strip() or base["updated_at"],
@@ -185,6 +190,7 @@ def update_ai_runtime_config(
     top_k_semantic_interview: int | None = None,
     interview_research_mode: str | None = None,
     interview_research_max_steps: int | None = None,
+    trace_truncation_enabled: bool | None = None,
     updated_by: str,
 ) -> AIRuntimeConfigRecord:
     current = get_ai_runtime_config()
@@ -207,6 +213,8 @@ def update_ai_runtime_config(
         current["interview_research_max_steps"] = _validate_interview_max_steps(
             interview_research_max_steps
         )
+    if trace_truncation_enabled is not None:
+        current["trace_truncation_enabled"] = bool(trace_truncation_enabled)
 
     current["updated_by"] = updated_by.strip() or "tutor"
     current["updated_at"] = _now_iso()

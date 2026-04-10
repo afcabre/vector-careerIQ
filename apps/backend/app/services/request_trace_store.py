@@ -7,6 +7,7 @@ import re
 
 from app.core.settings import get_settings
 from app.services.firestore_client import get_firestore_client
+from app.services.ai_runtime_config_store import get_ai_runtime_config
 
 
 class RequestTraceRecord(TypedDict):
@@ -119,7 +120,7 @@ def _redact_inline_secrets(value: str) -> str:
     return redacted
 
 
-def _sanitize_value(value: Any, *, depth: int) -> Any:
+def _sanitize_value(value: Any, *, depth: int, truncate: bool) -> Any:
     if depth > _MAX_TRACE_DEPTH:
         return "[MAX_DEPTH_REACHED]"
 
@@ -127,53 +128,57 @@ def _sanitize_value(value: Any, *, depth: int) -> Any:
         return value
 
     if isinstance(value, str):
-        return _truncate_text(_redact_inline_secrets(value))
+        redacted = _redact_inline_secrets(value)
+        return _truncate_text(redacted) if truncate else redacted
 
     if isinstance(value, dict):
         sanitized: dict[str, Any] = {}
         items = list(value.items())
         for index, (raw_key, raw_value) in enumerate(items):
-            if index >= _MAX_TRACE_OBJECT_KEYS:
+            if truncate and index >= _MAX_TRACE_OBJECT_KEYS:
                 sanitized["__truncated_keys"] = len(items) - _MAX_TRACE_OBJECT_KEYS
                 break
             key = str(raw_key)
             if _looks_sensitive_key(key):
                 sanitized[key] = _REDACTED
                 continue
-            sanitized[key] = _sanitize_value(raw_value, depth=depth + 1)
+            sanitized[key] = _sanitize_value(raw_value, depth=depth + 1, truncate=truncate)
         return sanitized
 
     if isinstance(value, list):
         sanitized_items: list[Any] = []
         for index, item in enumerate(value):
-            if index >= _MAX_TRACE_LIST_ITEMS:
+            if truncate and index >= _MAX_TRACE_LIST_ITEMS:
                 sanitized_items.append(
                     {
                         "__truncated_items": len(value) - _MAX_TRACE_LIST_ITEMS,
                     }
                 )
                 break
-            sanitized_items.append(_sanitize_value(item, depth=depth + 1))
+            sanitized_items.append(_sanitize_value(item, depth=depth + 1, truncate=truncate))
         return sanitized_items
 
     if isinstance(value, tuple):
-        return _sanitize_value(list(value), depth=depth)
+        return _sanitize_value(list(value), depth=depth, truncate=truncate)
 
     if isinstance(value, bytes):
         return f"<bytes {len(value)}>"
 
-    return _truncate_text(_redact_inline_secrets(str(value)))
+    redacted = _redact_inline_secrets(str(value))
+    return _truncate_text(redacted) if truncate else redacted
 
 
-def _sanitize_request_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    sanitized = _sanitize_value(payload, depth=0)
+def _sanitize_request_payload(payload: dict[str, Any], *, truncate: bool) -> dict[str, Any]:
+    sanitized = _sanitize_value(payload, depth=0, truncate=truncate)
     if not isinstance(sanitized, dict):
         sanitized = {}
+
+    if not truncate:
+        return sanitized
 
     serialized = json.dumps(sanitized, ensure_ascii=False)
     if len(serialized) <= _MAX_TRACE_PAYLOAD_CHARS:
         return sanitized
-
     preview_chars = max(400, _MAX_TRACE_PAYLOAD_CHARS - 400)
     preview = serialized[:preview_chars]
     return {
@@ -214,8 +219,17 @@ def add_request_trace(
     finished_at: str = "",
     response_payload: dict[str, Any] | None = None,
 ) -> RequestTraceRecord:
-    safe_payload = _sanitize_request_payload(request_payload)
-    safe_response_payload = _sanitize_request_payload(response_payload or {})
+    trace_truncation_enabled = bool(
+        get_ai_runtime_config().get("trace_truncation_enabled", True)
+    )
+    safe_payload = _sanitize_request_payload(
+        request_payload,
+        truncate=trace_truncation_enabled,
+    )
+    safe_response_payload = _sanitize_request_payload(
+        response_payload or {},
+        truncate=trace_truncation_enabled,
+    )
     normalized_step_order = max(0, int(step_order))
     record: RequestTraceRecord = {
         "trace_id": _new_id(),

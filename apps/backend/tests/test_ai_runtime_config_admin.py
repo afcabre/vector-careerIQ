@@ -49,6 +49,7 @@ class AIRuntimeConfigAdminTests(unittest.TestCase):
         self.assertEqual(response.top_k_semantic_interview, DEFAULT_TOP_K_SEMANTIC_INTERVIEW)
         self.assertEqual(response.interview_research_mode, DEFAULT_INTERVIEW_RESEARCH_MODE)
         self.assertEqual(response.interview_research_max_steps, DEFAULT_INTERVIEW_RESEARCH_MAX_STEPS)
+        self.assertTrue(response.trace_truncation_enabled)
 
     def test_patch_ai_runtime_config_updates_values(self) -> None:
         updated = ai_runtime_admin_api.patch_config(
@@ -57,6 +58,7 @@ class AIRuntimeConfigAdminTests(unittest.TestCase):
                 top_k_semantic_interview=10,
                 interview_research_mode="adaptive",
                 interview_research_max_steps=6,
+                trace_truncation_enabled=False,
             ),
             session=self.session,
         )
@@ -64,6 +66,7 @@ class AIRuntimeConfigAdminTests(unittest.TestCase):
         self.assertEqual(updated.top_k_semantic_interview, 10)
         self.assertEqual(updated.interview_research_mode, "adaptive")
         self.assertEqual(updated.interview_research_max_steps, 6)
+        self.assertFalse(updated.trace_truncation_enabled)
         self.assertEqual(updated.updated_by, "tutor")
 
     def test_patch_ai_runtime_config_requires_payload_fields(self) -> None:
