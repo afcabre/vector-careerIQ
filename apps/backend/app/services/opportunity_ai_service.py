@@ -290,6 +290,18 @@ def _person_context(person: PersonRecord) -> str:
             parts.append(f"Notas abiertas de preferencias: {notes}")
         culture_preferences = "\n\n".join(parts)
 
+    salary_min = person.get("salary_expectation_min")
+    salary_max = person.get("salary_expectation_max")
+    salary_currency = str(person.get("salary_currency", "")).strip()
+    salary_period = str(person.get("salary_period", "")).strip()
+    salary_text = ""
+    if salary_min is not None or salary_max is not None:
+        range_min = str(salary_min) if salary_min is not None else "sin minimo"
+        range_max = str(salary_max) if salary_max is not None else "sin maximo"
+        currency = salary_currency or "sin moneda"
+        period = salary_period or "sin periodo"
+        salary_text = f"Expectativa salarial: {range_min} - {range_max} {currency} ({period})"
+
     return (
         f"Persona consultada: {person['full_name']}\n"
         f"Ubicacion: {person['location']}\n"
@@ -297,6 +309,7 @@ def _person_context(person: PersonRecord) -> str:
         f"Skills: {', '.join(person['skills'])}\n"
         f"Experiencia aproximada: {person['years_experience']} anos\n"
         f"Preferencias culturales declaradas: {culture_preferences}"
+        + (f"\n{salary_text}" if salary_text else "")
     )
 
 

@@ -149,6 +149,12 @@ const OPPORTUNITY_STATUSES = [
   "discarded"
 ] as const;
 
+const SALARY_CURRENCIES = ["COP", "USD", "EUR"] as const;
+const SALARY_PERIODS = [
+  { value: "monthly", label: "Mensual" },
+  { value: "annual", label: "Anual" }
+] as const;
+
 const AI_RUN_ACTION_LABELS: Record<string, string> = {
   analyze_profile_match: "Analizar perfil-vacante",
   analyze_cultural_fit: "Analizar ajuste cultural",
@@ -693,6 +699,7 @@ export default function App() {
     "guided" | "adaptive"
   >("guided");
   const [aiRuntimeInterviewMaxStepsInput, setAiRuntimeInterviewMaxStepsInput] = useState("");
+  const [aiRuntimeTraceTruncationEnabled, setAiRuntimeTraceTruncationEnabled] = useState(true);
   const [isLoadingAiRuntimeConfig, setIsLoadingAiRuntimeConfig] = useState(false);
   const [isSavingAiRuntimeConfig, setIsSavingAiRuntimeConfig] = useState(false);
   const [promptVersionsByFlow, setPromptVersionsByFlow] = useState<
@@ -805,6 +812,10 @@ export default function App() {
   const [profileLocation, setProfileLocation] = useState("");
   const [profileYearsExperienceInput, setProfileYearsExperienceInput] = useState("");
   const [profileSkillsInput, setProfileSkillsInput] = useState("");
+  const [profileSalaryMinInput, setProfileSalaryMinInput] = useState("");
+  const [profileSalaryMaxInput, setProfileSalaryMaxInput] = useState("");
+  const [profileSalaryCurrency, setProfileSalaryCurrency] = useState("");
+  const [profileSalaryPeriod, setProfileSalaryPeriod] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isChatDrawerOpen, setIsChatDrawerOpen] = useState(false);
   const [isPersonContextMenuOpen, setIsPersonContextMenuOpen] = useState(false);
@@ -915,10 +926,11 @@ export default function App() {
         setPromptConfigDrafts(buildPromptConfigDrafts(items));
         setSearchProviderConfigs(providerItems);
         setAiRuntimeConfig(runtimeConfig);
-        setAiRuntimeTopKAnalysisInput(String(runtimeConfig.top_k_semantic_analysis));
-        setAiRuntimeTopKInterviewInput(String(runtimeConfig.top_k_semantic_interview));
-        setAiRuntimeInterviewResearchModeInput(runtimeConfig.interview_research_mode);
-        setAiRuntimeInterviewMaxStepsInput(String(runtimeConfig.interview_research_max_steps));
+      setAiRuntimeTopKAnalysisInput(String(runtimeConfig.top_k_semantic_analysis));
+      setAiRuntimeTopKInterviewInput(String(runtimeConfig.top_k_semantic_interview));
+      setAiRuntimeInterviewResearchModeInput(runtimeConfig.interview_research_mode);
+      setAiRuntimeInterviewMaxStepsInput(String(runtimeConfig.interview_research_max_steps));
+      setAiRuntimeTraceTruncationEnabled(runtimeConfig.trace_truncation_enabled);
       } catch (error) {
         const message =
           error instanceof Error
@@ -1456,6 +1468,10 @@ export default function App() {
       setProfileLocation("");
       setProfileYearsExperienceInput("");
       setProfileSkillsInput("");
+      setProfileSalaryMinInput("");
+      setProfileSalaryMaxInput("");
+      setProfileSalaryCurrency("");
+      setProfileSalaryPeriod("");
       setCulturePreferencesState(buildDefaultCulturalPreferences());
       setCulturePreferencesNotes("");
       return;
@@ -1465,6 +1481,18 @@ export default function App() {
     setProfileLocation(selectedPerson.location ?? "");
     setProfileYearsExperienceInput(String(selectedPerson.years_experience ?? 0));
     setProfileSkillsInput((selectedPerson.skills ?? []).join(", "));
+    setProfileSalaryMinInput(
+      selectedPerson.salary_expectation_min !== null
+        ? String(selectedPerson.salary_expectation_min)
+        : ""
+    );
+    setProfileSalaryMaxInput(
+      selectedPerson.salary_expectation_max !== null
+        ? String(selectedPerson.salary_expectation_max)
+        : ""
+    );
+    setProfileSalaryCurrency(selectedPerson.salary_currency ?? "");
+    setProfileSalaryPeriod(selectedPerson.salary_period ?? "");
 
     const defaults = buildDefaultCulturalPreferences();
     const incoming = selectedPerson.cultural_fit_preferences ?? {};
@@ -1498,6 +1526,10 @@ export default function App() {
     selectedPerson?.location,
     selectedPerson?.years_experience,
     selectedPerson?.skills,
+    selectedPerson?.salary_expectation_min,
+    selectedPerson?.salary_expectation_max,
+    selectedPerson?.salary_currency,
+    selectedPerson?.salary_period,
     selectedPerson?.cultural_fit_preferences,
     selectedPerson?.culture_preferences_notes
   ]);
@@ -1777,12 +1809,14 @@ export default function App() {
         top_k_semantic_interview: parsedInterview,
         interview_research_mode: aiRuntimeInterviewResearchModeInput,
         interview_research_max_steps: parsedInterviewSteps,
+        trace_truncation_enabled: aiRuntimeTraceTruncationEnabled,
       });
       setAiRuntimeConfig(updated);
       setAiRuntimeTopKAnalysisInput(String(updated.top_k_semantic_analysis));
       setAiRuntimeTopKInterviewInput(String(updated.top_k_semantic_interview));
       setAiRuntimeInterviewResearchModeInput(updated.interview_research_mode);
       setAiRuntimeInterviewMaxStepsInput(String(updated.interview_research_max_steps));
+      setAiRuntimeTraceTruncationEnabled(updated.trace_truncation_enabled);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "No se pudo guardar configuracion IA";
@@ -2605,6 +2639,12 @@ export default function App() {
     const fullName = profileFullName.trim();
     const location = profileLocation.trim();
     const yearsExperience = Number.parseInt(profileYearsExperienceInput.trim(), 10);
+    const salaryMinInput = profileSalaryMinInput.trim();
+    const salaryMaxInput = profileSalaryMaxInput.trim();
+    const salaryMin = salaryMinInput ? Number.parseInt(salaryMinInput, 10) : null;
+    const salaryMax = salaryMaxInput ? Number.parseInt(salaryMaxInput, 10) : null;
+    const salaryCurrency = profileSalaryCurrency.trim();
+    const salaryPeriod = profileSalaryPeriod.trim();
     const targetRoles = profileTargetRolesInput
       .split(/[\n,]/g)
       .map((item) => item.trim())
@@ -2622,6 +2662,28 @@ export default function App() {
       setErrorMessage("Años de experiencia debe estar entre 0 y 80.");
       return;
     }
+    if (
+      (salaryMinInput && !Number.isFinite(salaryMin)) ||
+      (salaryMaxInput && !Number.isFinite(salaryMax))
+    ) {
+      setErrorMessage("Expectativa salarial debe ser numerica.");
+      return;
+    }
+    if (salaryMin !== null && salaryMax !== null && salaryMin > salaryMax) {
+      setErrorMessage("Expectativa salarial invalida: el minimo supera el maximo.");
+      return;
+    }
+    if (salaryCurrency && !SALARY_CURRENCIES.includes(salaryCurrency as (typeof SALARY_CURRENCIES)[number])) {
+      setErrorMessage("Moneda salarial invalida.");
+      return;
+    }
+    if (
+      salaryPeriod
+      && !SALARY_PERIODS.some((item) => item.value === salaryPeriod)
+    ) {
+      setErrorMessage("Periodo salarial invalido.");
+      return;
+    }
 
     setIsSavingProfile(true);
     setErrorMessage(null);
@@ -2631,7 +2693,11 @@ export default function App() {
         target_roles: targetRoles,
         location,
         years_experience: yearsExperience,
-        skills
+        skills,
+        salary_expectation_min: salaryMin,
+        salary_expectation_max: salaryMax,
+        salary_currency: salaryCurrency,
+        salary_period: salaryPeriod
       });
       setPeople((current) =>
         current.map((item) => (item.person_id === updated.person_id ? updated : item))
@@ -3270,6 +3336,18 @@ export default function App() {
                 <p className="metaText">
                   steps permitidos: {AI_RUNTIME_INTERVIEW_STEPS_MIN} a {AI_RUNTIME_INTERVIEW_STEPS_MAX}
                 </p>
+                <label className="checkboxRow">
+                  <input
+                    checked={aiRuntimeTraceTruncationEnabled}
+                    disabled={isSavingAiRuntimeConfig}
+                    onChange={(event) => setAiRuntimeTraceTruncationEnabled(event.target.checked)}
+                    type="checkbox"
+                  />
+                  <span>Truncar trazas de request/response (seguro)</span>
+                </label>
+                <p className="metaText">
+                  Desactivalo para guardar trazas completas (puede aumentar peso y costo).
+                </p>
                 <p className="metaText">
                   Ultima actualizacion: {new Date(aiRuntimeConfig.updated_at).toLocaleString()} por{" "}
                   {aiRuntimeConfig.updated_by}
@@ -3495,6 +3573,62 @@ export default function App() {
                       type="number"
                       value={profileYearsExperienceInput}
                     />
+                  </label>
+                </div>
+                <div className="manualRow">
+                  <label className="field">
+                    Expectativa salarial min
+                    <input
+                      disabled={isSavingProfile}
+                      min={0}
+                      onChange={(event) => setProfileSalaryMinInput(event.target.value)}
+                      placeholder="Minimo"
+                      type="number"
+                      value={profileSalaryMinInput}
+                    />
+                  </label>
+                  <label className="field">
+                    Expectativa salarial max
+                    <input
+                      disabled={isSavingProfile}
+                      min={0}
+                      onChange={(event) => setProfileSalaryMaxInput(event.target.value)}
+                      placeholder="Maximo"
+                      type="number"
+                      value={profileSalaryMaxInput}
+                    />
+                  </label>
+                </div>
+                <div className="manualRow">
+                  <label className="field">
+                    Moneda
+                    <select
+                      disabled={isSavingProfile}
+                      onChange={(event) => setProfileSalaryCurrency(event.target.value)}
+                      value={profileSalaryCurrency}
+                    >
+                      <option value="">Sin definir</option>
+                      {SALARY_CURRENCIES.map((currency) => (
+                        <option key={currency} value={currency}>
+                          {currency}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    Periodo
+                    <select
+                      disabled={isSavingProfile}
+                      onChange={(event) => setProfileSalaryPeriod(event.target.value)}
+                      value={profileSalaryPeriod}
+                    >
+                      <option value="">Sin definir</option>
+                      {SALARY_PERIODS.map((period) => (
+                        <option key={period.value} value={period.value}>
+                          {period.label}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                 </div>
                 <label className="field">

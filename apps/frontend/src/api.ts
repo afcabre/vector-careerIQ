@@ -11,6 +11,10 @@ export type Person = {
   location: string;
   years_experience: number;
   skills: string[];
+  salary_expectation_min: number | null;
+  salary_expectation_max: number | null;
+  salary_currency: string;
+  salary_period: string;
   culture_preferences: string[];
   cultural_fit_preferences: Record<string, CulturalFieldPreference>;
   culture_preferences_notes: string;
@@ -257,6 +261,7 @@ export type AIRuntimeConfig = {
   top_k_semantic_interview: number;
   interview_research_mode: "guided" | "adaptive";
   interview_research_max_steps: number;
+  trace_truncation_enabled: boolean;
   updated_by: string;
   created_at: string;
   updated_at: string;
@@ -397,6 +402,7 @@ export async function updateAiRuntimeConfig(payload: {
   top_k_semantic_interview?: number;
   interview_research_mode?: "guided" | "adaptive";
   interview_research_max_steps?: number;
+  trace_truncation_enabled?: boolean;
 }): Promise<AIRuntimeConfig> {
   const response = await safeFetch(`${API_BASE}/admin/ai-runtime-config`, {
     method: "PATCH",
@@ -413,6 +419,10 @@ export async function createPerson(payload: {
   location: string;
   years_experience: number;
   skills: string[];
+  salary_expectation_min?: number | null;
+  salary_expectation_max?: number | null;
+  salary_currency?: string;
+  salary_period?: string;
 }): Promise<Person> {
   const response = await safeFetch(`${API_BASE}/persons`, {
     method: "POST",
@@ -431,6 +441,10 @@ export async function updatePerson(
     location?: string;
     years_experience?: number;
     skills?: string[];
+    salary_expectation_min?: number | null;
+    salary_expectation_max?: number | null;
+    salary_currency?: string;
+    salary_period?: string;
     culture_preferences?: string[];
     cultural_fit_preferences?: Record<string, CulturalFieldPreference>;
     culture_preferences_notes?: string;

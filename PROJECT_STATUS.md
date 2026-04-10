@@ -302,6 +302,8 @@
 - `Oportunidades guardadas` en `Busqueda` usa el mismo icono `ExpandCollapseIcon` de `Analisis` para expandir/contraer descripcion, eliminando flechas textuales `▴/▾`
 - botones de `Recalcular` en `Analisis/Postulacion` ahora muestran `...` durante ejecucion (`isAnalyzingProfile`, `isAnalyzingCultural`, `isInterviewing`, `isPreparing`) para feedback inmediato de orden recibida
 - botones de `Recalcular/Generar` en `Analisis/Postulacion` ahora usan spinner SVG pequeño durante ejecucion para consistencia visual
+- perfil ahora incluye expectativa salarial (min/max + moneda + periodo) en backend, API y UI
+- administracion global agrega toggle para truncar o guardar completas las trazas de request/response
 - build frontend revalidado tras integracion de controles `top_k` en administracion: `npm run build` en `OK`
 
 ## Mejoras Identificadas (Diferidas)

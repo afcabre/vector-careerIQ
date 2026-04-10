@@ -8,6 +8,8 @@ from app.services.firestore_client import get_firestore_client
 
 
 CRITICALITY_VALUES = {"normal", "high_penalty", "non_negotiable"}
+SALARY_PERIOD_VALUES = {"monthly", "annual"}
+SALARY_CURRENCY_VALUES = {"COP", "USD", "EUR"}
 CULTURAL_FIELD_OPTIONS: dict[str, set[str]] = {
     "work_modality": {"onsite", "hybrid", "remote"},
     "schedule_flexibility": {
@@ -60,6 +62,10 @@ class PersonRecord(TypedDict):
     location: str
     years_experience: int
     skills: list[str]
+    salary_expectation_min: int | None
+    salary_expectation_max: int | None
+    salary_currency: str
+    salary_period: str
     culture_preferences: list[str]
     cultural_fit_preferences: dict[str, CulturalFieldPreferenceRecord]
     culture_preferences_notes: str
@@ -89,6 +95,10 @@ def _seed_records() -> list[PersonRecord]:
             "location": "Bogota",
             "years_experience": 5,
             "skills": ["UX", "UI", "Figma"],
+            "salary_expectation_min": None,
+            "salary_expectation_max": None,
+            "salary_currency": "",
+            "salary_period": "",
             "culture_preferences": ["aprendizaje continuo", "liderazgo cercano"],
             "cultural_fit_preferences": _default_cultural_fit_preferences(),
             "culture_preferences_notes": "",
@@ -102,6 +112,10 @@ def _seed_records() -> list[PersonRecord]:
             "location": "Medellin",
             "years_experience": 4,
             "skills": ["SQL", "Python", "Power BI"],
+            "salary_expectation_min": None,
+            "salary_expectation_max": None,
+            "salary_currency": "",
+            "salary_period": "",
             "culture_preferences": ["claridad en objetivos", "colaboracion"],
             "cultural_fit_preferences": _default_cultural_fit_preferences(),
             "culture_preferences_notes": "",
@@ -165,6 +179,25 @@ def _sanitize_cultural_field(
     }
 
 
+def _coerce_optional_int(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _sanitize_salary_currency(value: Any) -> str:
+    text = str(value or "").strip().upper()
+    return text if text in SALARY_CURRENCY_VALUES else ""
+
+
+def _sanitize_salary_period(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    return text if text in SALARY_PERIOD_VALUES else ""
+
+
 def sanitize_cultural_fit_preferences(
     raw_value: Any,
 ) -> dict[str, CulturalFieldPreferenceRecord]:
@@ -213,6 +246,10 @@ def _normalize_firestore_record(person_id: str, payload: dict | None) -> PersonR
         location=str(source.get("location", "")),
         years_experience=int(source.get("years_experience", 0)),
         skills=[str(item) for item in source.get("skills", [])],
+        salary_expectation_min=_coerce_optional_int(source.get("salary_expectation_min")),
+        salary_expectation_max=_coerce_optional_int(source.get("salary_expectation_max")),
+        salary_currency=_sanitize_salary_currency(source.get("salary_currency")),
+        salary_period=_sanitize_salary_period(source.get("salary_period")),
         culture_preferences=legacy_culture_preferences,
         cultural_fit_preferences=sanitize_cultural_fit_preferences(
             source.get("cultural_fit_preferences", {})
@@ -266,6 +303,10 @@ def create_person(
     location: str,
     years_experience: int,
     skills: list[str],
+    salary_expectation_min: int | None = None,
+    salary_expectation_max: int | None = None,
+    salary_currency: str | None = None,
+    salary_period: str | None = None,
     culture_preferences: list[str] | None = None,
     cultural_fit_preferences: dict[str, Any] | None = None,
     culture_preferences_notes: str | None = None,
@@ -279,6 +320,10 @@ def create_person(
         "location": location,
         "years_experience": years_experience,
         "skills": skills,
+        "salary_expectation_min": _coerce_optional_int(salary_expectation_min),
+        "salary_expectation_max": _coerce_optional_int(salary_expectation_max),
+        "salary_currency": _sanitize_salary_currency(salary_currency),
+        "salary_period": _sanitize_salary_period(salary_period),
         "culture_preferences": _dedupe_non_empty(culture_preferences or []),
         "cultural_fit_preferences": sanitize_cultural_fit_preferences(cultural_fit_preferences),
         "culture_preferences_notes": str(culture_preferences_notes or "").strip(),
@@ -304,6 +349,10 @@ def update_person(
     location: str | None,
     years_experience: int | None,
     skills: list[str] | None,
+    salary_expectation_min: int | None,
+    salary_expectation_max: int | None,
+    salary_currency: str | None,
+    salary_period: str | None,
     culture_preferences: list[str] | None,
     cultural_fit_preferences: dict[str, Any] | None,
     culture_preferences_notes: str | None,
@@ -323,6 +372,14 @@ def update_person(
             existing["years_experience"] = years_experience
         if skills is not None:
             existing["skills"] = skills
+        if salary_expectation_min is not None:
+            existing["salary_expectation_min"] = _coerce_optional_int(salary_expectation_min)
+        if salary_expectation_max is not None:
+            existing["salary_expectation_max"] = _coerce_optional_int(salary_expectation_max)
+        if salary_currency is not None:
+            existing["salary_currency"] = _sanitize_salary_currency(salary_currency)
+        if salary_period is not None:
+            existing["salary_period"] = _sanitize_salary_period(salary_period)
         if culture_preferences is not None:
             existing["culture_preferences"] = _dedupe_non_empty(culture_preferences)
         if cultural_fit_preferences is not None:
@@ -352,6 +409,14 @@ def update_person(
             existing["years_experience"] = years_experience
         if skills is not None:
             existing["skills"] = skills
+        if salary_expectation_min is not None:
+            existing["salary_expectation_min"] = _coerce_optional_int(salary_expectation_min)
+        if salary_expectation_max is not None:
+            existing["salary_expectation_max"] = _coerce_optional_int(salary_expectation_max)
+        if salary_currency is not None:
+            existing["salary_currency"] = _sanitize_salary_currency(salary_currency)
+        if salary_period is not None:
+            existing["salary_period"] = _sanitize_salary_period(salary_period)
         if culture_preferences is not None:
             existing["culture_preferences"] = _dedupe_non_empty(culture_preferences)
         if cultural_fit_preferences is not None:

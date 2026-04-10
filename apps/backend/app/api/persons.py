@@ -26,6 +26,10 @@ class PersonSummary(BaseModel):
     location: str
     years_experience: int
     skills: list[str]
+    salary_expectation_min: int | None = None
+    salary_expectation_max: int | None = None
+    salary_currency: str = ""
+    salary_period: str = ""
     culture_preferences: list[str]
     cultural_fit_preferences: dict[str, CulturalFieldPreference]
     culture_preferences_notes: str
@@ -43,6 +47,10 @@ class CreatePersonRequest(BaseModel):
     location: str = Field(min_length=1)
     years_experience: int = Field(ge=0, le=80)
     skills: list[str] = Field(min_length=1)
+    salary_expectation_min: int | None = Field(default=None, ge=0, le=1_000_000_000)
+    salary_expectation_max: int | None = Field(default=None, ge=0, le=1_000_000_000)
+    salary_currency: str = Field(default="", max_length=8)
+    salary_period: str = Field(default="", max_length=12)
     culture_preferences: list[str] = Field(default_factory=list)
     cultural_fit_preferences: dict[str, CulturalFieldPreference] = Field(
         default_factory=dict
@@ -56,6 +64,10 @@ class UpdatePersonRequest(BaseModel):
     location: str | None = Field(default=None, min_length=1)
     years_experience: int | None = Field(default=None, ge=0, le=80)
     skills: list[str] | None = None
+    salary_expectation_min: int | None = Field(default=None, ge=0, le=1_000_000_000)
+    salary_expectation_max: int | None = Field(default=None, ge=0, le=1_000_000_000)
+    salary_currency: str | None = Field(default=None, max_length=8)
+    salary_period: str | None = Field(default=None, max_length=12)
     culture_preferences: list[str] | None = None
     cultural_fit_preferences: dict[str, CulturalFieldPreference] | None = None
     culture_preferences_notes: str | None = None
@@ -79,6 +91,10 @@ def create_person(
         location=payload.location,
         years_experience=payload.years_experience,
         skills=payload.skills,
+        salary_expectation_min=payload.salary_expectation_min,
+        salary_expectation_max=payload.salary_expectation_max,
+        salary_currency=payload.salary_currency,
+        salary_period=payload.salary_period,
         culture_preferences=payload.culture_preferences,
         cultural_fit_preferences={
             field_id: value.model_dump()
@@ -116,6 +132,10 @@ def update_person(
         location=payload.location,
         years_experience=payload.years_experience,
         skills=payload.skills,
+        salary_expectation_min=payload.salary_expectation_min,
+        salary_expectation_max=payload.salary_expectation_max,
+        salary_currency=payload.salary_currency,
+        salary_period=payload.salary_period,
         culture_preferences=payload.culture_preferences,
         cultural_fit_preferences=(
             {
