@@ -1141,8 +1141,6 @@ button:disabled {
 .analysisRailCollapsedHandle {
   position: sticky;
   top: 84px;
-  grid-column: 2;
-  grid-row: 1;
   justify-self: end;
   align-self: start;
   z-index: 3;
@@ -1180,9 +1178,39 @@ button:disabled {
   margin: 0;
 }
 
+.analysisTopPanel {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.analysisBottomGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(250px, 0.72fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.analysisBottomGridCollapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .analysisOpportunityList {
   display: grid;
   gap: 12px;
+}
+
+.analysisOpportunityListTop {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.analysisOpportunityRow {
+  display: grid;
+  gap: 12px;
+}
+
+.analysisDetailInlineMount {
+  display: block;
 }
 
 .analysisOpportunityCard {
@@ -1211,6 +1239,10 @@ button:disabled {
 
 .analysisOpportunityCompany {
   color: #c8d4e3;
+}
+
+.analysisOpportunitySnippet {
+  margin-top: 2px;
 }
 
 .iconOnlyButton {
@@ -1430,6 +1462,88 @@ button:disabled {
   color: color-mix(in srgb, var(--text-primary) 84%, #dbe3f2);
 }
 
+.resultBlockMarkdown {
+  display: grid;
+  gap: 8px;
+}
+
+.resultBlockMarkdown .mdParagraph,
+.resultBlockMarkdown .mdHeading {
+  margin: 0;
+  white-space: normal;
+}
+
+.resultBlockMarkdown .mdHeading2 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.resultBlockMarkdown .mdHeading3 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--text-primary) 88%, #dbe3f2);
+}
+
+.resultBlockMarkdown .mdHeading4 {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.resultBlockMarkdown .mdList {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 4px;
+}
+
+.resultBlockMarkdown code {
+  font-family: "JetBrains Mono", "Cascadia Code", "Fira Code", monospace;
+  font-size: 0.85em;
+  padding: 1px 5px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 75%, var(--accent));
+  background: color-mix(in srgb, var(--bg-main) 72%, black);
+}
+
+.mdTableWrap {
+  overflow-x: auto;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 75%, var(--accent));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-main) 66%, #0f172a);
+}
+
+.mdTable {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 560px;
+}
+
+.mdTable th,
+.mdTable td {
+  text-align: left;
+  vertical-align: top;
+  padding: 8px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 70%, var(--accent));
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.mdTable th {
+  color: var(--text-primary);
+  font-weight: 700;
+  background: color-mix(in srgb, var(--surface-soft) 45%, var(--bg-main));
+}
+
+.mdTable td {
+  color: color-mix(in srgb, var(--text-secondary) 88%, #d4dceb);
+}
+
+.mdTable tr:last-child td {
+  border-bottom: 0;
+}
+
 .resultSourcesDetails {
   border: 1px solid color-mix(in srgb, var(--border-subtle) 78%, var(--accent));
   border-radius: 10px;
@@ -1470,6 +1584,16 @@ button:disabled {
   position: sticky;
   top: 84px;
   overflow-x: hidden;
+}
+
+.analysisOpportunityRow .analysisRailRight {
+  position: static;
+  top: auto;
+}
+
+.analysisOpportunityRow .analysisRailCollapsedHandle {
+  position: static;
+  top: auto;
 }
 
 .analysisRailRight .payloadPre {
@@ -1786,12 +1910,16 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
-  .analysisLayoutGrid {
+  .analysisBottomGrid {
     grid-template-columns: 1fr;
   }
 
-  .analysisLayoutGridCollapsed {
-    grid-template-columns: minmax(240px, 0.88fr) minmax(0, 1.12fr);
+  .analysisBottomGridCollapsed {
+    grid-template-columns: 1fr;
+  }
+
+  .analysisOpportunityListTop {
+    grid-template-columns: 1fr;
   }
 
   .analysisRailRight {
@@ -1866,14 +1994,8 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
-  .analysisLayoutGridCollapsed {
+  .analysisBottomGridCollapsed {
     grid-template-columns: 1fr;
-  }
-
-  .analysisLayoutGridCollapsed .analysisRailLeft,
-  .analysisLayoutGridCollapsed .analysisCenterColumn {
-    grid-column: auto;
-    grid-row: auto;
   }
 
   .analysisRailCollapsedHandle {

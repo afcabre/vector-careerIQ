@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 import {
   AIRuntimeConfig,
@@ -462,6 +463,205 @@ function buildContentLinePreview(content: string, maxLines: number, expanded: bo
   };
 }
 
+function renderInlineMarkdown(text: string, keyPrefix: string): Array<string | JSX.Element> {
+  const pattern = /\[([^\]]+)\]\(([^)]+)\)|\*\*([^*]+)\*\*|`([^`]+)`|\*([^*]+)\*/g;
+  const nodes: Array<string | JSX.Element> = [];
+  let lastIndex = 0;
+  let match = pattern.exec(text);
+  let tokenIndex = 0;
+
+  while (match) {
+    const start = match.index;
+    if (start > lastIndex) {
+      nodes.push(text.slice(lastIndex, start));
+    }
+
+    if (match[1] && match[2]) {
+      const href = toExternalUrl(match[2]);
+      if (href) {
+        nodes.push(
+          <a
+            className="inlineLink"
+            href={href}
+            key={`${keyPrefix}-link-${tokenIndex}`}
+            rel="noreferrer"
+            target="_blank"
+          >
+            {match[1]}
+          </a>
+        );
+      } else {
+        nodes.push(match[1]);
+      }
+    } else if (match[3]) {
+      nodes.push(<strong key={`${keyPrefix}-strong-${tokenIndex}`}>{match[3]}</strong>);
+    } else if (match[4]) {
+      nodes.push(<code key={`${keyPrefix}-code-${tokenIndex}`}>{match[4]}</code>);
+    } else if (match[5]) {
+      nodes.push(<em key={`${keyPrefix}-em-${tokenIndex}`}>{match[5]}</em>);
+    }
+
+    lastIndex = pattern.lastIndex;
+    tokenIndex += 1;
+    match = pattern.exec(text);
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex));
+  }
+
+  return nodes;
+}
+
+function splitMarkdownTableRow(line: string): string[] {
+  const trimmed = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+  return trimmed.split("|").map((item) => item.trim());
+}
+
+function isMarkdownTableDelimiter(line: string): boolean {
+  const cells = splitMarkdownTableRow(line);
+  if (cells.length === 0) {
+    return false;
+  }
+  return cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+
+function MarkdownContent({ content, className }: { content: string; className?: string }) {
+  const lines = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  const blocks: JSX.Element[] = [];
+  let i = 0;
+  let blockIndex = 0;
+
+  const isHeading = (line: string) => /^\s{0,3}#{1,6}\s+/.test(line);
+  const isUnordered = (line: string) => /^\s*[-*]\s+/.test(line);
+  const isOrdered = (line: string) => /^\s*\d+[.)]\s+/.test(line);
+  const isTableStart = (idx: number) =>
+    idx + 1 < lines.length
+    && lines[idx].includes("|")
+    && isMarkdownTableDelimiter(lines[idx + 1]);
+
+  while (i < lines.length) {
+    const rawLine = lines[i];
+    const line = rawLine.trim();
+    if (!line) {
+      i += 1;
+      continue;
+    }
+
+    if (isHeading(line)) {
+      const level = Math.min(4, Math.max(2, (line.match(/^#{1,6}/)?.[0].length ?? 2)));
+      const text = line.replace(/^#{1,6}\s+/, "").trim();
+      const headingClass = `mdHeading mdHeading${level}`;
+      blocks.push(
+        <p className={headingClass} key={`md-h-${blockIndex}`}>
+          {renderInlineMarkdown(text, `md-h-${blockIndex}`)}
+        </p>
+      );
+      i += 1;
+      blockIndex += 1;
+      continue;
+    }
+
+    if (isTableStart(i)) {
+      const header = splitMarkdownTableRow(lines[i]);
+      i += 2;
+      const rows: string[][] = [];
+      while (i < lines.length && lines[i].trim().includes("|")) {
+        rows.push(splitMarkdownTableRow(lines[i]));
+        i += 1;
+      }
+      blocks.push(
+        <div className="mdTableWrap" key={`md-t-${blockIndex}`}>
+          <table className="mdTable">
+            <thead>
+              <tr>
+                {header.map((cell, idx) => (
+                  <th key={`md-th-${blockIndex}-${idx}`}>
+                    {renderInlineMarkdown(cell, `md-th-${blockIndex}-${idx}`)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, rowIndex) => (
+                <tr key={`md-tr-${blockIndex}-${rowIndex}`}>
+                  {row.map((cell, colIndex) => (
+                    <td key={`md-td-${blockIndex}-${rowIndex}-${colIndex}`}>
+                      {renderInlineMarkdown(cell, `md-td-${blockIndex}-${rowIndex}-${colIndex}`)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      blockIndex += 1;
+      continue;
+    }
+
+    if (isUnordered(line)) {
+      const items: string[] = [];
+      while (i < lines.length && isUnordered(lines[i].trim())) {
+        items.push(lines[i].trim().replace(/^[-*]\s+/, "").trim());
+        i += 1;
+      }
+      blocks.push(
+        <ul className="mdList" key={`md-ul-${blockIndex}`}>
+          {items.map((item, idx) => (
+            <li key={`md-ul-${blockIndex}-${idx}`}>
+              {renderInlineMarkdown(item, `md-ul-${blockIndex}-${idx}`)}
+            </li>
+          ))}
+        </ul>
+      );
+      blockIndex += 1;
+      continue;
+    }
+
+    if (isOrdered(line)) {
+      const items: string[] = [];
+      while (i < lines.length && isOrdered(lines[i].trim())) {
+        items.push(lines[i].trim().replace(/^\d+[.)]\s+/, "").trim());
+        i += 1;
+      }
+      blocks.push(
+        <ol className="mdList" key={`md-ol-${blockIndex}`}>
+          {items.map((item, idx) => (
+            <li key={`md-ol-${blockIndex}-${idx}`}>
+              {renderInlineMarkdown(item, `md-ol-${blockIndex}-${idx}`)}
+            </li>
+          ))}
+        </ol>
+      );
+      blockIndex += 1;
+      continue;
+    }
+
+    const paragraphLines: string[] = [];
+    while (
+      i < lines.length
+      && lines[i].trim()
+      && !isHeading(lines[i].trim())
+      && !isUnordered(lines[i].trim())
+      && !isOrdered(lines[i].trim())
+      && !isTableStart(i)
+    ) {
+      paragraphLines.push(lines[i].trim());
+      i += 1;
+    }
+    const paragraph = paragraphLines.join(" ");
+    blocks.push(
+      <p className="mdParagraph" key={`md-p-${blockIndex}`}>
+        {renderInlineMarkdown(paragraph, `md-p-${blockIndex}`)}
+      </p>
+    );
+    blockIndex += 1;
+  }
+
+  return <div className={className ?? "markdownContent"}>{blocks}</div>;
+}
+
 function formatAiRunTimestamp(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -745,6 +945,9 @@ export default function App() {
   const [expandedSavedOpportunityPreview, setExpandedSavedOpportunityPreview] = useState<
     Record<string, boolean>
   >({});
+  const [expandedAnalysisOpportunityPreview, setExpandedAnalysisOpportunityPreview] = useState<
+    Record<string, boolean>
+  >({});
   const [activeCv, setActiveCv] = useState<ActiveCV | null>(null);
   const [activeCvFullText, setActiveCvFullText] = useState("");
   const [selectedCvFile, setSelectedCvFile] = useState<File | null>(null);
@@ -825,6 +1028,9 @@ export default function App() {
     }
     return window.localStorage.getItem("analysis_context_rail_collapsed") === "1";
   });
+  const [analysisDetailMountNode, setAnalysisDetailMountNode] = useState<HTMLDivElement | null>(
+    null
+  );
   const [copiedArtifactKey, setCopiedArtifactKey] = useState<string | null>(null);
 
   useEffect(() => {
@@ -4363,59 +4569,98 @@ export default function App() {
       {showAnalysisPage ? (
         <section className="panel selectedPanel">
           <div
+            className="analysisTopPanel"
+          >
+            <header className="analysisColumnHeader">
+              <h3>Oportunidades guardadas</h3>
+            </header>
+            {isLoadingOpportunities ? (
+              <p className="metaText">Cargando oportunidades...</p>
+            ) : savedOpportunities.length === 0 ? (
+              <p className="metaText">No hay oportunidades guardadas para este perfil.</p>
+            ) : (
+              <div className="analysisOpportunityList analysisOpportunityListTop">
+                {savedOpportunities.map((item) => {
+                  const isExpanded = expandedAnalysisOpportunityPreview[item.opportunity_id] ?? false;
+                  const descriptionPreview = buildContentLinePreview(
+                    item.snapshot_raw_text ?? "",
+                    2,
+                    isExpanded
+                  );
+                  return (
+                    <div className="analysisOpportunityRow" key={`analysis-${item.opportunity_id}`}>
+                      <article
+                        className={
+                          selectedOpportunityId === item.opportunity_id
+                            ? "savedOpportunityCard analysisOpportunityCard analysisOpportunityCardActive"
+                            : "savedOpportunityCard analysisOpportunityCard"
+                        }
+                        onClick={() => handleSelectOpportunityCard(item.opportunity_id)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            handleSelectOpportunityCard(item.opportunity_id);
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
+                      >
+                        <p className="chatRole savedOpportunityStatus">{item.status.toUpperCase()}</p>
+                        <p className="chatContent savedOpportunityTitle">{item.title}</p>
+                        <div className="metaChips">
+                          <span className="metaChip">{item.company || "Empresa no identificada"}</span>
+                          <span className="metaChip">{item.location || "Ubicacion no especificada"}</span>
+                          <span className={getOpportunityOriginChipClass(item.source_type)}>
+                            {getOpportunityOriginLabel(item.source_type)}
+                          </span>
+                        </div>
+                        {descriptionPreview.previewText ? (
+                          <p className="savedOpportunitySnippet analysisOpportunitySnippet">
+                            {descriptionPreview.previewText}
+                          </p>
+                        ) : null}
+                        {descriptionPreview.hasOverflow ? (
+                          <div className="savedOpportunityExpandRow">
+                            <button
+                              aria-label={isExpanded ? "Contraer descripcion" : "Expandir descripcion"}
+                              className="iconOnlyButton"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setExpandedAnalysisOpportunityPreview((current) => ({
+                                  ...current,
+                                  [item.opportunity_id]: !isExpanded
+                                }));
+                              }}
+                              title={isExpanded ? "Contraer" : "Ver mas"}
+                              type="button"
+                            >
+                              <ExpandCollapseIcon expanded={isExpanded} />
+                            </button>
+                          </div>
+                        ) : null}
+                        <p className="metaText savedOpportunityLink">
+                          <ExternalUrlText url={item.source_url} />
+                        </p>
+                      </article>
+                      {selectedOpportunityId === item.opportunity_id ? (
+                        <div className="analysisDetailInlineMount" ref={setAnalysisDetailMountNode} />
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {selectedOpportunity && analysisDetailMountNode
+            ? createPortal(
+          <div
             className={
               isContextRailCollapsed
-                ? "analysisLayoutGrid analysisLayoutGridCollapsed"
-                : "analysisLayoutGrid"
+                ? "analysisBottomGrid analysisBottomGridCollapsed"
+                : "analysisBottomGrid"
             }
           >
-            <aside className="analysisRail analysisRailLeft">
-              <header className="analysisColumnHeader">
-                <h3>Oportunidades guardadas</h3>
-              </header>
-              {isLoadingOpportunities ? (
-                <p className="metaText">Cargando oportunidades...</p>
-              ) : savedOpportunities.length === 0 ? (
-                <p className="metaText">No hay oportunidades guardadas para este perfil.</p>
-              ) : (
-                <div className="analysisOpportunityList">
-                  {savedOpportunities.map((item) => (
-                    <article
-                      className={
-                        selectedOpportunityId === item.opportunity_id
-                          ? "savedOpportunityCard analysisOpportunityCard analysisOpportunityCardActive"
-                          : "savedOpportunityCard analysisOpportunityCard"
-                      }
-                      onClick={() => handleSelectOpportunityCard(item.opportunity_id)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          handleSelectOpportunityCard(item.opportunity_id);
-                        }
-                      }}
-                      role="button"
-                      tabIndex={0}
-                      key={`analysis-${item.opportunity_id}`}
-                    >
-                      <p className="chatRole savedOpportunityStatus">{item.status.toUpperCase()}</p>
-                      <p className="chatContent savedOpportunityTitle">{item.title}</p>
-                      <div className="metaChips">
-                        <span className={getOpportunityOriginChipClass(item.source_type)}>
-                          {getOpportunityOriginLabel(item.source_type)}
-                        </span>
-                      </div>
-                      <p className="metaText analysisOpportunityCompany">
-                        {item.company || "Empresa no identificada"}
-                      </p>
-                      <p className="metaText savedOpportunityLink">
-                        <ExternalUrlText url={item.source_url} />
-                      </p>
-                    </article>
-                  ))}
-                </div>
-              )}
-            </aside>
-
             <div className="analysisCenterColumn">
               <header className="analysisColumnHeader">
                 <div className="analysisCenterHeader">
@@ -4579,7 +4824,10 @@ export default function App() {
                             </div>
                           ) : null}
                           {profilePreview.previewText ? (
-                            <p className="chatContent resultBlockContent">{profilePreview.previewText}</p>
+                            <MarkdownContent
+                              className="chatContent resultBlockContent resultBlockMarkdown"
+                              content={profilePreview.previewText}
+                            />
                           ) : null}
                           {profileContent &&
                           (profilePreview.truncated ||
@@ -5590,6 +5838,10 @@ export default function App() {
               </div>
             ) : null}
           </div>
+              ,
+              analysisDetailMountNode
+            )
+            : null}
         </section>
       ) : null}
       {errorMessage ? <p className="errorText">{errorMessage}</p> : null}
