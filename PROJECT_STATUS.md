@@ -4,7 +4,7 @@
 - fase_actual: `Implementacion`
 - checkpoint_actual: `entrevista con modo dual guided/adaptive (planner+tools) y trazabilidad request/response por run_id`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, analisis por accion, interview brief, importacion manual, CV activo y capa semantica`
-- ultima_actualizacion: `2026-04-09`
+- ultima_actualizacion: `2026-04-11`
 
 ## Progreso Por Fase
 - `Fase 0`: completada
@@ -218,6 +218,9 @@
 - hardening de guardrails implementado: piso no editable, deteccion basica de prompt injection y saneo de salida ante intento de divulgacion de prompt interno
 - pruebas de hardening de guardrails agregadas (`apps/backend/tests/test_guardrails.py`)
 - flujos streaming ajustados para paridad operativa: lo emitido por `message_delta` coincide con `message_complete` y con contenido persistido en `chat`, `analyze/stream`, `interview/brief/stream` y `prepare/stream`
+- vista `Analisis` ajustada a lectura por oportunidad: cards de oportunidades en columna unica (full-width) y bloque `Resultados + Contextual Intelligence` renderizado inline debajo de la oportunidad seleccionada
+- administracion de prompts ajustada a layout de una columna por flujo (usable en edicion larga), manteniendo grilla maxima de 2 columnas en otras secciones admin
+- CORS ahora configurable por `CORS_ALLOW_ORIGINS` y se habilita `.env.local` para overrides locales; frontend usa `VITE_API_BASE_URL` desde `.env.local`
 - pruebas edge de seguridad en SSE agregadas para prompt leak/prompt injection en `chat`, `analyze` y `prepare` (`apps/backend/tests/test_sse_flows.py`, `apps/backend/tests/test_guardrails.py`)
 - pruebas de rate limiting de login agregadas (`apps/backend/tests/test_auth_rate_limit.py`)
 - README actualizado con seccion de placeholders validos (`{placeholder}`) y variables disponibles por flujo de prompt
@@ -304,10 +307,16 @@
 - botones de `Recalcular/Generar` en `Analisis/Postulacion` ahora usan spinner SVG pequeño durante ejecucion para consistencia visual
 - perfil ahora incluye expectativa salarial (min/max + moneda + periodo) en backend, API y UI
 - administracion global agrega toggle para truncar o guardar completas las trazas de request/response
+- administracion global agrega `cv_chunking_strategy` (`semantic_sections` / `token_window`) para controlar chunking en nuevas indexaciones de CV
+- indexacion vectorial del CV ahora persiste metadata de estrategia aplicada (`vector_chunking_strategy`, `vector_chunking_version`, `vector_source_format`) y la expone en API/UI
+- pipeline de CV incorpora construccion heuristica de Markdown estructurado para soportar chunking semantico por secciones con fallback automatico a `token_window`
+- pagina `Analisis` remaquetada para legibilidad: `Oportunidades guardadas` pasa a bloque superior con preview corta de descripcion de cargo por card
+- en `Analisis`, columnas de resultados y `Contextual Intelligence` ahora se renderizan en bloque inferior para lectura mas amplia del contenido principal
+- salida de `Alineacion perfil-vacante` ahora interpreta Markdown (titulos, listas, tablas, links y code inline) en lugar de render plano
 - build frontend revalidado tras integracion de controles `top_k` en administracion: `npm run build` en `OK`
 
 ## Mejoras Identificadas (Diferidas)
-- extraccion estructurada de CV a Markdown (PyMuPDF/LlamaIndex) para mejorar jerarquia semantica
+- extraccion estructurada avanzada de CV a Markdown (parser de layout/PyMuPDF-LlamaIndex) para mejorar fidelidad de jerarquia frente a heuristica V1
 - vector `profile_summary` por persona (`type=profile_summary`) para match ejecutivo de alto nivel
 - indicador radial de match porcentual en cards de oportunidad, condicionado a implementacion de scoring numerico formal
 - `Profile diff` por vacante para evidenciar brechas del perfil del candidato frente a requisitos de la oportunidad

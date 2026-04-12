@@ -1,12 +1,18 @@
 from datetime import UTC, datetime
 from io import BytesIO
+import re
 from threading import Lock
 from typing import TypedDict
 import uuid
 
 from app.core.settings import get_settings
+from app.services.ai_runtime_config_store import get_ai_runtime_config
 from app.services.firestore_client import get_firestore_client
-from app.services.cv_vector_service import upsert_cv_vectors
+from app.services.cv_vector_service import (
+    CHUNKING_STRATEGY_TOKEN_WINDOW,
+    CHUNKING_VERSION,
+    upsert_cv_vectors,
+)
 
 try:
     from pypdf import PdfReader
@@ -26,9 +32,13 @@ class CVRecord(TypedDict):
     text_length: int
     text_truncated: bool
     extraction_status: str
+    extraction_format: str
     vector_index_status: str
     vector_chunks_indexed: int
     vector_last_indexed_at: str
+    vector_chunking_strategy: str
+    vector_chunking_version: str
+    vector_source_format: str
     is_active: bool
     created_at: str
     updated_at: str
@@ -95,6 +105,71 @@ def _extract_text(source_filename: str, mime_type: str, payload: bytes) -> tuple
     return text, "ok"
 
 
+def _looks_like_heading(line: str) -> bool:
+    stripped = line.strip(" :.-").strip()
+    if not stripped:
+        return False
+    if len(stripped) > 72:
+        return False
+    lower = stripped.lower()
+    heading_hints = (
+        "experience",
+        "experiencia",
+        "education",
+        "educacion",
+        "skills",
+        "habilidades",
+        "summary",
+        "resumen",
+        "projects",
+        "proyectos",
+        "languages",
+        "idiomas",
+        "certifications",
+        "certificaciones",
+    )
+    if any(keyword in lower for keyword in heading_hints):
+        return True
+    if stripped.endswith((".", ";", ",")):
+        return False
+    words = [word for word in re.split(r"\s+", stripped) if word]
+    if not words or len(words) > 8:
+        return False
+    title_case_words = [word for word in words if word[:1].isupper()]
+    uppercase_ratio = len(title_case_words) / max(1, len(words))
+    return uppercase_ratio >= 0.7
+
+
+def _build_structured_markdown(raw_text: str) -> str:
+    text = raw_text.strip()
+    if not text:
+        return ""
+    md_lines: list[str] = []
+    for raw_line in text.splitlines():
+        line = re.sub(r"\s+", " ", raw_line).strip()
+        if not line:
+            if md_lines and md_lines[-1] != "":
+                md_lines.append("")
+            continue
+        if _looks_like_heading(line):
+            if md_lines and md_lines[-1] != "":
+                md_lines.append("")
+            md_lines.append(f"## {line.strip(' :.-')}")
+            continue
+        if re.match(r"^[-*•]\s+", line):
+            md_lines.append(f"- {re.sub(r'^[-*•]\s+', '', line).strip()}")
+            continue
+        if re.match(r"^\d+[\.\)]\s+", line):
+            md_lines.append(f"- {re.sub(r'^\d+[.)]\s+', '', line).strip()}")
+            continue
+        md_lines.append(line)
+
+    markdown = "\n".join(md_lines).strip()
+    if len(markdown) > MAX_TEXT_CHARS:
+        return markdown[:MAX_TEXT_CHARS]
+    return markdown
+
+
 def _normalize(record: dict | None) -> CVRecord:
     source = record or {}
     return {
@@ -106,9 +181,15 @@ def _normalize(record: dict | None) -> CVRecord:
         "text_length": int(source.get("text_length", 0)),
         "text_truncated": bool(source.get("text_truncated", False)),
         "extraction_status": str(source.get("extraction_status", "unknown")),
+        "extraction_format": str(source.get("extraction_format", "plain_text")),
         "vector_index_status": str(source.get("vector_index_status", "not_indexed")),
         "vector_chunks_indexed": int(source.get("vector_chunks_indexed", 0)),
         "vector_last_indexed_at": str(source.get("vector_last_indexed_at", "")),
+        "vector_chunking_strategy": str(
+            source.get("vector_chunking_strategy", CHUNKING_STRATEGY_TOKEN_WINDOW)
+        ),
+        "vector_chunking_version": str(source.get("vector_chunking_version", CHUNKING_VERSION)),
+        "vector_source_format": str(source.get("vector_source_format", "plain_text")),
         "is_active": bool(source.get("is_active", False)),
         "created_at": str(source.get("created_at", "")),
         "updated_at": str(source.get("updated_at", "")),
@@ -167,6 +248,7 @@ def upsert_active_cv(
     text_truncated = original_length > MAX_TEXT_CHARS
     if text_truncated:
         extracted_text = extracted_text[:MAX_TEXT_CHARS]
+    structured_markdown = _build_structured_markdown(extracted_text)
 
     record: CVRecord = {
         "cv_id": _new_id(),
@@ -177,9 +259,13 @@ def upsert_active_cv(
         "text_length": original_length,
         "text_truncated": text_truncated,
         "extraction_status": extraction_status,
+        "extraction_format": "plain_text",
         "vector_index_status": "pending",
         "vector_chunks_indexed": 0,
         "vector_last_indexed_at": "",
+        "vector_chunking_strategy": CHUNKING_STRATEGY_TOKEN_WINDOW,
+        "vector_chunking_version": CHUNKING_VERSION,
+        "vector_source_format": "plain_text",
         "is_active": True,
         "created_at": now,
         "updated_at": now,
@@ -187,9 +273,22 @@ def upsert_active_cv(
     saved = _save(record)
 
     settings = get_settings()
-    vector_status, chunks_indexed = upsert_cv_vectors(saved, settings)
+    runtime_config = get_ai_runtime_config()
+    vector_status, chunks_indexed, applied_strategy, chunking_version, source_format = (
+        upsert_cv_vectors(
+            {
+                **saved,
+                "structured_markdown": structured_markdown,
+            },
+            settings,
+            chunking_strategy=runtime_config.get("cv_chunking_strategy", CHUNKING_STRATEGY_TOKEN_WINDOW),
+        )
+    )
     saved["vector_index_status"] = vector_status
     saved["vector_chunks_indexed"] = chunks_indexed
+    saved["vector_chunking_strategy"] = applied_strategy
+    saved["vector_chunking_version"] = chunking_version
+    saved["vector_source_format"] = source_format
     if vector_status == "indexed":
         saved["vector_last_indexed_at"] = _now_iso()
     saved["updated_at"] = _now_iso()

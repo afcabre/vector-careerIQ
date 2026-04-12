@@ -5,6 +5,7 @@ from app.core.security import SessionData, require_operator_session
 from app.services.ai_runtime_config_store import (
     AI_RUNTIME_TOP_K_MAX,
     AI_RUNTIME_TOP_K_MIN,
+    CV_CHUNKING_STRATEGIES,
     INTERVIEW_RESEARCH_MAX_STEPS_MAX,
     INTERVIEW_RESEARCH_MAX_STEPS_MIN,
     get_ai_runtime_config,
@@ -19,6 +20,7 @@ class AIRuntimeConfigResponse(BaseModel):
     config_key: str
     top_k_semantic_analysis: int
     top_k_semantic_interview: int
+    cv_chunking_strategy: str
     interview_research_mode: str
     interview_research_max_steps: int
     trace_truncation_enabled: bool
@@ -38,6 +40,7 @@ class UpdateAIRuntimeConfigRequest(BaseModel):
         ge=AI_RUNTIME_TOP_K_MIN,
         le=AI_RUNTIME_TOP_K_MAX,
     )
+    cv_chunking_strategy: str | None = Field(default=None)
     interview_research_mode: str | None = Field(default=None)
     interview_research_max_steps: int | None = Field(
         default=None,
@@ -62,6 +65,7 @@ def patch_config(
     if (
         payload.top_k_semantic_analysis is None
         and payload.top_k_semantic_interview is None
+        and payload.cv_chunking_strategy is None
         and payload.interview_research_mode is None
         and payload.interview_research_max_steps is None
         and payload.trace_truncation_enabled is None
@@ -71,9 +75,15 @@ def patch_config(
             detail="At least one field must be provided",
         )
     try:
+        if payload.cv_chunking_strategy is not None:
+            candidate = payload.cv_chunking_strategy.strip().lower()
+            if candidate not in CV_CHUNKING_STRATEGIES:
+                allowed = ", ".join(sorted(CV_CHUNKING_STRATEGIES))
+                raise ValueError(f"cv_chunking_strategy must be one of: {allowed}")
         updated = update_ai_runtime_config(
             top_k_semantic_analysis=payload.top_k_semantic_analysis,
             top_k_semantic_interview=payload.top_k_semantic_interview,
+            cv_chunking_strategy=payload.cv_chunking_strategy,
             interview_research_mode=payload.interview_research_mode,
             interview_research_max_steps=payload.interview_research_max_steps,
             trace_truncation_enabled=payload.trace_truncation_enabled,

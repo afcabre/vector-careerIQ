@@ -960,6 +960,9 @@ export default function App() {
   const [aiRuntimeConfig, setAiRuntimeConfig] = useState<AIRuntimeConfig | null>(null);
   const [aiRuntimeTopKAnalysisInput, setAiRuntimeTopKAnalysisInput] = useState("");
   const [aiRuntimeTopKInterviewInput, setAiRuntimeTopKInterviewInput] = useState("");
+  const [aiRuntimeCvChunkingStrategyInput, setAiRuntimeCvChunkingStrategyInput] = useState<
+    "token_window" | "semantic_sections"
+  >("semantic_sections");
   const [aiRuntimeInterviewResearchModeInput, setAiRuntimeInterviewResearchModeInput] = useState<
     "guided" | "adaptive"
   >("guided");
@@ -1174,6 +1177,7 @@ export default function App() {
         setAiRuntimeConfig(null);
         setAiRuntimeTopKAnalysisInput("");
         setAiRuntimeTopKInterviewInput("");
+        setAiRuntimeCvChunkingStrategyInput("semantic_sections");
         setAiRuntimeInterviewResearchModeInput("guided");
         setAiRuntimeInterviewMaxStepsInput("");
         setSearchProviderConfigs([]);
@@ -1197,11 +1201,12 @@ export default function App() {
         setPromptConfigDrafts(buildPromptConfigDrafts(items));
         setSearchProviderConfigs(providerItems);
         setAiRuntimeConfig(runtimeConfig);
-      setAiRuntimeTopKAnalysisInput(String(runtimeConfig.top_k_semantic_analysis));
-      setAiRuntimeTopKInterviewInput(String(runtimeConfig.top_k_semantic_interview));
-      setAiRuntimeInterviewResearchModeInput(runtimeConfig.interview_research_mode);
-      setAiRuntimeInterviewMaxStepsInput(String(runtimeConfig.interview_research_max_steps));
-      setAiRuntimeTraceTruncationEnabled(runtimeConfig.trace_truncation_enabled);
+        setAiRuntimeTopKAnalysisInput(String(runtimeConfig.top_k_semantic_analysis));
+        setAiRuntimeTopKInterviewInput(String(runtimeConfig.top_k_semantic_interview));
+        setAiRuntimeCvChunkingStrategyInput(runtimeConfig.cv_chunking_strategy);
+        setAiRuntimeInterviewResearchModeInput(runtimeConfig.interview_research_mode);
+        setAiRuntimeInterviewMaxStepsInput(String(runtimeConfig.interview_research_max_steps));
+        setAiRuntimeTraceTruncationEnabled(runtimeConfig.trace_truncation_enabled);
       } catch (error) {
         const message =
           error instanceof Error
@@ -2065,6 +2070,13 @@ export default function App() {
       return;
     }
     if (
+      aiRuntimeCvChunkingStrategyInput !== "token_window"
+      && aiRuntimeCvChunkingStrategyInput !== "semantic_sections"
+    ) {
+      setErrorMessage("Estrategia de chunking CV invalida.");
+      return;
+    }
+    if (
       aiRuntimeInterviewResearchModeInput !== "guided"
       && aiRuntimeInterviewResearchModeInput !== "adaptive"
     ) {
@@ -2078,6 +2090,7 @@ export default function App() {
       const updated = await updateAiRuntimeConfigApi({
         top_k_semantic_analysis: parsedAnalysis,
         top_k_semantic_interview: parsedInterview,
+        cv_chunking_strategy: aiRuntimeCvChunkingStrategyInput,
         interview_research_mode: aiRuntimeInterviewResearchModeInput,
         interview_research_max_steps: parsedInterviewSteps,
         trace_truncation_enabled: aiRuntimeTraceTruncationEnabled,
@@ -2085,6 +2098,7 @@ export default function App() {
       setAiRuntimeConfig(updated);
       setAiRuntimeTopKAnalysisInput(String(updated.top_k_semantic_analysis));
       setAiRuntimeTopKInterviewInput(String(updated.top_k_semantic_interview));
+      setAiRuntimeCvChunkingStrategyInput(updated.cv_chunking_strategy);
       setAiRuntimeInterviewResearchModeInput(updated.interview_research_mode);
       setAiRuntimeInterviewMaxStepsInput(String(updated.interview_research_max_steps));
       setAiRuntimeTraceTruncationEnabled(updated.trace_truncation_enabled);
@@ -3602,6 +3616,24 @@ export default function App() {
                   />
                 </label>
                 <label className="field">
+                  Estrategia de chunking para CV
+                  <select
+                    disabled={isSavingAiRuntimeConfig}
+                    onChange={(event) =>
+                      setAiRuntimeCvChunkingStrategyInput(
+                        event.target.value as "token_window" | "semantic_sections"
+                      )
+                    }
+                    value={aiRuntimeCvChunkingStrategyInput}
+                  >
+                    <option value="semantic_sections">semantic_sections (por bloques semanticos)</option>
+                    <option value="token_window">token_window (ventana fija de tokens)</option>
+                  </select>
+                </label>
+                <p className="metaText">
+                  Se aplica en nuevas indexaciones de CV. Para CV ya cargados, requiere recarga/reindex.
+                </p>
+                <label className="field">
                   Modo de investigacion de entrevista
                   <select
                     disabled={isSavingAiRuntimeConfig}
@@ -4178,9 +4210,14 @@ export default function App() {
               </p>
               <div className="metaChips">
                 <span className="metaChip">Extraccion: {activeCv.extraction_status}</span>
+                <span className="metaChip">Formato: {activeCv.extraction_format}</span>
                 <span className="metaChip">
                   Vector: {activeCv.vector_index_status} · chunks {activeCv.vector_chunks_indexed}
                 </span>
+                <span className="metaChip">
+                  Chunking: {activeCv.vector_chunking_strategy} ({activeCv.vector_chunking_version})
+                </span>
+                <span className="metaChip">Fuente vector: {activeCv.vector_source_format}</span>
                 <span className="metaChip">
                   Texto: {activeCv.text_length} caracteres
                   {activeCv.text_truncated ? " (truncado)" : ""}

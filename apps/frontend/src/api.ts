@@ -183,9 +183,13 @@ export type ActiveCV = {
   source_filename: string;
   mime_type: string;
   extraction_status: string;
+  extraction_format: string;
   vector_index_status: string;
   vector_chunks_indexed: number;
   vector_last_indexed_at: string;
+  vector_chunking_strategy: "token_window" | "semantic_sections";
+  vector_chunking_version: string;
+  vector_source_format: "plain_text" | "markdown_structured";
   text_length: number;
   text_truncated: boolean;
   extracted_text_preview: string;
@@ -259,6 +263,7 @@ export type AIRuntimeConfig = {
   config_key: string;
   top_k_semantic_analysis: number;
   top_k_semantic_interview: number;
+  cv_chunking_strategy: "token_window" | "semantic_sections";
   interview_research_mode: "guided" | "adaptive";
   interview_research_max_steps: number;
   trace_truncation_enabled: boolean;
@@ -400,6 +405,7 @@ export async function getAiRuntimeConfig(): Promise<AIRuntimeConfig> {
 export async function updateAiRuntimeConfig(payload: {
   top_k_semantic_analysis?: number;
   top_k_semantic_interview?: number;
+  cv_chunking_strategy?: "token_window" | "semantic_sections";
   interview_research_mode?: "guided" | "adaptive";
   interview_research_max_steps?: number;
   trace_truncation_enabled?: boolean;

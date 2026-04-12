@@ -11,6 +11,13 @@ AI_RUNTIME_TOP_K_MIN = 4
 AI_RUNTIME_TOP_K_MAX = 30
 DEFAULT_TOP_K_SEMANTIC_ANALYSIS = 12
 DEFAULT_TOP_K_SEMANTIC_INTERVIEW = 8
+CV_CHUNKING_STRATEGY_TOKEN_WINDOW = "token_window"
+CV_CHUNKING_STRATEGY_SEMANTIC_SECTIONS = "semantic_sections"
+CV_CHUNKING_STRATEGIES = {
+    CV_CHUNKING_STRATEGY_TOKEN_WINDOW,
+    CV_CHUNKING_STRATEGY_SEMANTIC_SECTIONS,
+}
+DEFAULT_CV_CHUNKING_STRATEGY = CV_CHUNKING_STRATEGY_SEMANTIC_SECTIONS
 INTERVIEW_RESEARCH_MODE_GUIDED = "guided"
 INTERVIEW_RESEARCH_MODE_ADAPTIVE = "adaptive"
 INTERVIEW_RESEARCH_MODES = {
@@ -27,6 +34,7 @@ class AIRuntimeConfigRecord(TypedDict):
     config_key: str
     top_k_semantic_analysis: int
     top_k_semantic_interview: int
+    cv_chunking_strategy: str
     interview_research_mode: str
     interview_research_max_steps: int
     trace_truncation_enabled: bool
@@ -54,6 +62,7 @@ def _default_config() -> AIRuntimeConfigRecord:
         config_key=AI_RUNTIME_CONFIG_KEY,
         top_k_semantic_analysis=DEFAULT_TOP_K_SEMANTIC_ANALYSIS,
         top_k_semantic_interview=DEFAULT_TOP_K_SEMANTIC_INTERVIEW,
+        cv_chunking_strategy=DEFAULT_CV_CHUNKING_STRATEGY,
         interview_research_mode=DEFAULT_INTERVIEW_RESEARCH_MODE,
         interview_research_max_steps=DEFAULT_INTERVIEW_RESEARCH_MAX_STEPS,
         trace_truncation_enabled=True,
@@ -78,6 +87,14 @@ def _coerce_top_k(value: Any, default: int) -> int:
 def _normalize_firestore_record(payload: dict[str, Any] | None) -> AIRuntimeConfigRecord:
     base = _default_config()
     source = payload or {}
+    raw_chunking_strategy = str(
+        source.get("cv_chunking_strategy", base["cv_chunking_strategy"])
+    ).strip().lower()
+    normalized_chunking_strategy = (
+        raw_chunking_strategy
+        if raw_chunking_strategy in CV_CHUNKING_STRATEGIES
+        else base["cv_chunking_strategy"]
+    )
     raw_mode = str(
         source.get("interview_research_mode", base["interview_research_mode"])
     ).strip().lower()
@@ -108,6 +125,7 @@ def _normalize_firestore_record(payload: dict[str, Any] | None) -> AIRuntimeConf
             source.get("top_k_semantic_interview"),
             base["top_k_semantic_interview"],
         ),
+        cv_chunking_strategy=normalized_chunking_strategy,
         interview_research_mode=normalized_mode,
         interview_research_max_steps=max_steps,
         trace_truncation_enabled=bool(
@@ -184,10 +202,19 @@ def _validate_interview_max_steps(value: int) -> int:
     return number
 
 
+def _validate_cv_chunking_strategy(value: str) -> str:
+    normalized = str(value).strip().lower()
+    if normalized not in CV_CHUNKING_STRATEGIES:
+        allowed = ", ".join(sorted(CV_CHUNKING_STRATEGIES))
+        raise ValueError(f"cv_chunking_strategy must be one of: {allowed}")
+    return normalized
+
+
 def update_ai_runtime_config(
     *,
     top_k_semantic_analysis: int | None = None,
     top_k_semantic_interview: int | None = None,
+    cv_chunking_strategy: str | None = None,
     interview_research_mode: str | None = None,
     interview_research_max_steps: int | None = None,
     trace_truncation_enabled: bool | None = None,
@@ -204,6 +231,10 @@ def update_ai_runtime_config(
         current["top_k_semantic_interview"] = _validate_top_k(
             top_k_semantic_interview,
             "top_k_semantic_interview",
+        )
+    if cv_chunking_strategy is not None:
+        current["cv_chunking_strategy"] = _validate_cv_chunking_strategy(
+            cv_chunking_strategy
         )
     if interview_research_mode is not None:
         current["interview_research_mode"] = _validate_interview_mode(

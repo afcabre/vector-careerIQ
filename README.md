@@ -30,12 +30,14 @@ Base inicial del proyecto SDD para un asistente conversacional orientado a oport
 - frontend agrupa trazas por `run_id` y habilita navegacion bidireccional `request <-> response` con vista unificada por ejecucion
 - administracion de busqueda agrega switches por proveedor (`Tavily`, `Adzuna`, `Remotive`) para habilitar/deshabilitar ejecucion por UI
 - administracion IA agrega control global de retrieval semantico con `top_k` separado por contexto (`analisis/preparacion` y `entrevista`)
+- administracion IA agrega control global de estrategia de chunking de CV (`semantic_sections` / `token_window`)
 - busqueda Tavily aplica cap de query a `400` caracteres para evitar `HTTP 400` por longitud
 - respuesta de busqueda incluye `provider_status` por ejecucion (estado por proveedor, razon y conteo) y frontend lo muestra en el panel de busqueda
 - importacion manual de vacantes por URL y texto pegado desde frontend
 - carga de CV por persona (`/cv`) con un CV activo por perfil y extraccion base de texto
 - indexacion vectorial del CV activo habilitada (embeddings OpenAI + upsert/query en Pinecone cuando hay configuracion)
-- chunking token-aware con solapamiento aplicado al pipeline de CV para embeddings
+- chunking de CV configurable por estrategia (`semantic_sections` por defecto, fallback `token_window`)
+- metadata de CV activo expone estrategia/version/fuente usada en indexacion vectorial
 - fit cultural en `analyze` con señales publicas trazables por fuente y advertencias de evidencia
 - `analyze perfil-vacante` y `prepare` incorporan retrieval semantico de CV y exponen evidencia usada
 - notas operativas editables por oportunidad habilitadas en frontend (persistencia via `PATCH`)
@@ -188,7 +190,7 @@ Mapa rapido endpoint -> flow:
 - `GET /api/admin/search-providers`: listar habilitacion por proveedor de busqueda
 - `PATCH /api/admin/search-providers/{provider_key}`: habilitar/deshabilitar proveedor (`adzuna`, `remotive`, `tavily`)
 - `GET /api/admin/ai-runtime-config`: ver parametros globales de ejecucion IA (incluye `top_k` y modo de investigacion de entrevista)
-- `PATCH /api/admin/ai-runtime-config`: actualizar `top_k_semantic_analysis`, `top_k_semantic_interview`, `interview_research_mode`, `interview_research_max_steps`
+- `PATCH /api/admin/ai-runtime-config`: actualizar `top_k_semantic_analysis`, `top_k_semantic_interview`, `cv_chunking_strategy`, `interview_research_mode`, `interview_research_max_steps`
 - `POST /api/persons/{person_id}/search`: `search_jobs_tavily`
 - senales culturales en `analyze_cultural_fit`: `search_culture_tavily`
 - contexto pre-entrevista en `interview_brief`: `search_interview_tavily`
@@ -254,10 +256,12 @@ En `Administracion global` -> `Administracion de proveedores de busqueda`:
 En `Administracion global` -> `Administracion de retrieval semantico (global V1)`:
 - `top_k semantico para analisis/preparacion`
 - `top_k semantico para entrevista`
+- `estrategia de chunking para CV` (`semantic_sections` / `token_window`)
 - `Modo de investigacion de entrevista`:
   - `guided` (pasos fijos)
   - `adaptive` (plan dinamico con LLM + tools)
 - `max steps de investigacion entrevista` (`3` a `8`)
+- nota operativa: cambios de chunking aplican en nuevas indexaciones de CV
 
 ### 5) Admin UI: Prompts relevantes para entrevista
 Revisar/ajustar:

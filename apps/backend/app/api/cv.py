@@ -18,9 +18,13 @@ class CVResponse(BaseModel):
     source_filename: str
     mime_type: str
     extraction_status: str
+    extraction_format: str
     vector_index_status: str
     vector_chunks_indexed: int
     vector_last_indexed_at: str
+    vector_chunking_strategy: str
+    vector_chunking_version: str
+    vector_source_format: str
     text_length: int
     text_truncated: bool
     extracted_text_preview: str
@@ -53,9 +57,13 @@ def _to_response(record: dict) -> CVResponse:
         source_filename=str(record.get("source_filename", "")),
         mime_type=str(record.get("mime_type", "")),
         extraction_status=str(record.get("extraction_status", "")),
+        extraction_format=str(record.get("extraction_format", "plain_text")),
         vector_index_status=str(record.get("vector_index_status", "")),
         vector_chunks_indexed=int(record.get("vector_chunks_indexed", 0)),
         vector_last_indexed_at=str(record.get("vector_last_indexed_at", "")),
+        vector_chunking_strategy=str(record.get("vector_chunking_strategy", "")),
+        vector_chunking_version=str(record.get("vector_chunking_version", "")),
+        vector_source_format=str(record.get("vector_source_format", "plain_text")),
         text_length=int(record.get("text_length", 0)),
         text_truncated=bool(record.get("text_truncated", False)),
         extracted_text_preview=str(record.get("extracted_text", ""))[:PREVIEW_CHARS],
