@@ -164,6 +164,14 @@ const AI_RUN_ACTION_LABELS: Record<string, string> = {
   prepare_cover_letter: "Preparar carta de presentacion",
   prepare_experience_summary: "Preparar resumen de experiencia"
 };
+const ACTION_TO_FLOW_KEY: Record<string, string> = {
+  analyze_profile_match: "task_analyze_profile_match",
+  analyze_cultural_fit: "task_analyze_cultural_fit",
+  interview_brief: "task_interview_brief",
+  prepare_guidance_text: "task_prepare_guidance",
+  prepare_cover_letter: "task_prepare_cover_letter",
+  prepare_experience_summary: "task_prepare_experience_summary",
+};
 
 type AnalysisResultBlockId =
   | "analysis_profile_match"
@@ -431,11 +439,68 @@ function getAiRunPreviewText(run: AIRun): string {
   if (typeof analysisText === "string" && analysisText.trim()) {
     return analysisText;
   }
+  const guidanceText = run.result_payload["guidance_text"];
+  if (typeof guidanceText === "string" && guidanceText.trim()) {
+    return guidanceText;
+  }
+  const coverLetter = run.result_payload["cover_letter"];
+  if (typeof coverLetter === "string" && coverLetter.trim()) {
+    return coverLetter;
+  }
+  const experienceSummary = run.result_payload["experience_summary"];
+  if (typeof experienceSummary === "string" && experienceSummary.trim()) {
+    return experienceSummary;
+  }
   const content = run.result_payload["content"];
   if (typeof content === "string" && content.trim()) {
     return content;
   }
   return "";
+}
+
+type PromptBadge = {
+  label: string;
+  tooltip: string;
+};
+
+function getPromptBadgeForFlow(
+  resultPayload: Record<string, unknown> | null | undefined,
+  flowKey: string
+): PromptBadge | null {
+  if (!resultPayload || typeof resultPayload !== "object") {
+    return null;
+  }
+  const rawMeta = (resultPayload as Record<string, unknown>)["prompt_meta"];
+  if (!rawMeta || typeof rawMeta !== "object") {
+    return null;
+  }
+  const metaRecord = rawMeta as Record<string, Record<string, unknown>>;
+  const flowMeta = metaRecord[flowKey];
+  if (!flowMeta || typeof flowMeta !== "object") {
+    return null;
+  }
+  const configId = String(flowMeta.config_id ?? "").trim();
+  const updatedAt = String(flowMeta.updated_at ?? "").trim();
+  const source = String(flowMeta.source ?? "").trim();
+  const label = configId ? `Prompt ${configId}` : source ? `Prompt ${source}` : "";
+  if (!label) {
+    return null;
+  }
+  const tooltipParts: string[] = [];
+  if (configId) {
+    tooltipParts.push(`config_id: ${configId}`);
+  }
+  if (updatedAt) {
+    tooltipParts.push(`updated_at: ${updatedAt}`);
+  }
+  if (source) {
+    tooltipParts.push(`source: ${source}`);
+  }
+  tooltipParts.push(`flow: ${flowKey}`);
+  return {
+    label,
+    tooltip: tooltipParts.join(" · "),
+  };
 }
 
 function buildContentLinePreview(content: string, maxLines: number, expanded: boolean) {
@@ -3059,6 +3124,30 @@ export default function App() {
   const interviewIterationsView = interviewRun
     ? asInterviewIterations(interviewRun.result_payload["interview_iterations"])
     : [];
+  const profilePromptBadge = getPromptBadgeForFlow(
+    profileRun?.result_payload,
+    "task_analyze_profile_match"
+  );
+  const culturalPromptBadge = getPromptBadgeForFlow(
+    culturalRun?.result_payload,
+    "task_analyze_cultural_fit"
+  );
+  const interviewPromptBadge = getPromptBadgeForFlow(
+    interviewRun?.result_payload,
+    "task_interview_brief"
+  );
+  const guidancePromptBadge = getPromptBadgeForFlow(
+    guidanceRun?.result_payload,
+    "task_prepare_guidance"
+  );
+  const coverPromptBadge = getPromptBadgeForFlow(
+    coverRun?.result_payload,
+    "task_prepare_cover_letter"
+  );
+  const summaryPromptBadge = getPromptBadgeForFlow(
+    summaryRun?.result_payload,
+    "task_prepare_experience_summary"
+  );
   const interviewReferenceUrls = Array.from(
     new Set(
       [
@@ -4748,6 +4837,14 @@ export default function App() {
                                   ? `Generado · ${formatAiRunTimestamp(profileRun.updated_at)}`
                                   : "Sin generar"}
                               </p>
+                              {profilePromptBadge ? (
+                                <span
+                                  className="promptBadge"
+                                  title={profilePromptBadge.tooltip}
+                                >
+                                  {profilePromptBadge.label}
+                                </span>
+                              ) : null}
                             </div>
                             <div className="cardActions">
                               {profileRun ? (
@@ -4883,6 +4980,14 @@ export default function App() {
                                   ? `Generado · ${formatAiRunTimestamp(culturalRun.updated_at)}`
                                   : "Sin generar"}
                               </p>
+                              {culturalPromptBadge ? (
+                                <span
+                                  className="promptBadge"
+                                  title={culturalPromptBadge.tooltip}
+                                >
+                                  {culturalPromptBadge.label}
+                                </span>
+                              ) : null}
                             </div>
                             <div className="cardActions">
                               {culturalRun ? (
@@ -5043,6 +5148,14 @@ export default function App() {
                                   ? `Generado · ${formatAiRunTimestamp(interviewRun.updated_at)}`
                                   : "Sin generar"}
                               </p>
+                              {interviewPromptBadge ? (
+                                <span
+                                  className="promptBadge"
+                                  title={interviewPromptBadge.tooltip}
+                                >
+                                  {interviewPromptBadge.label}
+                                </span>
+                              ) : null}
                             </div>
                             <div className="cardActions">
                               {interviewRun ? (
@@ -5220,6 +5333,14 @@ export default function App() {
                                   ? `Generado · ${formatAiRunTimestamp(guidanceRun.updated_at)}`
                                   : "Sin generar"}
                               </p>
+                              {guidancePromptBadge ? (
+                                <span
+                                  className="promptBadge"
+                                  title={guidancePromptBadge.tooltip}
+                                >
+                                  {guidancePromptBadge.label}
+                                </span>
+                              ) : null}
                             </div>
                             <div className="cardActions">
                               {guidanceRun ? (
@@ -5369,6 +5490,14 @@ export default function App() {
                                   ? `Generado · ${formatAiRunTimestamp(coverRun.updated_at)}`
                                   : "Sin generar"}
                               </p>
+                              {coverPromptBadge ? (
+                                <span
+                                  className="promptBadge"
+                                  title={coverPromptBadge.tooltip}
+                                >
+                                  {coverPromptBadge.label}
+                                </span>
+                              ) : null}
                             </div>
                             <div className="cardActions">
                               {coverRun ? (
@@ -5517,6 +5646,14 @@ export default function App() {
                                   ? `Generado · ${formatAiRunTimestamp(summaryRun.updated_at)}`
                                   : "Sin generar"}
                               </p>
+                              {summaryPromptBadge ? (
+                                <span
+                                  className="promptBadge"
+                                  title={summaryPromptBadge.tooltip}
+                                >
+                                  {summaryPromptBadge.label}
+                                </span>
+                              ) : null}
                             </div>
                             <div className="cardActions">
                               {summaryRun ? (
@@ -5752,6 +5889,20 @@ export default function App() {
                           run_id: {focusedRun.run_id} · actualizado:{" "}
                           {formatAiRunTimestamp(focusedRun.updated_at)}
                         </p>
+                        {focusedRun ? (() => {
+                          const flowKey = ACTION_TO_FLOW_KEY[focusedRun.action_key];
+                          const badge = flowKey
+                            ? getPromptBadgeForFlow(
+                                focusedRun.result_payload as Record<string, unknown>,
+                                flowKey
+                              )
+                            : null;
+                          return badge ? (
+                            <span className="promptBadge" title={badge.tooltip}>
+                              {badge.label}
+                            </span>
+                          ) : null;
+                        })() : null}
                         <details className="payloadDetails">
                           <summary>Ver response payload persistido</summary>
                           <pre className="payloadPre">

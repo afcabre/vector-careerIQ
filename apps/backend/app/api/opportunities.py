@@ -560,6 +560,7 @@ def analyze_profile_match_action(
         result_payload={
             "analysis_text": result["analysis_text"],
             "semantic_evidence": result["semantic_evidence"],
+            "prompt_meta": result.get("prompt_meta", {}),
         },
     )
     updated = update_saved_opportunity(
@@ -712,6 +713,7 @@ def interview_brief_action(
             "interview_sources": result["interview_sources"],
             "interview_iterations": result["interview_iterations"],
             "semantic_evidence": result["semantic_evidence"],
+            "prompt_meta": result.get("prompt_meta", {}),
         },
     )
     assistant_message_id = _append_assistant_message_dedup(
@@ -817,7 +819,7 @@ async def analyze_profile_match_stream(
                 },
             )
             run_id = new_ai_run_id()
-            semantic_evidence, stream = stream_analyze_profile_match_text(
+            semantic_evidence, prompt_meta, stream = stream_analyze_profile_match_text(
                 person,
                 opportunity,
                 settings,
@@ -845,6 +847,7 @@ async def analyze_profile_match_stream(
                 result_payload={
                     "analysis_text": analysis_text,
                     "semantic_evidence": semantic_evidence,
+                    "prompt_meta": prompt_meta,
                 },
             )
             updated = update_saved_opportunity(
@@ -960,7 +963,7 @@ async def analyze_cultural_fit_stream(
                 },
             )
             run_id = new_ai_run_id()
-            confidence, warnings, signals, stream = stream_analyze_cultural_fit_text(
+            confidence, warnings, signals, prompt_meta, stream = stream_analyze_cultural_fit_text(
                 person,
                 opportunity,
                 settings,
@@ -990,6 +993,7 @@ async def analyze_cultural_fit_stream(
                     "cultural_confidence": confidence,
                     "cultural_warnings": warnings,
                     "cultural_signals": signals,
+                    "prompt_meta": prompt_meta,
                 },
             )
             updated = update_saved_opportunity(
@@ -1110,13 +1114,18 @@ async def interview_brief_stream(
                 },
             )
             run_id = new_ai_run_id()
-            semantic_evidence, interview_sources, interview_warnings, interview_iterations, stream = (
-                stream_interview_brief_text(
-                    person,
-                    opportunity,
-                    settings,
-                    run_id=run_id,
-                )
+            (
+                semantic_evidence,
+                interview_sources,
+                interview_warnings,
+                interview_iterations,
+                prompt_meta,
+                stream,
+            ) = stream_interview_brief_text(
+                person,
+                opportunity,
+                settings,
+                run_id=run_id,
             )
             analysis_text = ""
             for delta in stream:
@@ -1143,6 +1152,7 @@ async def interview_brief_stream(
                     "interview_sources": interview_sources,
                     "interview_iterations": interview_iterations,
                     "semantic_evidence": semantic_evidence,
+                    "prompt_meta": prompt_meta,
                 },
             )
             assistant_message_id = _append_assistant_message_dedup(
@@ -1433,6 +1443,7 @@ def prepare(
                 result_payload={
                     "content": cleaned,
                     "semantic_evidence": semantic_evidence,
+                    "prompt_meta": generated.get("prompt_meta", {}),
                 },
             )
 

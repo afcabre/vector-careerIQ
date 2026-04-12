@@ -1439,6 +1439,22 @@ button:disabled {
   gap: 10px;
 }
 
+.promptBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border-subtle));
+  background: color-mix(in srgb, var(--surface-card) 86%, #0f172a);
+  color: color-mix(in srgb, var(--text-secondary) 92%, #c6d4e7);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  margin-top: 6px;
+  width: fit-content;
+}
+
 .resultBlockPager {
   display: flex;
   align-items: center;

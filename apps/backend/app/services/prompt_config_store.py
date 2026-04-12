@@ -759,3 +759,59 @@ def build_prompt_text(flow_key: str, context: dict[str, str], fallback: str) -> 
 
 def build_prompt_query(flow_key: str, context: dict[str, str], fallback: str) -> str:
     return build_prompt_text(flow_key=flow_key, context=context, fallback=fallback)
+
+
+def build_prompt_text_with_meta(
+    flow_key: str,
+    context: dict[str, str],
+    fallback: str,
+) -> tuple[str, dict[str, str | bool]]:
+    fallback_clean = _compact_whitespace(fallback.strip())
+    meta: dict[str, str | bool] = {
+        "flow_key": flow_key,
+        "config_id": "",
+        "updated_at": "",
+        "is_active": False,
+        "source": "fallback",
+    }
+    if not fallback_clean:
+        meta["source"] = "empty_fallback"
+        return fallback_clean, meta
+
+    try:
+        config = get_prompt_config(flow_key)
+    except KeyError:
+        meta["source"] = "missing"
+        return fallback_clean, meta
+
+    meta["config_id"] = str(config.get("config_id", "")).strip()
+    meta["updated_at"] = str(config.get("updated_at", "")).strip()
+    meta["is_active"] = bool(config.get("is_active", False))
+
+    if not config["is_active"]:
+        meta["source"] = "inactive"
+        return fallback_clean, meta
+
+    template = config["template_text"].strip()
+    if not template:
+        meta["source"] = "empty_template"
+        return fallback_clean, meta
+
+    render_context = _SafeDict(
+        {
+            **{key: _compact_whitespace(str(value).strip()) for key, value in context.items()},
+            "target_sources": " ".join(config["target_sources"]),
+        }
+    )
+    try:
+        rendered = _compact_whitespace(template.format_map(render_context))
+    except Exception as exc:
+        logger.warning(
+            "prompt template render failed flow_key=%s error=%s; using fallback",
+            flow_key,
+            exc,
+        )
+        meta["source"] = "render_error"
+        return fallback_clean, meta
+    meta["source"] = "config"
+    return rendered or fallback_clean, meta
