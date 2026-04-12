@@ -11,6 +11,7 @@ DEFAULT_TUTOR_PASSWORD_HASH = (
 class Settings(BaseSettings):
     app_env: str = "local"
     persistence_backend: str = "memory"
+    cors_allow_origins: str = "http://localhost:5173"
     session_cookie_name: str = "session_id"
     session_ttl_minutes: int = 480
     session_cookie_secure: bool = False
@@ -38,7 +39,7 @@ class Settings(BaseSettings):
     adzuna_app_key: str = ""
     remotive_api_key: str = ""
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file=(".env", ".env.local"), env_file_encoding="utf-8")
 
 
 @lru_cache
