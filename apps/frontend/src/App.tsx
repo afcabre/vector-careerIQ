@@ -3373,8 +3373,8 @@ export default function App() {
           <div>
             <h2>Administracion de prompts (global V1)</h2>
             <p>
-              Ajusta guardrails, identidad y prompts de tarea para chat/analisis/preparacion. Tambien
-              puedes editar consultas Tavily para busqueda y fit cultural.
+              Primero se listan prompts IA (guardrails, identidad y tareas). Luego se agrupan
+              consultas externas Tavily con sus prompts asociados.
             </p>
           </div>
           <button
@@ -3391,8 +3391,12 @@ export default function App() {
         ) : promptConfigs.length === 0 ? (
           <p className="metaText">No hay flujos de prompts configurados.</p>
         ) : (
-          <div className="promptConfigGrid">
-            {orderedPromptConfigs.map((config) => {
+          <>
+          {(() => {
+            const configByFlow = new Map(
+              orderedPromptConfigs.map((config) => [config.flow_key, config] as const)
+            );
+            const renderPromptConfigCard = (config: PromptConfig) => {
               const draft = promptConfigDrafts[config.flow_key] ?? {
                 template_text: config.template_text,
                 target_sources_input: config.target_sources.join("\n"),
@@ -3403,77 +3407,92 @@ export default function App() {
               const isLoadingVersions = loadingPromptVersionsFlowKey === config.flow_key;
               const isRollingBack = rollingBackPromptFlowKey === config.flow_key;
               const versions = promptVersionsByFlow[config.flow_key] ?? [];
+              const isSourceFlow = PROMPT_SOURCE_FLOW_KEYS.has(config.flow_key);
               return (
-                <article className="manualCard" key={config.flow_key}>
-                  <p className="chatRole">
-                    {PROMPT_FLOW_LABELS[config.flow_key] ?? config.flow_key}
-                  </p>
-                  <p className="metaText">flow_key: {config.flow_key}</p>
-                  <label className="checkboxRow">
-                    <input
-                      checked={draft.is_active}
-                      disabled={isSaving}
-                      onChange={(event) =>
-                        handlePromptDraftChange(config.flow_key, {
-                          is_active: event.target.checked
-                        })
-                      }
-                      type="checkbox"
-                    />
-                    <span>Configuracion activa</span>
-                  </label>
-                  <label className="field">
-                    Plantilla de prompt
-                    <textarea
-                      disabled={isSaving}
-                      onChange={(event) =>
-                        handlePromptDraftChange(config.flow_key, {
-                          template_text: event.target.value
-                        })
-                      }
-                      rows={5}
-                      value={draft.template_text}
-                    />
-                  </label>
-                  {PROMPT_SOURCE_FLOW_KEYS.has(config.flow_key) ? (
-                    <label className="field">
-                      Fuentes objetivo (coma o salto de linea)
-                      <textarea
+                <article className="manualCard promptConfigCard" key={config.flow_key}>
+                  <div className="promptConfigHeader">
+                    <div>
+                      <p className="chatRole">
+                        {PROMPT_FLOW_LABELS[config.flow_key] ?? config.flow_key}
+                      </p>
+                      <p className="metaText">flow_key: {config.flow_key}</p>
+                    </div>
+                    <label className="checkboxRow promptConfigToggle">
+                      <input
+                        checked={draft.is_active}
                         disabled={isSaving}
                         onChange={(event) =>
                           handlePromptDraftChange(config.flow_key, {
-                            target_sources_input: event.target.value
+                            is_active: event.target.checked
                           })
                         }
-                        rows={5}
-                        value={draft.target_sources_input}
+                        type="checkbox"
                       />
-                      <small className="metaText">
-                        Opcional: puedes dejarlo vacio para buscar sin restringir fuentes.
-                      </small>
+                      <span>Configuracion activa</span>
                     </label>
-                  ) : (
-                    <p className="metaText">Este flujo no usa fuentes objetivo.</p>
-                  )}
-                  <p className="metaText">
-                    Ultima actualizacion: {new Date(config.updated_at).toLocaleString()} por{" "}
-                    {config.updated_by}
-                  </p>
-                  <div className="cardActions">
-                    <button
-                      disabled={isSaving}
-                      onClick={() => void handleSavePromptConfig(config.flow_key)}
-                      type="button"
-                    >
-                      {isSaving ? "Guardando..." : "Guardar configuracion"}
-                    </button>
-                    <button
-                      disabled={isSaving || isRollingBack}
-                      onClick={() => handleTogglePromptVersions(config.flow_key)}
-                      type="button"
-                    >
-                      {isExpanded ? "Ocultar versiones" : "Ver versiones"}
-                    </button>
+                  </div>
+                  <div className={isSourceFlow ? "promptConfigCardSplit" : "promptConfigCardStack"}>
+                    <div className="promptConfigColumn">
+                      <label className="field">
+                        Plantilla de prompt
+                        <textarea
+                          className="promptTextarea"
+                          disabled={isSaving}
+                          onChange={(event) =>
+                            handlePromptDraftChange(config.flow_key, {
+                              template_text: event.target.value
+                            })
+                          }
+                          rows={5}
+                          value={draft.template_text}
+                        />
+                      </label>
+                    </div>
+                    <div className="promptConfigColumn promptConfigSide">
+                      {isSourceFlow ? (
+                        <label className="field">
+                          Fuentes objetivo (coma o salto de linea)
+                          <textarea
+                            className="promptTextarea"
+                            disabled={isSaving}
+                            onChange={(event) =>
+                              handlePromptDraftChange(config.flow_key, {
+                                target_sources_input: event.target.value
+                              })
+                            }
+                            rows={5}
+                            value={draft.target_sources_input}
+                          />
+                          <small className="metaText">
+                            Opcional: puedes dejarlo vacio para buscar sin restringir fuentes.
+                          </small>
+                        </label>
+                      ) : (
+                        <p className="metaText">Este flujo no usa fuentes objetivo.</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="promptConfigFooter">
+                    <p className="metaText">
+                      Ultima actualizacion: {new Date(config.updated_at).toLocaleString()} por{" "}
+                      {config.updated_by}
+                    </p>
+                    <div className="cardActions">
+                      <button
+                        disabled={isSaving}
+                        onClick={() => void handleSavePromptConfig(config.flow_key)}
+                        type="button"
+                      >
+                        {isSaving ? "Guardando..." : "Guardar configuracion"}
+                      </button>
+                      <button
+                        disabled={isSaving || isRollingBack}
+                        onClick={() => handleTogglePromptVersions(config.flow_key)}
+                        type="button"
+                      >
+                        {isExpanded ? "Ocultar versiones" : "Ver versiones"}
+                      </button>
+                    </div>
                   </div>
                   {isExpanded ? (
                     <div className="chatList">
@@ -3533,8 +3552,79 @@ export default function App() {
                   ) : null}
                 </article>
               );
-            })}
-          </div>
+            };
+            const promptOnlyConfigs = orderedPromptConfigs.filter(
+              (config) => !PROMPT_SOURCE_FLOW_KEYS.has(config.flow_key)
+            );
+            return (
+              <>
+                <div className="promptSectionHeader">
+                  <h3>Prompts IA</h3>
+                  <p className="metaText">
+                    Guardrails, identidad y tareas de analisis, entrevista y postulacion.
+                  </p>
+                </div>
+                <div className="promptConfigGrid promptConfigGridSingle">
+                  {promptOnlyConfigs.map((config) => renderPromptConfigCard(config))}
+                </div>
+                <div className="promptSectionHeader">
+                  <h3>Contexto externo (Tavily + prompts)</h3>
+                  <p className="metaText">
+                    Consultas de busqueda con sus prompts asociados por modulo.
+                  </p>
+                </div>
+                <div className="promptModuleList">
+                  {[
+                    {
+                      title: "Fit cultural",
+                      searchFlow: "search_culture_tavily",
+                      promptFlows: ["task_analyze_cultural_fit"]
+                    },
+                    {
+                      title: "Entrevista",
+                      searchFlow: "search_interview_tavily",
+                      promptFlows: ["task_interview_research_plan", "task_interview_brief"]
+                    },
+                    {
+                      title: "Busqueda de vacantes",
+                      searchFlow: "search_jobs_tavily",
+                      promptFlows: []
+                    }
+                  ].map((module) => {
+                    const searchConfig = configByFlow.get(module.searchFlow);
+                    const promptConfigs = module.promptFlows
+                      .map((flow) => configByFlow.get(flow))
+                      .filter(Boolean) as PromptConfig[];
+                    if (!searchConfig) {
+                      return null;
+                    }
+                    return (
+                      <section className="promptModule" key={module.searchFlow}>
+                        <h4>{module.title}</h4>
+                        <div className="promptModuleGrid">
+                          <div className="promptModuleColumn">
+                            {renderPromptConfigCard(searchConfig)}
+                          </div>
+                          <div className="promptModulePromptGrid">
+                            {promptConfigs.length > 0 ? (
+                              promptConfigs.map((config) => renderPromptConfigCard(config))
+                            ) : (
+                              <article className="manualCard promptConfigCard promptConfigEmpty">
+                                <p className="metaText">
+                                  No hay prompt asociado para este modulo.
+                                </p>
+                              </article>
+                            )}
+                          </div>
+                        </div>
+                      </section>
+                    );
+                  })}
+                </div>
+              </>
+            );
+          })()}
+          </>
         )}
         </section>
       ) : null}
