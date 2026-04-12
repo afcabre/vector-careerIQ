@@ -3553,8 +3553,30 @@ export default function App() {
                 </article>
               );
             };
+            const moduleDefinitions = [
+              {
+                title: "Fit cultural",
+                searchFlow: "search_culture_tavily",
+                promptFlows: ["task_analyze_cultural_fit"]
+              },
+              {
+                title: "Entrevista",
+                searchFlow: "search_interview_tavily",
+                promptFlows: ["task_interview_research_plan", "task_interview_brief"]
+              },
+              {
+                title: "Busqueda de vacantes",
+                searchFlow: "search_jobs_tavily",
+                promptFlows: []
+              }
+            ];
+            const modulePromptFlowSet = new Set(
+              moduleDefinitions.flatMap((module) => module.promptFlows)
+            );
             const promptOnlyConfigs = orderedPromptConfigs.filter(
-              (config) => !PROMPT_SOURCE_FLOW_KEYS.has(config.flow_key)
+              (config) =>
+                !PROMPT_SOURCE_FLOW_KEYS.has(config.flow_key)
+                && !modulePromptFlowSet.has(config.flow_key)
             );
             return (
               <>
