@@ -1535,7 +1535,7 @@ export default function App() {
       setSemanticEvidence(guidanceEvidence as SemanticEvidence);
     }
 
-    const guidanceText = String(guidancePayload.content ?? "").trim();
+    const guidanceText = String(guidancePayload.guidance_text ?? guidancePayload.content ?? "").trim();
     if (guidanceText) {
       setGuidanceText(guidanceText);
     }
@@ -3923,23 +3923,7 @@ export default function App() {
                   </p>
                 </div>
                 <div className="promptModuleList">
-                  {[
-                    {
-                      title: "Fit cultural",
-                      searchFlow: "search_culture_tavily",
-                      promptFlows: ["task_analyze_cultural_fit"]
-                    },
-                    {
-                      title: "Entrevista",
-                      searchFlow: "search_interview_tavily",
-                      promptFlows: ["task_interview_research_plan", "task_interview_brief"]
-                    },
-                    {
-                      title: "Busqueda de vacantes",
-                      searchFlow: "search_jobs_tavily",
-                      promptFlows: []
-                    }
-                  ].map((module) => {
+                  {moduleDefinitions.map((module) => {
                     const searchConfig = configByFlow.get(module.searchFlow);
                     const promptConfigs = module.promptFlows
                       .map((flow) => configByFlow.get(flow))
