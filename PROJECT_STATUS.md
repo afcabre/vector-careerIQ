@@ -326,6 +326,7 @@
 - ajuste de enfoque visual en `Analisis`: seleccion de oportunidad migrada a acento de tema (cian) y agrupacion clara de card+resultados mediante contenedor `analysisOpportunityRowSelected`
 - refinamiento de scroll en `Analisis`: compensacion de header fijo con `scroll-margin-top` para que el titulo de vacante no quede tapado tras cambiar seleccion
 - refinamiento de legibilidad en `Analisis`: incremento de contraste del titulo activo dentro de la oportunidad seleccionada
+- ajuste de jerarquia de acciones en oportunidades guardadas (`Busqueda` y `Analisis`): `Ver mas` (expandir) a la izquierda, y `Ver vacante` + `Copiar URL` agrupados a la derecha
 
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada avanzada de CV a Markdown (parser de layout/PyMuPDF-LlamaIndex) para mejorar fidelidad de jerarquia frente a heuristica V1

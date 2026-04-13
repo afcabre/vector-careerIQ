@@ -1855,6 +1855,12 @@ button:disabled {
   flex-wrap: nowrap;
 }
 
+.savedOpportunityLinkExpandSlot {
+  display: inline-flex;
+  align-items: center;
+  min-width: 30px;
+}
+
 .savedOpportunityLinkButton {
   display: inline-flex;
   align-items: center;

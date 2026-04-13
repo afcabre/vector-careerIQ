@@ -4691,21 +4691,7 @@ export default function App() {
                     <p className="savedOpportunitySnippet">{descriptionPreview.previewText}</p>
                   ) : null}
                   <div className="savedOpportunityLinkRow">
-                    {opportunityUrl ? (
-                      <a
-                        className="savedOpportunityLinkButton"
-                        href={opportunityUrl}
-                        onClick={(event) => event.stopPropagation()}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        <span>Ver vacante</span>
-                        <span aria-hidden="true">↗</span>
-                      </a>
-                    ) : (
-                      <span className="savedOpportunityLinkUnavailable">URL no disponible</span>
-                    )}
-                    <div className="savedOpportunityLinkActions">
+                    <div className="savedOpportunityLinkExpandSlot">
                       {descriptionPreview.hasOverflow ? (
                         <button
                           aria-label={isExpanded ? "Contraer descripcion" : "Expandir descripcion"}
@@ -4723,6 +4709,22 @@ export default function App() {
                           <ExpandCollapseIcon expanded={isExpanded} />
                         </button>
                       ) : null}
+                    </div>
+                    <div className="savedOpportunityLinkActions">
+                      {opportunityUrl ? (
+                        <a
+                          className="savedOpportunityLinkButton"
+                          href={opportunityUrl}
+                          onClick={(event) => event.stopPropagation()}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          <span>Ver vacante</span>
+                          <span aria-hidden="true">↗</span>
+                        </a>
+                      ) : (
+                        <span className="savedOpportunityLinkUnavailable">URL no disponible</span>
+                      )}
                       {opportunityUrl ? (
                         <button
                           aria-label="Copiar URL de la vacante"
@@ -4809,21 +4811,7 @@ export default function App() {
                           </p>
                         ) : null}
                         <div className="savedOpportunityLinkRow">
-                          {opportunityUrl ? (
-                            <a
-                              className="savedOpportunityLinkButton"
-                              href={opportunityUrl}
-                              onClick={(event) => event.stopPropagation()}
-                              rel="noreferrer"
-                              target="_blank"
-                            >
-                              <span>Ver vacante</span>
-                              <span aria-hidden="true">↗</span>
-                            </a>
-                          ) : (
-                            <span className="savedOpportunityLinkUnavailable">URL no disponible</span>
-                          )}
-                          <div className="savedOpportunityLinkActions">
+                          <div className="savedOpportunityLinkExpandSlot">
                             {descriptionPreview.hasOverflow ? (
                               <button
                                 aria-label={isExpanded ? "Contraer descripcion" : "Expandir descripcion"}
@@ -4841,6 +4829,22 @@ export default function App() {
                                 <ExpandCollapseIcon expanded={isExpanded} />
                               </button>
                             ) : null}
+                          </div>
+                          <div className="savedOpportunityLinkActions">
+                            {opportunityUrl ? (
+                              <a
+                                className="savedOpportunityLinkButton"
+                                href={opportunityUrl}
+                                onClick={(event) => event.stopPropagation()}
+                                rel="noreferrer"
+                                target="_blank"
+                              >
+                                <span>Ver vacante</span>
+                                <span aria-hidden="true">↗</span>
+                              </a>
+                            ) : (
+                              <span className="savedOpportunityLinkUnavailable">URL no disponible</span>
+                            )}
                             {opportunityUrl ? (
                               <button
                                 aria-label="Copiar URL de la vacante"
