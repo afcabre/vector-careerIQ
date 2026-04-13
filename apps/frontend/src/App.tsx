@@ -164,6 +164,7 @@ const AI_RUN_ACTION_LABELS: Record<string, string> = {
   prepare_cover_letter: "Preparar carta de presentacion",
   prepare_experience_summary: "Preparar resumen de experiencia"
 };
+const ANALYSIS_CONTEXT_RAIL_COLLAPSE_KEY = "analysis_context_rail_collapsed_v2";
 const ACTION_TO_FLOW_KEY: Record<string, string> = {
   analyze_profile_match: "task_analyze_profile_match",
   analyze_cultural_fit: "task_analyze_cultural_fit",
@@ -1094,7 +1095,7 @@ export default function App() {
     if (typeof window === "undefined") {
       return false;
     }
-    return window.localStorage.getItem("analysis_context_rail_collapsed") === "1";
+    return window.localStorage.getItem(ANALYSIS_CONTEXT_RAIL_COLLAPSE_KEY) === "1";
   });
   const [analysisDetailMountNode, setAnalysisDetailMountNode] = useState<HTMLDivElement | null>(
     null
@@ -1138,7 +1139,7 @@ export default function App() {
       return;
     }
     window.localStorage.setItem(
-      "analysis_context_rail_collapsed",
+      ANALYSIS_CONTEXT_RAIL_COLLAPSE_KEY,
       isContextRailCollapsed ? "1" : "0"
     );
   }, [isContextRailCollapsed]);
@@ -4784,6 +4785,18 @@ export default function App() {
                     </p>
                   ) : null}
                 </div>
+                {isContextRailCollapsed ? (
+                  <button
+                    aria-label="Mostrar contexto de historial y trazas"
+                    className="iconOnlyButton contextRailToggleButton contextRailToggleButtonCollapsed hasTooltip"
+                    data-tooltip="Mostrar contexto"
+                    onClick={() => setIsContextRailCollapsed(false)}
+                    title="Mostrar contexto"
+                    type="button"
+                  >
+                    <ContextPanelIcon />
+                  </button>
+                ) : null}
               </header>
 
               {selectedOpportunity ? (
@@ -5994,20 +6007,6 @@ export default function App() {
                 </>
               )}
             </aside>
-            ) : null}
-            {isContextRailCollapsed ? (
-              <div className="analysisRailCollapsedHandle">
-                <button
-                  aria-label="Mostrar contexto de historial y trazas"
-                  className="iconOnlyButton contextRailToggleButton contextRailToggleButtonCollapsed hasTooltip"
-                  data-tooltip="Mostrar contexto"
-                  onClick={() => setIsContextRailCollapsed(false)}
-                  title="Mostrar contexto"
-                  type="button"
-                >
-                  <ContextPanelIcon />
-                </button>
-              </div>
             ) : null}
           </div>
               ,
