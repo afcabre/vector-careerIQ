@@ -1207,6 +1207,22 @@ button:disabled {
 .analysisOpportunityRow {
   display: grid;
   gap: 12px;
+  scroll-margin-top: 108px;
+}
+
+.analysisOpportunityRowSelected {
+  border: 1px solid color-mix(in srgb, var(--accent) 58%, var(--border-subtle));
+  border-radius: var(--radius-md);
+  padding: 10px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent) 8%, var(--surface-card)),
+      color-mix(in srgb, var(--accent) 4%, var(--surface-card))
+    );
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent),
+    0 6px 16px rgba(2, 6, 23, 0.28);
 }
 
 .analysisDetailInlineMount {
@@ -1228,13 +1244,14 @@ button:disabled {
 }
 
 .analysisOpportunityCardActive {
-  border-color: color-mix(in srgb, var(--accent) 96%, white) !important;
-  border-left-width: 6px;
-  border-left-color: color-mix(in srgb, var(--accent) 98%, white);
+  border-width: 2px;
+  border-color: color-mix(in srgb, var(--accent) 88%, white) !important;
+  border-left-width: 2px;
+  border-left-color: color-mix(in srgb, var(--accent) 88%, white);
   box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--accent) 44%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--accent) 34%, transparent),
+    0 0 12px color-mix(in srgb, var(--accent) 22%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.03);
-  background: color-mix(in srgb, var(--accent) 13%, var(--surface-card));
 }
 
 .analysisOpportunityCompany {
@@ -1829,8 +1846,71 @@ button:disabled {
   font-weight: 600;
 }
 
-.savedOpportunityLink {
+.savedOpportunityLinkRow {
   margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+  flex-wrap: nowrap;
+}
+
+.savedOpportunityLinkButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 58%, var(--border-subtle));
+  background: color-mix(in srgb, var(--surface-card) 88%, #0f172a);
+  color: color-mix(in srgb, var(--accent) 88%, #e8fbff);
+  font-size: 0.84rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.savedOpportunityLinkButton:hover {
+  border-color: color-mix(in srgb, var(--accent) 90%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface-card));
+}
+
+.savedOpportunityLinkUnavailable {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.savedOpportunityLinkActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.savedOpportunityCopyButton {
+  margin-left: 0;
+}
+
+.savedOpportunityCard.analysisOpportunityCardActive {
+  border-width: 2px;
+  border-color: color-mix(in srgb, var(--accent) 88%, white) !important;
+  border-left-width: 2px;
+  border-left-color: color-mix(in srgb, var(--accent) 88%, white);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 34%, transparent),
+    0 0 12px color-mix(in srgb, var(--accent) 22%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface-card));
+}
+
+.savedOpportunityCard.analysisOpportunityCardActive:hover {
+  border-color: color-mix(in srgb, var(--accent) 92%, white) !important;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-card));
+}
+
+.savedOpportunityCard.analysisOpportunityCardActive .savedOpportunityTitle {
+  color: color-mix(in srgb, var(--accent) 52%, var(--text-primary));
 }
 
 .savedOpportunitySnippet {

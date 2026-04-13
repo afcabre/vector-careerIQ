@@ -316,6 +316,16 @@
 - build frontend revalidado tras integracion de controles `top_k` en administracion: `npm run build` en `OK`
 - fix UX en `Analisis`: `Contextual Intelligence` (Historial IA + Trazas tecnicas) vuelve visible por defecto al versionar la clave de colapso en `localStorage`
 - fix UX en `Analisis`: al colapsar `Contextual Intelligence`, el boton `Mostrar contexto` se muestra en el header central de resultados para recuperacion inmediata de la columna
+- UX de oportunidades guardadas mejorada (`Busqueda` y `Analisis`): preview de descripcion saneado para ignorar lineas en blanco iniciales y colapsar saltos vacios repetidos en modo compacto
+- UX de URL en oportunidades guardadas mejorada (`Busqueda` y `Analisis`): se reemplaza URL larga por CTA `Ir a la vacante` + boton de copia de URL
+- refinamiento visual de CTA de URL en oportunidades guardadas (`Busqueda` y `Analisis`): `Ver vacante` estilo boton secundario con icono externo, manteniendo boton de copia de URL
+- ajustes de micro-layout en oportunidades guardadas (`Busqueda` y `Analisis`): iconos de `expandir` y `copiar URL` unificados en una sola fila horizontal de acciones
+- ajuste de legibilidad en card seleccionada de `Analisis`: `Ver vacante` vuelve a variante secundaria no magenta y el titulo reduce intensidad de magenta para mejorar lectura
+- UX de navegacion en `Analisis`: al cambiar de vacante seleccionada, la vista hace auto-scroll al inicio del bloque de resultados para evitar quedar en la parte inferior
+- refinamiento de seleccion en `Analisis`: color de seleccion ajustado a magenta mas sobrio (`#C2185B`) con menor glow y menor intensidad en titulo
+- ajuste de enfoque visual en `Analisis`: seleccion de oportunidad migrada a acento de tema (cian) y agrupacion clara de card+resultados mediante contenedor `analysisOpportunityRowSelected`
+- refinamiento de scroll en `Analisis`: compensacion de header fijo con `scroll-margin-top` para que el titulo de vacante no quede tapado tras cambiar seleccion
+- refinamiento de legibilidad en `Analisis`: incremento de contraste del titulo activo dentro de la oportunidad seleccionada
 
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada avanzada de CV a Markdown (parser de layout/PyMuPDF-LlamaIndex) para mejorar fidelidad de jerarquia frente a heuristica V1

@@ -506,8 +506,11 @@ function getPromptBadgeForFlow(
 
 function buildContentLinePreview(content: string, maxLines: number, expanded: boolean) {
   const normalized = content.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  const lines = normalized.split("\n");
-  const hasOverflow = lines.length > maxLines;
+  const meaningfulLines = normalized
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  const hasOverflow = meaningfulLines.length > maxLines;
   if (expanded) {
     return {
       previewText: normalized,
@@ -515,15 +518,15 @@ function buildContentLinePreview(content: string, maxLines: number, expanded: bo
       hasOverflow
     };
   }
-  if (lines.length <= maxLines) {
+  if (meaningfulLines.length <= maxLines) {
     return {
-      previewText: normalized,
+      previewText: meaningfulLines.join("\n"),
       truncated: false,
       hasOverflow
     };
   }
   return {
-    previewText: lines.slice(0, maxLines).join("\n"),
+    previewText: meaningfulLines.slice(0, maxLines).join("\n"),
     truncated: true,
     hasOverflow
   };
@@ -1101,6 +1104,7 @@ export default function App() {
     null
   );
   const [copiedArtifactKey, setCopiedArtifactKey] = useState<string | null>(null);
+  const [copiedOpportunityUrlId, setCopiedOpportunityUrlId] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -1696,6 +1700,24 @@ export default function App() {
   }, [selectedPersonId, selectedOpportunityId, focusedRunId, showAnalysisPage]);
 
   useEffect(() => {
+    if (!showAnalysisPage || !selectedOpportunityId || typeof window === "undefined") {
+      return;
+    }
+    const selector = `[data-analysis-row-id="${CSS.escape(selectedOpportunityId)}"]`;
+    const target = document.querySelector(selector);
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+    const prefersReducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    window.requestAnimationFrame(() => {
+      target.scrollIntoView({
+        behavior: prefersReducedMotion ? "auto" : "smooth",
+        block: "start",
+      });
+    });
+  }, [selectedOpportunityId, showAnalysisPage]);
+
+  useEffect(() => {
     setSelectedOpportunityId(null);
     setFocusedRunId("");
     setSelectedResultBlockId("");
@@ -2286,6 +2308,25 @@ export default function App() {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "No se pudo copiar el artefacto";
+      setErrorMessage(message);
+    }
+  }
+
+  async function handleCopyOpportunityUrl(opportunityId: string, url: string | null | undefined) {
+    const payload = toExternalUrl(url) ?? String(url ?? "").trim();
+    if (!payload) {
+      setErrorMessage("URL no disponible para copiar.");
+      return;
+    }
+    try {
+      await copyToClipboard(payload);
+      setCopiedOpportunityUrlId(opportunityId);
+      window.setTimeout(() => {
+        setCopiedOpportunityUrlId((current) => (current === opportunityId ? null : current));
+      }, 1600);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo copiar la URL";
       setErrorMessage(message);
     }
   }
@@ -4626,6 +4667,7 @@ export default function App() {
           <div className="chatList">
             {savedOpportunities.map((item) => {
               const isExpanded = expandedSavedOpportunityPreview[item.opportunity_id] ?? false;
+              const opportunityUrl = toExternalUrl(item.source_url);
               const descriptionPreview = buildContentLinePreview(
                 item.snapshot_raw_text ?? "",
                 2,
@@ -4648,28 +4690,55 @@ export default function App() {
                   {descriptionPreview.previewText ? (
                     <p className="savedOpportunitySnippet">{descriptionPreview.previewText}</p>
                   ) : null}
-                  {descriptionPreview.hasOverflow ? (
-                    <div className="savedOpportunityExpandRow">
-                      <button
-                        aria-label={isExpanded ? "Contraer descripcion" : "Expandir descripcion"}
-                        className="iconOnlyButton"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setExpandedSavedOpportunityPreview((current) => ({
-                            ...current,
-                            [item.opportunity_id]: !isExpanded
-                          }));
-                        }}
-                        title={isExpanded ? "Contraer" : "Ver mas"}
-                        type="button"
+                  <div className="savedOpportunityLinkRow">
+                    {opportunityUrl ? (
+                      <a
+                        className="savedOpportunityLinkButton"
+                        href={opportunityUrl}
+                        onClick={(event) => event.stopPropagation()}
+                        rel="noreferrer"
+                        target="_blank"
                       >
-                        <ExpandCollapseIcon expanded={isExpanded} />
-                      </button>
+                        <span>Ver vacante</span>
+                        <span aria-hidden="true">↗</span>
+                      </a>
+                    ) : (
+                      <span className="savedOpportunityLinkUnavailable">URL no disponible</span>
+                    )}
+                    <div className="savedOpportunityLinkActions">
+                      {descriptionPreview.hasOverflow ? (
+                        <button
+                          aria-label={isExpanded ? "Contraer descripcion" : "Expandir descripcion"}
+                          className="iconOnlyButton"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setExpandedSavedOpportunityPreview((current) => ({
+                              ...current,
+                              [item.opportunity_id]: !isExpanded
+                            }));
+                          }}
+                          title={isExpanded ? "Contraer" : "Ver mas"}
+                          type="button"
+                        >
+                          <ExpandCollapseIcon expanded={isExpanded} />
+                        </button>
+                      ) : null}
+                      {opportunityUrl ? (
+                        <button
+                          aria-label="Copiar URL de la vacante"
+                          className="iconOnlyButton savedOpportunityCopyButton"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleCopyOpportunityUrl(item.opportunity_id, item.source_url);
+                          }}
+                          title={copiedOpportunityUrlId === item.opportunity_id ? "Copiada" : "Copiar URL"}
+                          type="button"
+                        >
+                          {copiedOpportunityUrlId === item.opportunity_id ? "✓" : "⧉"}
+                        </button>
+                      ) : null}
                     </div>
-                  ) : null}
-                  <p className="metaText savedOpportunityLink">
-                    <ExternalUrlText url={item.source_url} />
-                  </p>
+                  </div>
                 </article>
               );
             })}
@@ -4693,13 +4762,22 @@ export default function App() {
               <div className="analysisOpportunityList analysisOpportunityListTop">
                 {savedOpportunities.map((item) => {
                   const isExpanded = expandedAnalysisOpportunityPreview[item.opportunity_id] ?? false;
+                  const opportunityUrl = toExternalUrl(item.source_url);
                   const descriptionPreview = buildContentLinePreview(
                     item.snapshot_raw_text ?? "",
                     2,
                     isExpanded
                   );
                   return (
-                    <div className="analysisOpportunityRow" key={`analysis-${item.opportunity_id}`}>
+                    <div
+                      className={
+                        selectedOpportunityId === item.opportunity_id
+                          ? "analysisOpportunityRow analysisOpportunityRowSelected"
+                          : "analysisOpportunityRow"
+                      }
+                      data-analysis-row-id={item.opportunity_id}
+                      key={`analysis-${item.opportunity_id}`}
+                    >
                       <article
                         className={
                           selectedOpportunityId === item.opportunity_id
@@ -4730,28 +4808,55 @@ export default function App() {
                             {descriptionPreview.previewText}
                           </p>
                         ) : null}
-                        {descriptionPreview.hasOverflow ? (
-                          <div className="savedOpportunityExpandRow">
-                            <button
-                              aria-label={isExpanded ? "Contraer descripcion" : "Expandir descripcion"}
-                              className="iconOnlyButton"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setExpandedAnalysisOpportunityPreview((current) => ({
-                                  ...current,
-                                  [item.opportunity_id]: !isExpanded
-                                }));
-                              }}
-                              title={isExpanded ? "Contraer" : "Ver mas"}
-                              type="button"
+                        <div className="savedOpportunityLinkRow">
+                          {opportunityUrl ? (
+                            <a
+                              className="savedOpportunityLinkButton"
+                              href={opportunityUrl}
+                              onClick={(event) => event.stopPropagation()}
+                              rel="noreferrer"
+                              target="_blank"
                             >
-                              <ExpandCollapseIcon expanded={isExpanded} />
-                            </button>
+                              <span>Ver vacante</span>
+                              <span aria-hidden="true">↗</span>
+                            </a>
+                          ) : (
+                            <span className="savedOpportunityLinkUnavailable">URL no disponible</span>
+                          )}
+                          <div className="savedOpportunityLinkActions">
+                            {descriptionPreview.hasOverflow ? (
+                              <button
+                                aria-label={isExpanded ? "Contraer descripcion" : "Expandir descripcion"}
+                                className="iconOnlyButton"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setExpandedAnalysisOpportunityPreview((current) => ({
+                                    ...current,
+                                    [item.opportunity_id]: !isExpanded
+                                  }));
+                                }}
+                                title={isExpanded ? "Contraer" : "Ver mas"}
+                                type="button"
+                              >
+                                <ExpandCollapseIcon expanded={isExpanded} />
+                              </button>
+                            ) : null}
+                            {opportunityUrl ? (
+                              <button
+                                aria-label="Copiar URL de la vacante"
+                                className="iconOnlyButton savedOpportunityCopyButton"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void handleCopyOpportunityUrl(item.opportunity_id, item.source_url);
+                                }}
+                                title={copiedOpportunityUrlId === item.opportunity_id ? "Copiada" : "Copiar URL"}
+                                type="button"
+                              >
+                                {copiedOpportunityUrlId === item.opportunity_id ? "✓" : "⧉"}
+                              </button>
+                            ) : null}
                           </div>
-                        ) : null}
-                        <p className="metaText savedOpportunityLink">
-                          <ExternalUrlText url={item.source_url} />
-                        </p>
+                        </div>
                       </article>
                       {selectedOpportunityId === item.opportunity_id ? (
                         <div className="analysisDetailInlineMount" ref={setAnalysisDetailMountNode} />
