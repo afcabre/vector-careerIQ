@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     persistence_backend: str = "memory"
     cors_allow_origins: str = "http://localhost:5173"
     session_cookie_name: str = "session_id"
+    session_cookie_domain: str = ""
     session_ttl_minutes: int = 480
     session_cookie_secure: bool = False
     login_rate_limit_window_seconds: int = 300

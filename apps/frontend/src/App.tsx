@@ -946,7 +946,7 @@ export default function App() {
     }
     return window.location.pathname || "/candidates";
   });
-  const [username, setUsername] = useState("tutor");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [operatorName, setOperatorName] = useState("");
   const [people, setPeople] = useState<Person[]>([]);
@@ -1080,6 +1080,7 @@ export default function App() {
   const [isSavingNotes, setIsSavingNotes] = useState(false);
   const [opportunityStatus, setOpportunityStatus] = useState<string>("detected");
   const [isSavingStatus, setIsSavingStatus] = useState(false);
+  const [statusSaveMessage, setStatusSaveMessage] = useState<string | null>(null);
   const [culturePreferencesState, setCulturePreferencesState] = useState<
     Record<string, CulturalFieldPreference>
   >(buildDefaultCulturalPreferences());
@@ -1767,7 +1768,20 @@ export default function App() {
 
   useEffect(() => {
     setOpportunityStatus(selectedOpportunity?.status ?? "detected");
+    setStatusSaveMessage(null);
   }, [selectedOpportunity?.opportunity_id, selectedOpportunity?.status]);
+
+  useEffect(() => {
+    if (!statusSaveMessage) {
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setStatusSaveMessage(null);
+    }, 2600);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [statusSaveMessage]);
 
   useEffect(() => {
     if (!selectedPerson) {
@@ -2935,6 +2949,7 @@ export default function App() {
       return;
     }
     setIsSavingStatus(true);
+    setStatusSaveMessage(null);
     setErrorMessage(null);
     try {
       const updated = await updateOpportunity(selectedPersonId, selectedOpportunityId, {
@@ -2945,6 +2960,7 @@ export default function App() {
           item.opportunity_id === updated.opportunity_id ? updated : item
         )
       );
+      setStatusSaveMessage("Estado actualizado");
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "No se pudo guardar el estado";
@@ -3077,8 +3093,10 @@ export default function App() {
   }
 
   function handleSwitchResultsTab(nextTab: "analysis" | "artifacts") {
+    const blockOrder = nextTab === "analysis" ? ANALYSIS_BLOCK_ORDER : ARTIFACT_BLOCK_ORDER;
+    const firstWithRun = blockOrder.find((blockId) => getRunsForBlock(blockId).length > 0);
     setResultsPanelTab(nextTab);
-    setSelectedResultBlockId("");
+    setSelectedResultBlockId(firstWithRun ?? blockOrder[0]);
   }
 
   function handleSelectResultBlock(blockId: AnalysisResultBlockId) {
@@ -4961,7 +4979,7 @@ export default function App() {
                         onClick={() => handleSwitchResultsTab("analysis")}
                         type="button"
                       >
-                        Analisis
+                        Análisis
                       </button>
                       <button
                         className={
@@ -4972,32 +4990,43 @@ export default function App() {
                         onClick={() => handleSwitchResultsTab("artifacts")}
                         type="button"
                       >
-                        Postulacion
+                        Postulación
                       </button>
                     </div>
 
                     {resultsPanelTab === "analysis" ? (
                       <>
-                        <div className="analysisResultSubTabs">
-                          {ANALYSIS_MENU_BLOCKS.map((item) => (
-                            <button
-                              className={
-                                selectedResultBlockId === item.id
-                                  ? "workspaceTabButton workspaceTabButtonActive"
-                                  : "workspaceTabButton"
-                              }
-                              key={item.id}
-                              onClick={() => handleSelectResultBlock(item.id)}
-                              type="button"
-                            >
-                              {item.label}
-                            </button>
-                          ))}
+                        <div className="analysisResultSubTabsWrap">
+                          <p className="analysisSubTabHint">Bloques de análisis</p>
+                          <div
+                            aria-label="Bloques de análisis"
+                            className="analysisResultSubTabs"
+                            role="tablist"
+                          >
+                            {ANALYSIS_MENU_BLOCKS.map((item) => (
+                              <button
+                                aria-selected={selectedResultBlockId === item.id}
+                                className={
+                                  selectedResultBlockId === item.id
+                                    ? "analysisSubTabButton analysisSubTabButtonActive"
+                                    : "analysisSubTabButton"
+                                }
+                                key={item.id}
+                                onClick={() => handleSelectResultBlock(item.id)}
+                                role="tab"
+                                type="button"
+                              >
+                                {item.label}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                         <div className="resultBlockList">
                           <article
                           className={
-                            selectedResultBlockId === "analysis_profile_match"
+                            selectedResultBlockId !== "analysis_profile_match"
+                              ? "resultBlockCard resultBlockCardHidden"
+                              : selectedResultBlockId === "analysis_profile_match"
                               ? "resultBlockCard resultBlockCardActive"
                               : "resultBlockCard"
                           }
@@ -5140,7 +5169,9 @@ export default function App() {
 
                           <article
                           className={
-                            selectedResultBlockId === "analysis_cultural_fit"
+                            selectedResultBlockId !== "analysis_cultural_fit"
+                              ? "resultBlockCard resultBlockCardHidden"
+                              : selectedResultBlockId === "analysis_cultural_fit"
                               ? "resultBlockCard resultBlockCardActive"
                               : "resultBlockCard"
                           }
@@ -5306,9 +5337,11 @@ export default function App() {
                           ) : null}
                           </article>
 
-                          <article
+                        <article
                           className={
-                            selectedResultBlockId === "analysis_interview_brief"
+                            selectedResultBlockId !== "analysis_interview_brief"
+                              ? "resultBlockCard resultBlockCardHidden"
+                              : selectedResultBlockId === "analysis_interview_brief"
                               ? "resultBlockCard resultBlockCardActive"
                               : "resultBlockCard"
                           }
@@ -5474,26 +5507,37 @@ export default function App() {
                       </>
                     ) : (
                       <>
-                        <div className="analysisResultSubTabs">
-                          {POSTULATION_MENU_BLOCKS.map((item) => (
-                            <button
-                              className={
-                                selectedResultBlockId === item.id
-                                  ? "workspaceTabButton workspaceTabButtonActive"
-                                  : "workspaceTabButton"
-                              }
-                              key={item.id}
-                              onClick={() => handleSelectResultBlock(item.id)}
-                              type="button"
-                            >
-                              {item.label}
-                            </button>
-                          ))}
+                        <div className="analysisResultSubTabsWrap">
+                          <p className="analysisSubTabHint">Bloques de postulación</p>
+                          <div
+                            aria-label="Bloques de postulación"
+                            className="analysisResultSubTabs"
+                            role="tablist"
+                          >
+                            {POSTULATION_MENU_BLOCKS.map((item) => (
+                              <button
+                                aria-selected={selectedResultBlockId === item.id}
+                                className={
+                                  selectedResultBlockId === item.id
+                                    ? "analysisSubTabButton analysisSubTabButtonActive"
+                                    : "analysisSubTabButton"
+                                }
+                                key={item.id}
+                                onClick={() => handleSelectResultBlock(item.id)}
+                                role="tab"
+                                type="button"
+                              >
+                                {item.label}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                         <div className="resultBlockList">
                         <article
                           className={
-                            selectedResultBlockId === "artifact_guidance_text"
+                            selectedResultBlockId !== "artifact_guidance_text"
+                              ? "resultBlockCard resultBlockCardHidden"
+                              : selectedResultBlockId === "artifact_guidance_text"
                               ? "resultBlockCard resultBlockCardActive"
                               : "resultBlockCard"
                           }
@@ -5650,7 +5694,9 @@ export default function App() {
 
                         <article
                           className={
-                            selectedResultBlockId === "artifact_cover_letter"
+                            selectedResultBlockId !== "artifact_cover_letter"
+                              ? "resultBlockCard resultBlockCardHidden"
+                              : selectedResultBlockId === "artifact_cover_letter"
                               ? "resultBlockCard resultBlockCardActive"
                               : "resultBlockCard"
                           }
@@ -5806,7 +5852,9 @@ export default function App() {
 
                         <article
                           className={
-                            selectedResultBlockId === "artifact_experience_summary"
+                            selectedResultBlockId !== "artifact_experience_summary"
+                              ? "resultBlockCard resultBlockCardHidden"
+                              : selectedResultBlockId === "artifact_experience_summary"
                               ? "resultBlockCard resultBlockCardActive"
                               : "resultBlockCard"
                           }
@@ -5997,6 +6045,7 @@ export default function App() {
                           </button>
                         </div>
                       </div>
+                      {statusSaveMessage ? <p className="successText">{statusSaveMessage}</p> : null}
 
                       <label className="field">
                         Notas operativas (V1)

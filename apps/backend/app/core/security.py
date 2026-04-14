@@ -63,6 +63,8 @@ def require_operator_session(
 ) -> SessionData:
     session_id = request.cookies.get(settings.session_cookie_name)
     if not session_id:
+        session_id = request.headers.get("x-session-id", "").strip() or None
+    if not session_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",

@@ -167,6 +167,10 @@
 - cada bloque de resultado soporta estado `sin generar/generado`, `refresh`, vista previa de `7` lineas con `Ver mas` y paginacion por historico de `run_id`
 - panel central de `Resultados` agrega submenu explicito en `Analisis` para acceso directo a `Perfil-vacante`, `Fit cultural` y `Entrevista`
 - panel central de `Resultados` agrega submenu explicito en `Postulacion` para acceso directo a `Guia de perfil`, `Carta de presentacion` y `Resumen adaptado`
+- navegacion de submenus en `Resultados` reforzada con estilo de tabs visibles (estado activo mas evidente), seleccion inmediata al cambiar entre `Análisis/Postulación` y etiqueta corregida a `Postulación`
+- tabs de `Resultados` ajustados a comportamiento real: solo se visualiza el contenedor del bloque seleccionado; los demas bloques quedan ocultos
+- gestion de estado en `Analisis` ajustada: guardado de estado libre entre estados validos V1 (sin restriccion de secuencia), manteniendo validacion solo de estado invalido
+- `Gestion de oportunidad` agrega confirmacion visual de guardado de estado (`Estado actualizado`) con auto-ocultado para feedback inmediato
 - columna derecha de `Contextual Intelligence` queda filtrada al bloque/run activo (request+response vinculados) y se vacia cuando no hay seleccion activa
 - al lanzar `Entrevista` desde `Analisis`, el drawer de chat se abre automaticamente para continuar conversacion contextual sobre la oportunidad activa
 - se eliminan en V1 las sugerencias predefinidas (`quick starts`) del chat para reducir ruido y mantener interaccion directa por mensaje libre
@@ -333,6 +337,7 @@
 - correccion de trazabilidad CV->MD: API de CV ahora expone `structured_markdown_preview` y `structured_markdown`; UI de perfil prioriza y renderiza ese contenido en vista previa/expandido
 - runtime IA ahora soporta `cv_markdown_extraction_mode` (`heuristic`/`pymupdf4llm`) configurable desde admin
 - carga de CV aplica extraccion Markdown avanzada opcional para PDF y cae a heuristica cuando la dependencia no esta disponible
+- hardening de autenticacion para Safari movil: backend acepta sesion por header `X-Session-Id` como fallback cuando no llega cookie cross-site; frontend persiste token de sesion en `sessionStorage` y lo envia automaticamente
 
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada avanzada de CV a Markdown (parser de layout/PyMuPDF-LlamaIndex) para mejorar fidelidad de jerarquia frente a heuristica V1

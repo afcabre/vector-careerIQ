@@ -31,6 +31,16 @@ class SessionResponse(BaseModel):
     authenticated: bool
     username: str
     expires_at: str
+    session_token: str | None = None
+
+
+def _resolve_cookie_domain(settings: Settings) -> str | None:
+    raw = settings.session_cookie_domain.strip()
+    if not raw:
+        return None
+    if raw.lower() in {"auto", "host", "host-only", "none"}:
+        return None
+    return raw
 
 
 @router.post("/login")
@@ -72,12 +82,15 @@ def login(
 
     session_id, session = create_session(payload.username, settings)
     cookie_samesite = "none" if settings.session_cookie_secure else "lax"
+    cookie_domain = _resolve_cookie_domain(settings)
     response.set_cookie(
         key=settings.session_cookie_name,
         value=session_id,
         httponly=True,
         secure=settings.session_cookie_secure,
         samesite=cookie_samesite,
+        domain=cookie_domain,
+        path="/",
         max_age=settings.session_ttl_minutes * 60,
     )
 
@@ -85,6 +98,7 @@ def login(
         authenticated=True,
         username=session.username,
         expires_at=session.expires_at.astimezone(UTC).isoformat(),
+        session_token=session_id,
     )
 
 
@@ -95,9 +109,19 @@ def logout(
     settings: Settings = Depends(get_settings),
 ) -> dict[str, str]:
     session_id = request.cookies.get(settings.session_cookie_name)
+    if not session_id:
+        session_id = request.headers.get("x-session-id", "").strip() or None
     if session_id:
         destroy_session(session_id, settings)
-    response.delete_cookie(key=settings.session_cookie_name)
+    cookie_samesite = "none" if settings.session_cookie_secure else "lax"
+    cookie_domain = _resolve_cookie_domain(settings)
+    response.delete_cookie(
+        key=settings.session_cookie_name,
+        domain=cookie_domain,
+        path="/",
+        secure=settings.session_cookie_secure,
+        samesite=cookie_samesite,
+    )
     return {"message": "logged out"}
 
 
@@ -109,4 +133,5 @@ def session(
         authenticated=True,
         username=session_data.username,
         expires_at=session_data.expires_at.astimezone(UTC).isoformat(),
+        session_token=None,
     )

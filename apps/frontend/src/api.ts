@@ -2,6 +2,7 @@ export type Session = {
   authenticated: boolean;
   username: string;
   expires_at: string;
+  session_token?: string | null;
 };
 
 export type Person = {
@@ -276,6 +277,26 @@ export type AIRuntimeConfig = {
 };
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
+const SESSION_TOKEN_STORAGE_KEY = "careeriq_session_token";
+
+function getSessionToken(): string {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  return window.sessionStorage.getItem(SESSION_TOKEN_STORAGE_KEY) ?? "";
+}
+
+function setSessionToken(value: string | null | undefined): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const normalized = (value ?? "").trim();
+  if (!normalized) {
+    window.sessionStorage.removeItem(SESSION_TOKEN_STORAGE_KEY);
+    return;
+  }
+  window.sessionStorage.setItem(SESSION_TOKEN_STORAGE_KEY, normalized);
+}
 
 function buildNetworkErrorMessage() {
   const currentOrigin =
@@ -287,7 +308,15 @@ function buildNetworkErrorMessage() {
 
 async function safeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   try {
-    return await fetch(input, init);
+    const headers = new Headers(init?.headers ?? {});
+    const sessionToken = getSessionToken();
+    if (sessionToken && !headers.has("X-Session-Id")) {
+      headers.set("X-Session-Id", sessionToken);
+    }
+    return await fetch(input, {
+      ...init,
+      headers
+    });
   } catch (error) {
     if (error instanceof TypeError) {
       throw new Error(buildNetworkErrorMessage());
@@ -317,7 +346,11 @@ export async function getSession(): Promise<Session> {
     method: "GET",
     credentials: "include"
   });
-  return parseResponse<Session>(response);
+  const payload = await parseResponse<Session>(response);
+  if (payload.session_token) {
+    setSessionToken(payload.session_token);
+  }
+  return payload;
 }
 
 export async function login(username: string, password: string): Promise<Session> {
@@ -327,7 +360,9 @@ export async function login(username: string, password: string): Promise<Session
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password })
   });
-  return parseResponse<Session>(response);
+  const payload = await parseResponse<Session>(response);
+  setSessionToken(payload.session_token);
+  return payload;
 }
 
 export async function logout(): Promise<void> {
@@ -335,6 +370,7 @@ export async function logout(): Promise<void> {
     method: "POST",
     credentials: "include"
   });
+  setSessionToken(null);
   if (!response.ok) {
     throw new Error(`Logout failed: ${response.status}`);
   }

@@ -757,6 +757,13 @@ button:disabled {
   margin: 0;
 }
 
+.successText {
+  color: color-mix(in srgb, var(--success) 80%, #d1fae5);
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
 .chatList {
   display: grid;
   gap: 10px;
@@ -1120,11 +1127,54 @@ button:disabled {
   gap: 8px;
 }
 
+.analysisResultSubTabsWrap {
+  display: grid;
+  gap: 6px;
+}
+
+.analysisSubTabHint {
+  margin: 0;
+  font-size: 0.77rem;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
 .analysisResultSubTabs {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
-  padding-top: 2px;
+  padding: 6px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, var(--accent));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface-card) 92%, #0f172a);
+}
+
+.analysisSubTabButton {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 6px 11px;
+  min-height: 32px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+
+.analysisSubTabButton:hover {
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.analysisSubTabButtonActive {
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--accent) 78%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 .analysisBubbleHeader {
@@ -1453,6 +1503,10 @@ button:disabled {
   gap: 8px;
   cursor: pointer;
   transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+}
+
+.resultBlockCardHidden {
+  display: none;
 }
 
 .resultBlockCard:hover {

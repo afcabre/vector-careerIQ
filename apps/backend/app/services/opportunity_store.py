@@ -236,23 +236,7 @@ def import_text_opportunity(
 
 
 def is_valid_transition(current: str, new_status: str) -> bool:
-    if new_status not in OPPORTUNITY_STATUSES:
-        return False
-    if current == new_status:
-        return True
-    if new_status == "discarded":
-        return True
-    if current == "discarded":
-        return new_status in OPPORTUNITY_STATUSES[:-1]
-
-    order = {status: index for index, status in enumerate(OPPORTUNITY_STATUSES[:-1])}
-    current_index = order.get(current)
-    next_index = order.get(new_status)
-    if current_index is None or next_index is None:
-        return False
-    if next_index <= current_index:
-        return True
-    return next_index == current_index + 1
+    return new_status in OPPORTUNITY_STATUSES
 
 
 def update_opportunity(
