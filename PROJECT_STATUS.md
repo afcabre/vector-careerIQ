@@ -338,6 +338,7 @@
 - runtime IA ahora soporta `cv_markdown_extraction_mode` (`heuristic`/`pymupdf4llm`) configurable desde admin
 - carga de CV aplica extraccion Markdown avanzada opcional para PDF y cae a heuristica cuando la dependencia no esta disponible
 - hardening de autenticacion para Safari movil: backend acepta sesion por header `X-Session-Id` como fallback cuando no llega cookie cross-site; frontend persiste token de sesion en `sessionStorage` y lo envia automaticamente
+- ajuste de marca en header: `CareerIQ` ahora separa `IQ` con acento magenta sobrio para mayor diferenciacion visual
 
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada avanzada de CV a Markdown (parser de layout/PyMuPDF-LlamaIndex) para mejorar fidelidad de jerarquia frente a heuristica V1

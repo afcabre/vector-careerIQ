@@ -1269,7 +1269,7 @@ export default function App() {
       : showProfilePage
         ? "Perfil"
         : showOpportunitiesPage
-          ? "Busqueda de oportunidades"
+          ? "Vacantes"
           : "Análisis";
   const currentPageTitle = showCandidatesPage
     ? "Selecciona un perfil para abrir su contexto."
@@ -3309,7 +3309,10 @@ export default function App() {
     <main className={shellClassName}>
       <section className="panel workspaceTopbar">
         <div className="workspaceBrand">
-          <p className="eyebrow">CareerIQ</p>
+          <p className="eyebrow workspaceBrandWordmark">
+            <span>Career</span>
+            <span className="workspaceBrandIq">IQ</span>
+          </p>
         </div>
         <div className="workspaceCenter">
           {selectedPerson ? (
@@ -3391,7 +3394,7 @@ export default function App() {
                 }
                 type="button"
               >
-                Busqueda
+                Vacantes
               </button>
               <button
                 className={
