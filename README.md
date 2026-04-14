@@ -1,4 +1,4 @@
-#CareerIQ
+# CareerIQ
 
 Base inicial del proyecto SDD para un asistente conversacional orientado a oportunidades laborales.
 
