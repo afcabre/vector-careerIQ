@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `runtime configurable para extraccion Markdown de CV (heuristic/pymupdf4llm) con fallback seguro`
+- checkpoint_actual: `deploy productivo en Railway + hardening auth cross-domain + purga de historial git para .specify/instructions`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, analisis por accion, interview brief, importacion manual, CV activo y capa semantica`
 - ultima_actualizacion: `2026-04-14`
 
@@ -220,6 +220,7 @@
 - flujos streaming ajustados para paridad operativa: lo emitido por `message_delta` coincide con `message_complete` y con contenido persistido en `chat`, `analyze/stream`, `interview/brief/stream` y `prepare/stream`
 - despliegue Railway en `gleaming-achievement` ejecutado con servicios separados `backend`/`frontend` y validaciones de salud/CORS/login
 - runbook público de despliegue agregado en `.specify/memory/10_railway_deploy_public_runbook_2026-04-14.md` (sin secretos)
+- historial git reescrito para purgar `.specify/instructions` del remoto y del historial local; blindaje agregado en `.gitignore`
 - vista `Analisis` ajustada a lectura por oportunidad: cards de oportunidades en columna unica (full-width) y bloque `Resultados + Contextual Intelligence` renderizado inline debajo de la oportunidad seleccionada
 - administracion de prompts ajustada a layout de una columna por flujo (usable en edicion larga), manteniendo grilla maxima de 2 columnas en otras secciones admin
 - CORS ahora configurable por `CORS_ALLOW_ORIGINS` y se habilita `.env.local` para overrides locales; frontend usa `VITE_API_BASE_URL` desde `.env.local`
