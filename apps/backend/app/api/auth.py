@@ -71,12 +71,13 @@ def login(
     clear_failed_attempts(rate_limit_key, settings)
 
     session_id, session = create_session(payload.username, settings)
+    cookie_samesite = "none" if settings.session_cookie_secure else "lax"
     response.set_cookie(
         key=settings.session_cookie_name,
         value=session_id,
         httponly=True,
         secure=settings.session_cookie_secure,
-        samesite="lax",
+        samesite=cookie_samesite,
         max_age=settings.session_ttl_minutes * 60,
     )
 

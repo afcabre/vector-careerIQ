@@ -218,6 +218,8 @@
 - hardening de guardrails implementado: piso no editable, deteccion basica de prompt injection y saneo de salida ante intento de divulgacion de prompt interno
 - pruebas de hardening de guardrails agregadas (`apps/backend/tests/test_guardrails.py`)
 - flujos streaming ajustados para paridad operativa: lo emitido por `message_delta` coincide con `message_complete` y con contenido persistido en `chat`, `analyze/stream`, `interview/brief/stream` y `prepare/stream`
+- despliegue Railway en `gleaming-achievement` ejecutado con servicios separados `backend`/`frontend` y validaciones de salud/CORS/login
+- runbook público de despliegue agregado en `.specify/memory/10_railway_deploy_public_runbook_2026-04-14.md` (sin secretos)
 - vista `Analisis` ajustada a lectura por oportunidad: cards de oportunidades en columna unica (full-width) y bloque `Resultados + Contextual Intelligence` renderizado inline debajo de la oportunidad seleccionada
 - administracion de prompts ajustada a layout de una columna por flujo (usable en edicion larga), manteniendo grilla maxima de 2 columnas en otras secciones admin
 - CORS ahora configurable por `CORS_ALLOW_ORIGINS` y se habilita `.env.local` para overrides locales; frontend usa `VITE_API_BASE_URL` desde `.env.local`
