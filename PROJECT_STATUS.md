@@ -2,9 +2,9 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `entrevista con modo dual guided/adaptive (planner+tools) y trazabilidad request/response por run_id`
+- checkpoint_actual: `fidelidad de visualizacion CV: structured_markdown expuesto por API y priorizado en UI`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, analisis por accion, interview brief, importacion manual, CV activo y capa semantica`
-- ultima_actualizacion: `2026-04-13`
+- ultima_actualizacion: `2026-04-14`
 
 ## Progreso Por Fase
 - `Fase 0`: completada
@@ -327,6 +327,7 @@
 - refinamiento de scroll en `Analisis`: compensacion de header fijo con `scroll-margin-top` para que el titulo de vacante no quede tapado tras cambiar seleccion
 - refinamiento de legibilidad en `Analisis`: incremento de contraste del titulo activo dentro de la oportunidad seleccionada
 - ajuste de jerarquia de acciones en oportunidades guardadas (`Busqueda` y `Analisis`): `Ver mas` (expandir) a la izquierda, y `Ver vacante` + `Copiar URL` agrupados a la derecha
+- correccion de trazabilidad CV->MD: API de CV ahora expone `structured_markdown_preview` y `structured_markdown`; UI de perfil prioriza y renderiza ese contenido en vista previa/expandido
 
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada avanzada de CV a Markdown (parser de layout/PyMuPDF-LlamaIndex) para mejorar fidelidad de jerarquia frente a heuristica V1
@@ -343,8 +344,8 @@
 - riesgo operativo local: entorno de desarrollo modificado para diagnostico (`anyio` downgraded en `.venv`) sin solucion aun para el bloqueo ASGI
 
 ## Siguiente Actividad
-- cerrar commit(s) del bloque `interview_brief` (backend + frontend + docs) y preparar push
-- ejecutar smoke test funcional en UI de `analysis` para validar flujo `generar -> recalcular -> historial -> trazas` en `interview_brief`
+- evaluar mejora de extraccion PDF->Markdown (parser especializado) para reducir perdida de jerarquia semantica
+- definir estrategia de rollout controlado (flag/config) para no romper indexacion actual en CV ya cargados
 
 ## Ajustes Post-UI Confirmados
 - `semantic_evidence` colapsable por defecto en la vista de `analysis` (implementado)

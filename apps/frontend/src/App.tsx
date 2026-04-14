@@ -1290,7 +1290,11 @@ export default function App() {
     hasRoleToken(searchQuery, role)
   ).length;
   const cvPreviewLineLimit = 8;
-  const cvPreviewText = (activeCv?.extracted_text_preview ?? "").trim();
+  const cvPreviewText = (
+    activeCv?.structured_markdown_preview
+    || activeCv?.extracted_text_preview
+    || ""
+  ).trim();
   const cvExpandedText = (activeCvFullText || cvPreviewText).trim();
   const cvPreviewLines = cvPreviewText ? cvPreviewText.split(/\r?\n/) : [];
   const cvPreviewShortText = cvPreviewLines
@@ -2343,7 +2347,7 @@ export default function App() {
       setIsLoadingCvFullText(true);
       try {
         const payload = await getActiveCVText(activeCv.person_id);
-        setActiveCvFullText(payload.extracted_text);
+        setActiveCvFullText((payload.structured_markdown || payload.extracted_text || "").trim());
       } catch (error) {
         const message =
           error instanceof Error
@@ -4250,18 +4254,19 @@ export default function App() {
                 </span>
               </div>
               <article className="chatBubble chatBubbleAssistant cvPreviewSection">
-                <p className="chatRole">Vista previa extraida</p>
-                <p
+                <p className="chatRole">Vista previa estructurada (Markdown)</p>
+                <MarkdownContent
                   className={
                     isCvPreviewExpanded
-                      ? "chatContent cvPreviewText"
-                      : "chatContent cvPreviewText cvPreviewTextCollapsed"
+                      ? "chatContent cvPreviewText resultBlockMarkdown"
+                      : "chatContent cvPreviewText resultBlockMarkdown cvPreviewTextCollapsed"
                   }
-                >
-                  {isCvPreviewExpanded
+                  content={
+                    isCvPreviewExpanded
                     ? cvExpandedText || "No se obtuvo texto util del archivo."
-                    : cvPreviewShortText || "No se obtuvo texto util del archivo."}
-                </p>
+                    : cvPreviewShortText || "No se obtuvo texto util del archivo."
+                  }
+                />
                 {isCvPreviewExpanded && isLoadingCvFullText ? (
                   <p className="metaText">Cargando texto completo...</p>
                 ) : null}

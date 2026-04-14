@@ -193,6 +193,7 @@ export type ActiveCV = {
   text_length: number;
   text_truncated: boolean;
   extracted_text_preview: string;
+  structured_markdown_preview: string;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -204,6 +205,7 @@ export type ActiveCVText = {
   text_length: number;
   text_truncated: boolean;
   extracted_text: string;
+  structured_markdown: string;
 };
 
 export type PromptConfig = {

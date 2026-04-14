@@ -28,6 +28,7 @@ class CVResponse(BaseModel):
     text_length: int
     text_truncated: bool
     extracted_text_preview: str
+    structured_markdown_preview: str
     is_active: bool
     created_at: str
     updated_at: str
@@ -39,6 +40,7 @@ class CVTextResponse(BaseModel):
     text_length: int
     text_truncated: bool
     extracted_text: str
+    structured_markdown: str
 
 
 def _require_person(person_id: str) -> None:
@@ -67,6 +69,7 @@ def _to_response(record: dict) -> CVResponse:
         text_length=int(record.get("text_length", 0)),
         text_truncated=bool(record.get("text_truncated", False)),
         extracted_text_preview=str(record.get("extracted_text", ""))[:PREVIEW_CHARS],
+        structured_markdown_preview=str(record.get("structured_markdown", ""))[:PREVIEW_CHARS],
         is_active=bool(record.get("is_active", False)),
         created_at=str(record.get("created_at", "")),
         updated_at=str(record.get("updated_at", "")),
@@ -134,4 +137,5 @@ def get_active_text(
         text_length=int(record.get("text_length", 0)),
         text_truncated=bool(record.get("text_truncated", False)),
         extracted_text=str(record.get("extracted_text", "")),
+        structured_markdown=str(record.get("structured_markdown", "")),
     )

@@ -29,6 +29,7 @@ class CVRecord(TypedDict):
     source_filename: str
     mime_type: str
     extracted_text: str
+    structured_markdown: str
     text_length: int
     text_truncated: bool
     extraction_status: str
@@ -178,6 +179,7 @@ def _normalize(record: dict | None) -> CVRecord:
         "source_filename": str(source.get("source_filename", "")),
         "mime_type": str(source.get("mime_type", "")),
         "extracted_text": str(source.get("extracted_text", "")),
+        "structured_markdown": str(source.get("structured_markdown", "")),
         "text_length": int(source.get("text_length", 0)),
         "text_truncated": bool(source.get("text_truncated", False)),
         "extraction_status": str(source.get("extraction_status", "unknown")),
@@ -256,6 +258,7 @@ def upsert_active_cv(
         "source_filename": source_filename,
         "mime_type": mime_type,
         "extracted_text": extracted_text,
+        "structured_markdown": structured_markdown,
         "text_length": original_length,
         "text_truncated": text_truncated,
         "extraction_status": extraction_status,
