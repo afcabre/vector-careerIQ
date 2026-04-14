@@ -2102,16 +2102,18 @@ button:disabled {
   }
 
   .candidateCards {
-    display: flex;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    overscroll-behavior-x: contain;
-    -webkit-overflow-scrolling: touch;
+    display: grid;
+    grid-template-columns: 1fr;
+    overflow: visible;
+    scroll-snap-type: none;
+    overscroll-behavior-x: auto;
+    -webkit-overflow-scrolling: auto;
   }
 
   .candidateCards .card {
-    flex: 0 0 min(320px, 84vw);
-    scroll-snap-align: start;
+    flex: initial;
+    width: 100%;
+    scroll-snap-align: none;
   }
 }
 
