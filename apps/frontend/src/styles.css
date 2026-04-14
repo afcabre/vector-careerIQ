@@ -363,22 +363,31 @@ select:focus-visible {
 }
 
 .cards {
-  display: flex;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.candidateCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: var(--space-3);
-  overflow-x: auto;
   padding: 4px 2px 10px;
-  scroll-snap-type: x mandatory;
 }
 
 .card {
-  flex: 0 0 min(340px, 85vw);
-  scroll-snap-align: start;
+  width: 100%;
   border: 1px solid color-mix(in srgb, var(--border-subtle) 80%, var(--accent));
   border-left: 4px solid var(--accent);
   border-radius: var(--radius-md);
   padding: var(--space-3);
   background: color-mix(in srgb, var(--surface-card) 90%, #0f172a);
   min-height: 182px;
+  min-width: 0;
+}
+
+.candidateCards .card {
+  flex: 0 0 auto;
 }
 
 .candidateSelectionCard {
@@ -2036,6 +2045,19 @@ button:disabled {
 
   .analysisRailRight {
     position: static;
+  }
+
+  .candidateCards {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .candidateCards .card {
+    flex: 0 0 min(320px, 84vw);
+    scroll-snap-align: start;
   }
 }
 

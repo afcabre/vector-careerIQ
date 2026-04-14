@@ -3444,9 +3444,11 @@ export default function App() {
         </div>
       </section>
 
-      <section className={showProfilePage ? "hero heroCompact" : "hero"}>
+      <section className={showProfilePage || showCandidatesPage ? "hero heroCompact" : "hero"}>
         <p className="eyebrow">{currentPageLabel}</p>
-        <h1 className={showProfilePage ? "heroTitleCompact" : undefined}>{currentPageTitle}</h1>
+        <h1 className={showProfilePage || showCandidatesPage ? "heroTitleCompact" : undefined}>
+          {currentPageTitle}
+        </h1>
         {currentPageLede ? <p className="lede">{currentPageLede}</p> : null}
       </section>
 
@@ -3471,7 +3473,7 @@ export default function App() {
           </div>
         </header>
 
-        <div className="cards">
+        <div className="cards candidateCards">
           {people.map((person) => (
             <article
               className={
