@@ -266,6 +266,7 @@ export type AIRuntimeConfig = {
   top_k_semantic_analysis: number;
   top_k_semantic_interview: number;
   cv_chunking_strategy: "token_window" | "semantic_sections";
+  cv_markdown_extraction_mode: "heuristic" | "pymupdf4llm";
   interview_research_mode: "guided" | "adaptive";
   interview_research_max_steps: number;
   trace_truncation_enabled: boolean;
@@ -408,6 +409,7 @@ export async function updateAiRuntimeConfig(payload: {
   top_k_semantic_analysis?: number;
   top_k_semantic_interview?: number;
   cv_chunking_strategy?: "token_window" | "semantic_sections";
+  cv_markdown_extraction_mode?: "heuristic" | "pymupdf4llm";
   interview_research_mode?: "guided" | "adaptive";
   interview_research_max_steps?: number;
   trace_truncation_enabled?: boolean;

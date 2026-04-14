@@ -19,8 +19,23 @@ try:
 except ImportError:  # pragma: no cover - optional dependency fallback.
     PdfReader = None  # type: ignore[assignment]
 
+try:
+    import fitz  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover - optional dependency fallback.
+    fitz = None  # type: ignore[assignment]
+
+try:
+    import pymupdf4llm  # type: ignore[import-not-found]
+except ImportError:  # pragma: no cover - optional dependency fallback.
+    pymupdf4llm = None  # type: ignore[assignment]
+
 
 MAX_TEXT_CHARS = 200_000
+CV_MARKDOWN_MODE_HEURISTIC = "heuristic"
+CV_MARKDOWN_MODE_PYMUPDF4LLM = "pymupdf4llm"
+EXTRACTION_FORMAT_PLAIN_TEXT = "plain_text"
+EXTRACTION_FORMAT_MD_HEURISTIC = "markdown_heuristic"
+EXTRACTION_FORMAT_MD_PYMUPDF4LLM = "markdown_pymupdf4llm"
 
 
 class CVRecord(TypedDict):
@@ -106,6 +121,30 @@ def _extract_text(source_filename: str, mime_type: str, payload: bytes) -> tuple
     return text, "ok"
 
 
+def _extract_pdf_markdown_with_pymupdf4llm(payload: bytes) -> tuple[str, str]:
+    if pymupdf4llm is None or fitz is None:
+        return "", "parser_missing"
+    doc = None
+    try:
+        doc = fitz.open(stream=payload, filetype="pdf")
+        markdown = pymupdf4llm.to_markdown(doc)
+        if isinstance(markdown, list):
+            markdown_text = "\n\n".join(str(item) for item in markdown if str(item).strip())
+        else:
+            markdown_text = str(markdown or "")
+        markdown_text = markdown_text.strip()
+        if not markdown_text:
+            return "", "empty_markdown"
+        if len(markdown_text) > MAX_TEXT_CHARS:
+            return markdown_text[:MAX_TEXT_CHARS], "ok_truncated"
+        return markdown_text, "ok"
+    except Exception:
+        return "", "parse_error"
+    finally:
+        if doc is not None:
+            doc.close()
+
+
 def _looks_like_heading(line: str) -> bool:
     stripped = line.strip(" :.-").strip()
     if not stripped:
@@ -141,7 +180,7 @@ def _looks_like_heading(line: str) -> bool:
     return uppercase_ratio >= 0.7
 
 
-def _build_structured_markdown(raw_text: str) -> str:
+def _build_structured_markdown_heuristic(raw_text: str) -> str:
     text = raw_text.strip()
     if not text:
         return ""
@@ -171,6 +210,25 @@ def _build_structured_markdown(raw_text: str) -> str:
     return markdown
 
 
+def _build_structured_markdown(
+    *,
+    raw_text: str,
+    payload: bytes,
+    is_pdf: bool,
+    markdown_mode: str,
+) -> tuple[str, str, str]:
+    mode = str(markdown_mode or CV_MARKDOWN_MODE_HEURISTIC).strip().lower()
+    if is_pdf and mode == CV_MARKDOWN_MODE_PYMUPDF4LLM:
+        markdown, status = _extract_pdf_markdown_with_pymupdf4llm(payload)
+        if markdown:
+            return markdown, EXTRACTION_FORMAT_MD_PYMUPDF4LLM, status
+        heuristic = _build_structured_markdown_heuristic(raw_text)
+        return heuristic, EXTRACTION_FORMAT_MD_HEURISTIC, f"fallback_heuristic:{status}"
+
+    heuristic = _build_structured_markdown_heuristic(raw_text)
+    return heuristic, EXTRACTION_FORMAT_MD_HEURISTIC, "ok"
+
+
 def _normalize(record: dict | None) -> CVRecord:
     source = record or {}
     return {
@@ -183,7 +241,7 @@ def _normalize(record: dict | None) -> CVRecord:
         "text_length": int(source.get("text_length", 0)),
         "text_truncated": bool(source.get("text_truncated", False)),
         "extraction_status": str(source.get("extraction_status", "unknown")),
-        "extraction_format": str(source.get("extraction_format", "plain_text")),
+        "extraction_format": str(source.get("extraction_format", EXTRACTION_FORMAT_PLAIN_TEXT)),
         "vector_index_status": str(source.get("vector_index_status", "not_indexed")),
         "vector_chunks_indexed": int(source.get("vector_chunks_indexed", 0)),
         "vector_last_indexed_at": str(source.get("vector_last_indexed_at", "")),
@@ -245,12 +303,24 @@ def upsert_active_cv(
     now = _now_iso()
     _deactivate_current_cv(person_id, now)
 
+    runtime_config = get_ai_runtime_config()
     extracted_text, extraction_status = _extract_text(source_filename, mime_type, payload)
     original_length = len(extracted_text)
     text_truncated = original_length > MAX_TEXT_CHARS
     if text_truncated:
         extracted_text = extracted_text[:MAX_TEXT_CHARS]
-    structured_markdown = _build_structured_markdown(extracted_text)
+
+    filename = source_filename.lower()
+    content_type = (mime_type or "").lower()
+    is_pdf = filename.endswith(".pdf") or content_type == "application/pdf"
+    structured_markdown, extraction_format, markdown_status = _build_structured_markdown(
+        raw_text=extracted_text,
+        payload=payload,
+        is_pdf=is_pdf,
+        markdown_mode=str(runtime_config.get("cv_markdown_extraction_mode", CV_MARKDOWN_MODE_HEURISTIC)),
+    )
+    if markdown_status != "ok":
+        extraction_status = f"{extraction_status}|md:{markdown_status}"
 
     record: CVRecord = {
         "cv_id": _new_id(),
@@ -262,7 +332,7 @@ def upsert_active_cv(
         "text_length": original_length,
         "text_truncated": text_truncated,
         "extraction_status": extraction_status,
-        "extraction_format": "plain_text",
+        "extraction_format": extraction_format,
         "vector_index_status": "pending",
         "vector_chunks_indexed": 0,
         "vector_last_indexed_at": "",
@@ -276,7 +346,6 @@ def upsert_active_cv(
     saved = _save(record)
 
     settings = get_settings()
-    runtime_config = get_ai_runtime_config()
     vector_status, chunks_indexed, applied_strategy, chunking_version, source_format = (
         upsert_cv_vectors(
             {

@@ -190,7 +190,7 @@ Mapa rapido endpoint -> flow:
 - `GET /api/admin/search-providers`: listar habilitacion por proveedor de busqueda
 - `PATCH /api/admin/search-providers/{provider_key}`: habilitar/deshabilitar proveedor (`adzuna`, `remotive`, `tavily`)
 - `GET /api/admin/ai-runtime-config`: ver parametros globales de ejecucion IA (incluye `top_k` y modo de investigacion de entrevista)
-- `PATCH /api/admin/ai-runtime-config`: actualizar `top_k_semantic_analysis`, `top_k_semantic_interview`, `cv_chunking_strategy`, `interview_research_mode`, `interview_research_max_steps`
+- `PATCH /api/admin/ai-runtime-config`: actualizar `top_k_semantic_analysis`, `top_k_semantic_interview`, `cv_chunking_strategy`, `cv_markdown_extraction_mode`, `interview_research_mode`, `interview_research_max_steps`
 - `POST /api/persons/{person_id}/search`: `search_jobs_tavily`
 - senales culturales en `analyze_cultural_fit`: `search_culture_tavily`
 - contexto pre-entrevista en `interview_brief`: `search_interview_tavily`
@@ -257,11 +257,13 @@ En `Administracion global` -> `Administracion de retrieval semantico (global V1)
 - `top_k semantico para analisis/preparacion`
 - `top_k semantico para entrevista`
 - `estrategia de chunking para CV` (`semantic_sections` / `token_window`)
+- `estrategia de extraccion markdown de CV` (`heuristic` / `pymupdf4llm`)
 - `Modo de investigacion de entrevista`:
   - `guided` (pasos fijos)
   - `adaptive` (plan dinamico con LLM + tools)
 - `max steps de investigacion entrevista` (`3` a `8`)
-- nota operativa: cambios de chunking aplican en nuevas indexaciones de CV
+- nota operativa: cambios de chunking y extraccion markdown aplican en nuevas indexaciones de CV
+- `pymupdf4llm` requiere dependencias opcionales en backend (`pymupdf` + `pymupdf4llm`); si faltan, el sistema cae a `heuristic` de forma segura
 
 ### 5) Admin UI: Prompts relevantes para entrevista
 Revisar/ajustar:

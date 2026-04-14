@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `fidelidad de visualizacion CV: structured_markdown expuesto por API y priorizado en UI`
+- checkpoint_actual: `runtime configurable para extraccion Markdown de CV (heuristic/pymupdf4llm) con fallback seguro`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, analisis por accion, interview brief, importacion manual, CV activo y capa semantica`
 - ultima_actualizacion: `2026-04-14`
 
@@ -328,6 +328,8 @@
 - refinamiento de legibilidad en `Analisis`: incremento de contraste del titulo activo dentro de la oportunidad seleccionada
 - ajuste de jerarquia de acciones en oportunidades guardadas (`Busqueda` y `Analisis`): `Ver mas` (expandir) a la izquierda, y `Ver vacante` + `Copiar URL` agrupados a la derecha
 - correccion de trazabilidad CV->MD: API de CV ahora expone `structured_markdown_preview` y `structured_markdown`; UI de perfil prioriza y renderiza ese contenido en vista previa/expandido
+- runtime IA ahora soporta `cv_markdown_extraction_mode` (`heuristic`/`pymupdf4llm`) configurable desde admin
+- carga de CV aplica extraccion Markdown avanzada opcional para PDF y cae a heuristica cuando la dependencia no esta disponible
 
 ## Mejoras Identificadas (Diferidas)
 - extraccion estructurada avanzada de CV a Markdown (parser de layout/PyMuPDF-LlamaIndex) para mejorar fidelidad de jerarquia frente a heuristica V1

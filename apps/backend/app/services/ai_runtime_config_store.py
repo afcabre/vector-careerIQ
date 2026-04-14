@@ -18,6 +18,13 @@ CV_CHUNKING_STRATEGIES = {
     CV_CHUNKING_STRATEGY_SEMANTIC_SECTIONS,
 }
 DEFAULT_CV_CHUNKING_STRATEGY = CV_CHUNKING_STRATEGY_SEMANTIC_SECTIONS
+CV_MARKDOWN_EXTRACTION_MODE_HEURISTIC = "heuristic"
+CV_MARKDOWN_EXTRACTION_MODE_PYMUPDF4LLM = "pymupdf4llm"
+CV_MARKDOWN_EXTRACTION_MODES = {
+    CV_MARKDOWN_EXTRACTION_MODE_HEURISTIC,
+    CV_MARKDOWN_EXTRACTION_MODE_PYMUPDF4LLM,
+}
+DEFAULT_CV_MARKDOWN_EXTRACTION_MODE = CV_MARKDOWN_EXTRACTION_MODE_HEURISTIC
 INTERVIEW_RESEARCH_MODE_GUIDED = "guided"
 INTERVIEW_RESEARCH_MODE_ADAPTIVE = "adaptive"
 INTERVIEW_RESEARCH_MODES = {
@@ -35,6 +42,7 @@ class AIRuntimeConfigRecord(TypedDict):
     top_k_semantic_analysis: int
     top_k_semantic_interview: int
     cv_chunking_strategy: str
+    cv_markdown_extraction_mode: str
     interview_research_mode: str
     interview_research_max_steps: int
     trace_truncation_enabled: bool
@@ -63,6 +71,7 @@ def _default_config() -> AIRuntimeConfigRecord:
         top_k_semantic_analysis=DEFAULT_TOP_K_SEMANTIC_ANALYSIS,
         top_k_semantic_interview=DEFAULT_TOP_K_SEMANTIC_INTERVIEW,
         cv_chunking_strategy=DEFAULT_CV_CHUNKING_STRATEGY,
+        cv_markdown_extraction_mode=DEFAULT_CV_MARKDOWN_EXTRACTION_MODE,
         interview_research_mode=DEFAULT_INTERVIEW_RESEARCH_MODE,
         interview_research_max_steps=DEFAULT_INTERVIEW_RESEARCH_MAX_STEPS,
         trace_truncation_enabled=True,
@@ -95,6 +104,14 @@ def _normalize_firestore_record(payload: dict[str, Any] | None) -> AIRuntimeConf
         if raw_chunking_strategy in CV_CHUNKING_STRATEGIES
         else base["cv_chunking_strategy"]
     )
+    raw_md_mode = str(
+        source.get("cv_markdown_extraction_mode", base["cv_markdown_extraction_mode"])
+    ).strip().lower()
+    normalized_md_mode = (
+        raw_md_mode
+        if raw_md_mode in CV_MARKDOWN_EXTRACTION_MODES
+        else base["cv_markdown_extraction_mode"]
+    )
     raw_mode = str(
         source.get("interview_research_mode", base["interview_research_mode"])
     ).strip().lower()
@@ -126,6 +143,7 @@ def _normalize_firestore_record(payload: dict[str, Any] | None) -> AIRuntimeConf
             base["top_k_semantic_interview"],
         ),
         cv_chunking_strategy=normalized_chunking_strategy,
+        cv_markdown_extraction_mode=normalized_md_mode,
         interview_research_mode=normalized_mode,
         interview_research_max_steps=max_steps,
         trace_truncation_enabled=bool(
@@ -210,11 +228,20 @@ def _validate_cv_chunking_strategy(value: str) -> str:
     return normalized
 
 
+def _validate_cv_markdown_extraction_mode(value: str) -> str:
+    normalized = str(value).strip().lower()
+    if normalized not in CV_MARKDOWN_EXTRACTION_MODES:
+        allowed = ", ".join(sorted(CV_MARKDOWN_EXTRACTION_MODES))
+        raise ValueError(f"cv_markdown_extraction_mode must be one of: {allowed}")
+    return normalized
+
+
 def update_ai_runtime_config(
     *,
     top_k_semantic_analysis: int | None = None,
     top_k_semantic_interview: int | None = None,
     cv_chunking_strategy: str | None = None,
+    cv_markdown_extraction_mode: str | None = None,
     interview_research_mode: str | None = None,
     interview_research_max_steps: int | None = None,
     trace_truncation_enabled: bool | None = None,
@@ -235,6 +262,10 @@ def update_ai_runtime_config(
     if cv_chunking_strategy is not None:
         current["cv_chunking_strategy"] = _validate_cv_chunking_strategy(
             cv_chunking_strategy
+        )
+    if cv_markdown_extraction_mode is not None:
+        current["cv_markdown_extraction_mode"] = _validate_cv_markdown_extraction_mode(
+            cv_markdown_extraction_mode
         )
     if interview_research_mode is not None:
         current["interview_research_mode"] = _validate_interview_mode(

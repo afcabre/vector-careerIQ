@@ -967,6 +967,9 @@ export default function App() {
   const [aiRuntimeCvChunkingStrategyInput, setAiRuntimeCvChunkingStrategyInput] = useState<
     "token_window" | "semantic_sections"
   >("semantic_sections");
+  const [aiRuntimeCvMarkdownExtractionModeInput, setAiRuntimeCvMarkdownExtractionModeInput] = useState<
+    "heuristic" | "pymupdf4llm"
+  >("heuristic");
   const [aiRuntimeInterviewResearchModeInput, setAiRuntimeInterviewResearchModeInput] = useState<
     "guided" | "adaptive"
   >("guided");
@@ -1183,6 +1186,7 @@ export default function App() {
         setAiRuntimeTopKAnalysisInput("");
         setAiRuntimeTopKInterviewInput("");
         setAiRuntimeCvChunkingStrategyInput("semantic_sections");
+        setAiRuntimeCvMarkdownExtractionModeInput("heuristic");
         setAiRuntimeInterviewResearchModeInput("guided");
         setAiRuntimeInterviewMaxStepsInput("");
         setSearchProviderConfigs([]);
@@ -1209,6 +1213,7 @@ export default function App() {
         setAiRuntimeTopKAnalysisInput(String(runtimeConfig.top_k_semantic_analysis));
         setAiRuntimeTopKInterviewInput(String(runtimeConfig.top_k_semantic_interview));
         setAiRuntimeCvChunkingStrategyInput(runtimeConfig.cv_chunking_strategy);
+        setAiRuntimeCvMarkdownExtractionModeInput(runtimeConfig.cv_markdown_extraction_mode);
         setAiRuntimeInterviewResearchModeInput(runtimeConfig.interview_research_mode);
         setAiRuntimeInterviewMaxStepsInput(String(runtimeConfig.interview_research_max_steps));
         setAiRuntimeTraceTruncationEnabled(runtimeConfig.trace_truncation_enabled);
@@ -2104,6 +2109,13 @@ export default function App() {
       return;
     }
     if (
+      aiRuntimeCvMarkdownExtractionModeInput !== "heuristic"
+      && aiRuntimeCvMarkdownExtractionModeInput !== "pymupdf4llm"
+    ) {
+      setErrorMessage("Modo de extraccion Markdown de CV invalido.");
+      return;
+    }
+    if (
       aiRuntimeInterviewResearchModeInput !== "guided"
       && aiRuntimeInterviewResearchModeInput !== "adaptive"
     ) {
@@ -2118,6 +2130,7 @@ export default function App() {
         top_k_semantic_analysis: parsedAnalysis,
         top_k_semantic_interview: parsedInterview,
         cv_chunking_strategy: aiRuntimeCvChunkingStrategyInput,
+        cv_markdown_extraction_mode: aiRuntimeCvMarkdownExtractionModeInput,
         interview_research_mode: aiRuntimeInterviewResearchModeInput,
         interview_research_max_steps: parsedInterviewSteps,
         trace_truncation_enabled: aiRuntimeTraceTruncationEnabled,
@@ -2126,6 +2139,7 @@ export default function App() {
       setAiRuntimeTopKAnalysisInput(String(updated.top_k_semantic_analysis));
       setAiRuntimeTopKInterviewInput(String(updated.top_k_semantic_interview));
       setAiRuntimeCvChunkingStrategyInput(updated.cv_chunking_strategy);
+      setAiRuntimeCvMarkdownExtractionModeInput(updated.cv_markdown_extraction_mode);
       setAiRuntimeInterviewResearchModeInput(updated.interview_research_mode);
       setAiRuntimeInterviewMaxStepsInput(String(updated.interview_research_max_steps));
       setAiRuntimeTraceTruncationEnabled(updated.trace_truncation_enabled);
@@ -3678,6 +3692,24 @@ export default function App() {
                 </label>
                 <p className="metaText">
                   Se aplica en nuevas indexaciones de CV. Para CV ya cargados, requiere recarga/reindex.
+                </p>
+                <label className="field">
+                  Estrategia de extraccion Markdown de CV
+                  <select
+                    disabled={isSavingAiRuntimeConfig}
+                    onChange={(event) =>
+                      setAiRuntimeCvMarkdownExtractionModeInput(
+                        event.target.value as "heuristic" | "pymupdf4llm"
+                      )
+                    }
+                    value={aiRuntimeCvMarkdownExtractionModeInput}
+                  >
+                    <option value="heuristic">heuristic (actual, estable)</option>
+                    <option value="pymupdf4llm">pymupdf4llm (mejor jerarquia PDF)</option>
+                  </select>
+                </label>
+                <p className="metaText">
+                  Solo afecta nuevas cargas de CV. Si falta dependencia, cae a heuristic con fallback seguro.
                 </p>
                 <label className="field">
                   Modo de investigacion de entrevista

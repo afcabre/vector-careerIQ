@@ -6,6 +6,7 @@ from app.services.ai_runtime_config_store import (
     AI_RUNTIME_TOP_K_MAX,
     AI_RUNTIME_TOP_K_MIN,
     CV_CHUNKING_STRATEGIES,
+    CV_MARKDOWN_EXTRACTION_MODES,
     INTERVIEW_RESEARCH_MAX_STEPS_MAX,
     INTERVIEW_RESEARCH_MAX_STEPS_MIN,
     get_ai_runtime_config,
@@ -21,6 +22,7 @@ class AIRuntimeConfigResponse(BaseModel):
     top_k_semantic_analysis: int
     top_k_semantic_interview: int
     cv_chunking_strategy: str
+    cv_markdown_extraction_mode: str
     interview_research_mode: str
     interview_research_max_steps: int
     trace_truncation_enabled: bool
@@ -41,6 +43,7 @@ class UpdateAIRuntimeConfigRequest(BaseModel):
         le=AI_RUNTIME_TOP_K_MAX,
     )
     cv_chunking_strategy: str | None = Field(default=None)
+    cv_markdown_extraction_mode: str | None = Field(default=None)
     interview_research_mode: str | None = Field(default=None)
     interview_research_max_steps: int | None = Field(
         default=None,
@@ -66,6 +69,7 @@ def patch_config(
         payload.top_k_semantic_analysis is None
         and payload.top_k_semantic_interview is None
         and payload.cv_chunking_strategy is None
+        and payload.cv_markdown_extraction_mode is None
         and payload.interview_research_mode is None
         and payload.interview_research_max_steps is None
         and payload.trace_truncation_enabled is None
@@ -80,10 +84,16 @@ def patch_config(
             if candidate not in CV_CHUNKING_STRATEGIES:
                 allowed = ", ".join(sorted(CV_CHUNKING_STRATEGIES))
                 raise ValueError(f"cv_chunking_strategy must be one of: {allowed}")
+        if payload.cv_markdown_extraction_mode is not None:
+            candidate = payload.cv_markdown_extraction_mode.strip().lower()
+            if candidate not in CV_MARKDOWN_EXTRACTION_MODES:
+                allowed = ", ".join(sorted(CV_MARKDOWN_EXTRACTION_MODES))
+                raise ValueError(f"cv_markdown_extraction_mode must be one of: {allowed}")
         updated = update_ai_runtime_config(
             top_k_semantic_analysis=payload.top_k_semantic_analysis,
             top_k_semantic_interview=payload.top_k_semantic_interview,
             cv_chunking_strategy=payload.cv_chunking_strategy,
+            cv_markdown_extraction_mode=payload.cv_markdown_extraction_mode,
             interview_research_mode=payload.interview_research_mode,
             interview_research_max_steps=payload.interview_research_max_steps,
             trace_truncation_enabled=payload.trace_truncation_enabled,
