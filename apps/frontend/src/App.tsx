@@ -1008,7 +1008,7 @@ export default function App() {
   const [searchWarnings, setSearchWarnings] = useState<string[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [opportunityDiscoveryMode, setOpportunityDiscoveryMode] = useState<"search" | "manual">(
-    "search"
+    "manual"
   );
   const [manualUrl, setManualUrl] = useState("");
   const [manualUrlTitle, setManualUrlTitle] = useState("");
@@ -1315,12 +1315,6 @@ export default function App() {
   useEffect(() => {
     setIsPersonContextMenuOpen(false);
   }, [currentPath, selectedPersonId]);
-
-  useEffect(() => {
-    if (showCandidatesPage && people.length === 0) {
-      setIsCreateProfileFormOpen(true);
-    }
-  }, [showCandidatesPage, people.length]);
 
   useEffect(() => {
     setActiveCvFullText("");
@@ -4464,19 +4458,6 @@ export default function App() {
         <div className="opportunityModeTabs" role="tablist" aria-label="Modo de descubrimiento">
           <button
             className={
-              opportunityDiscoveryMode === "search"
-                ? "opportunityModeTab opportunityModeTabActive"
-                : "opportunityModeTab"
-            }
-            aria-selected={opportunityDiscoveryMode === "search"}
-            onClick={() => setOpportunityDiscoveryMode("search")}
-            role="tab"
-            type="button"
-          >
-            Búsqueda
-          </button>
-          <button
-            className={
               opportunityDiscoveryMode === "manual"
                 ? "opportunityModeTab opportunityModeTabActive"
                 : "opportunityModeTab"
@@ -4487,6 +4468,19 @@ export default function App() {
             type="button"
           >
             Carga manual
+          </button>
+          <button
+            className={
+              opportunityDiscoveryMode === "search"
+                ? "opportunityModeTab opportunityModeTabActive"
+                : "opportunityModeTab"
+            }
+            aria-selected={opportunityDiscoveryMode === "search"}
+            onClick={() => setOpportunityDiscoveryMode("search")}
+            role="tab"
+            type="button"
+          >
+            Búsqueda
           </button>
         </div>
         {opportunityDiscoveryMode === "search" ? (
@@ -4972,12 +4966,12 @@ export default function App() {
                 <>
                   <article className="manualCard analysisResultsPanel">
                     <h3 className="subheading subheadingCompact">Resultados</h3>
-                    <div className="analysisResultTabs">
+                    <div className="opportunityModeTabs opportunityModeTabsCompact">
                       <button
                         className={
                           resultsPanelTab === "analysis"
-                            ? "workspaceTabButton workspaceTabButtonActive"
-                            : "workspaceTabButton"
+                            ? "opportunityModeTab opportunityModeTabActive"
+                            : "opportunityModeTab"
                         }
                         onClick={() => handleSwitchResultsTab("analysis")}
                         type="button"
@@ -4987,8 +4981,8 @@ export default function App() {
                       <button
                         className={
                           resultsPanelTab === "artifacts"
-                            ? "workspaceTabButton workspaceTabButtonActive"
-                            : "workspaceTabButton"
+                            ? "opportunityModeTab opportunityModeTabActive"
+                            : "opportunityModeTab"
                         }
                         onClick={() => handleSwitchResultsTab("artifacts")}
                         type="button"
@@ -5003,7 +4997,7 @@ export default function App() {
                           <p className="analysisSubTabHint">Bloques de análisis</p>
                           <div
                             aria-label="Bloques de análisis"
-                            className="analysisResultSubTabs"
+                            className="opportunityModeTabs opportunityModeTabsCompact opportunityModeTabsWrap"
                             role="tablist"
                           >
                             {ANALYSIS_MENU_BLOCKS.map((item) => (
@@ -5011,8 +5005,8 @@ export default function App() {
                                 aria-selected={selectedResultBlockId === item.id}
                                 className={
                                   selectedResultBlockId === item.id
-                                    ? "analysisSubTabButton analysisSubTabButtonActive"
-                                    : "analysisSubTabButton"
+                                    ? "opportunityModeTab opportunityModeTabActive"
+                                    : "opportunityModeTab"
                                 }
                                 key={item.id}
                                 onClick={() => handleSelectResultBlock(item.id)}
@@ -5514,7 +5508,7 @@ export default function App() {
                           <p className="analysisSubTabHint">Bloques de postulación</p>
                           <div
                             aria-label="Bloques de postulación"
-                            className="analysisResultSubTabs"
+                            className="opportunityModeTabs opportunityModeTabsCompact opportunityModeTabsWrap"
                             role="tablist"
                           >
                             {POSTULATION_MENU_BLOCKS.map((item) => (
@@ -5522,8 +5516,8 @@ export default function App() {
                                 aria-selected={selectedResultBlockId === item.id}
                                 className={
                                   selectedResultBlockId === item.id
-                                    ? "analysisSubTabButton analysisSubTabButtonActive"
-                                    : "analysisSubTabButton"
+                                    ? "opportunityModeTab opportunityModeTabActive"
+                                    : "opportunityModeTab"
                                 }
                                 key={item.id}
                                 onClick={() => handleSelectResultBlock(item.id)}
