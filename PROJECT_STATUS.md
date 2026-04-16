@@ -4,7 +4,7 @@
 - fase_actual: `Implementacion`
 - checkpoint_actual: `deploy productivo en Railway + hardening auth cross-domain + purga de historial git para .specify/instructions`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, analisis por accion, interview brief, importacion manual, CV activo y capa semantica`
-- ultima_actualizacion: `2026-04-14`
+- ultima_actualizacion: `2026-04-15`
 
 ## Progreso Por Fase
 - `Fase 0`: completada
@@ -20,6 +20,8 @@
 - `.specify/01.Constitucion.md`
 - `.specify/02.Spec.md`
 - `.specify/03.Arquitectura-y-Plan.md`
+- `caso_de_uso.md`
+- `cumplimiento_ejercicio.md`
 
 ## Estado Tecnico
 - scaffold base existente en `apps/frontend` y `apps/backend`
@@ -338,10 +340,12 @@
 - runtime IA ahora soporta `cv_markdown_extraction_mode` (`heuristic`/`pymupdf4llm`) configurable desde admin
 - carga de CV aplica extraccion Markdown avanzada opcional para PDF y cae a heuristica cuando la dependencia no esta disponible
 - hardening de autenticacion para Safari movil: backend acepta sesion por header `X-Session-Id` como fallback cuando no llega cookie cross-site; frontend persiste token de sesion en `sessionStorage` y lo envia automaticamente
+- documento raiz `caso_de_uso.md` generado y refinado como sintesis formal del caso de uso, con enfasis en entrevista, parametrizacion operativa y Tavily como proveedor activo actual
+- caso de uso refinado con limitacion operativa de captura automatica de vacantes en portales cerrados y recomendacion vigente de carga manual como via mas confiable
+- matriz de cumplimiento del ejercicio separada a `cumplimiento_ejercicio.md` para mantener `caso_de_uso.md` centrado en el caso de uso
 - ajuste de marca en header: `CareerIQ` ahora separa `IQ` con acento magenta sobrio para mayor diferenciacion visual
 
 ## Mejoras Identificadas (Diferidas)
-- extraccion estructurada avanzada de CV a Markdown (parser de layout/PyMuPDF-LlamaIndex) para mejorar fidelidad de jerarquia frente a heuristica V1
 - vector `profile_summary` por persona (`type=profile_summary`) para match ejecutivo de alto nivel
 - indicador radial de match porcentual en cards de oportunidad, condicionado a implementacion de scoring numerico formal
 - `Profile diff` por vacante para evidenciar brechas del perfil del candidato frente a requisitos de la oportunidad
@@ -355,7 +359,6 @@
 - riesgo operativo local: entorno de desarrollo modificado para diagnostico (`anyio` downgraded en `.venv`) sin solucion aun para el bloqueo ASGI
 
 ## Siguiente Actividad
-- evaluar mejora de extraccion PDF->Markdown (parser especializado) para reducir perdida de jerarquia semantica
 - definir estrategia de rollout controlado (flag/config) para no romper indexacion actual en CV ya cargados
 
 ## Ajustes Post-UI Confirmados

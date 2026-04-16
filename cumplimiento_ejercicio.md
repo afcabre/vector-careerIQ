@@ -1,0 +1,10 @@
+# Cumplimiento del ejercicio
+
+## Tabla de cumplimiento de requisitos del ejercicio
+| Capacidad | Exigencia del ejercicio | Evidencia en la solución | Cómo se implementa | Estado |
+| --- | --- | --- | --- | --- |
+| Perfil de usuario | Datos reales del cliente almacenados en Firestore y usados en el system prompt | `apps/backend/app/services/person_store.py`, `apps/backend/app/services/firestore_client.py`, `apps/backend/app/services/opportunity_ai_service.py`, `apps/backend/app/api/persons.py` | El sistema persiste el `Perfil` del consultado en `persons` y lo usa para construir contexto base de prompts y respuestas. En V1, la personalización se hace sobre el perfil activo, mientras el tutor solo opera la sesión. | Cumplido |
+| Memoria persistente | Historial de conversaciones que sobrevive al cierre y recarga de la app | `apps/backend/app/services/conversation_store.py`, `apps/backend/app/api/chat.py`, `apps/frontend/src/api.ts` | Cada `person_id` tiene una conversación propia persistida en `conversations`; el frontend la recupera al volver a cargar el perfil activo y continúa el hilo. | Cumplido |
+| Búsqueda en tiempo real | Al menos una herramienta externa para información actualizada | `apps/backend/app/services/search_service.py`, `apps/backend/app/api/search.py`, `apps/backend/app/services/opportunity_ai_service.py` | La solución usa Tavily como proveedor operativo para búsquedas en Internet y para obtener señales recientes que complementan análisis y entrevistas. | Cumplido |
+| Streaming | Los tokens del LLM aparecen en pantalla mientras se generan | `apps/backend/app/api/chat.py`, `apps/backend/app/api/opportunities.py`, `apps/frontend/src/App.tsx` | El backend expone endpoints SSE para chat y acciones IA; el frontend consume eventos incrementales y actualiza la interfaz en tiempo real. | Cumplido |
+| Interfaz funcional | Frontend React que conecta con el backend FastAPI | `apps/frontend/src/App.tsx`, `apps/frontend/src/api.ts`, `apps/backend/app/main.py` | El frontend en React/Vite consume endpoints del backend FastAPI para `Perfil`, chat, `Vacantes`, `Análisis`, `Postulación`, CV y administración. | Cumplido |
