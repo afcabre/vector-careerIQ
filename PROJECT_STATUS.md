@@ -22,6 +22,7 @@
 - `.specify/03.Arquitectura-y-Plan.md`
 - `caso_de_uso.md`
 - `cumplimiento_ejercicio.md`
+- `guia_uso.md`
 
 ## Estado Tecnico
 - scaffold base existente en `apps/frontend` y `apps/backend`
@@ -340,9 +341,12 @@
 - runtime IA ahora soporta `cv_markdown_extraction_mode` (`heuristic`/`pymupdf4llm`) configurable desde admin
 - carga de CV aplica extraccion Markdown avanzada opcional para PDF y cae a heuristica cuando la dependencia no esta disponible
 - hardening de autenticacion para Safari movil: backend acepta sesion por header `X-Session-Id` como fallback cuando no llega cookie cross-site; frontend persiste token de sesion en `sessionStorage` y lo envia automaticamente
+- vista `Vacantes` ajustada para priorizar `Carga manual` como tab principal y modo por defecto, dejando `Búsqueda` como funcionalidad secundaria en la interfaz
+- alta de perfil en `Perfiles consultados` permanece oculta por defecto y solo se despliega por accion explicita del usuario
 - documento raiz `caso_de_uso.md` generado y refinado como sintesis formal del caso de uso, con enfasis en entrevista, parametrizacion operativa y Tavily como proveedor activo actual
 - caso de uso refinado con limitacion operativa de captura automatica de vacantes en portales cerrados y recomendacion vigente de carga manual como via mas confiable
 - matriz de cumplimiento del ejercicio separada a `cumplimiento_ejercicio.md` para mantener `caso_de_uso.md` centrado en el caso de uso
+- guia operativa paso a paso agregada en `guia_uso.md` y enlazada desde el escenario principal de `caso_de_uso.md`
 - ajuste de marca en header: `CareerIQ` ahora separa `IQ` con acento magenta sobrio para mayor diferenciacion visual
 
 ## Mejoras Identificadas (Diferidas)

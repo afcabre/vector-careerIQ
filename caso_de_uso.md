@@ -1,4 +1,4 @@
-# Caso de uso de la aplicación
+# Caso de uso de CareerIQ
 
 ## 1. Descripción del caso de uso y propósito de la solución
 CareerIQ es un asistente conversacional especializado en trabajo sobre vacantes. Fue concebido para un escenario en el que un tutor opera sobre varios perfiles consultados y necesita mantener `Perfil`, vacantes, historial y contexto separados por cada uno.
@@ -29,6 +29,8 @@ La descripción técnica detallada de componentes, integraciones y responsabilid
 
 ## 3. Escenario de uso principal
 El flujo principal comienza cuando el tutor inicia sesión en la aplicación. Tras autenticarse, la interfaz presenta la vista de perfiles consultados. Allí el tutor selecciona el perfil con el que desea trabajar o crea uno nuevo si aún no existe.
+
+El paso a paso de uso operativo de la herramienta se documenta en [guia_uso.md](./guia_uso.md). Ese documento complementa este caso de uso con instrucciones prácticas de interacción sobre `Perfil`, `Vacantes`, `Análisis`, `Postulación` y chat.
 
 Al activar un perfil, el sistema recupera su información persistente: datos base de `Perfil`, preferencias, CV activo si existe, historial de conversación y vacantes previamente guardadas. Desde ese momento, todas las respuestas y acciones se contextualizan para ese perfil activo.
 
@@ -88,7 +90,7 @@ Dentro de la sección `Análisis`, CareerIQ organiza las acciones principales al
 En el dominio de acompañamiento laboral, la principal ventaja de CareerIQ frente a un chat genérico es que trabaja sobre contexto persistente y acciones funcionales concretas. No se limita a responder: permite operar sobre vacantes, analizarlas, preparar postulación e investigar empresas para entrevista dentro del mismo flujo.
 
 ## 6. Tabla de cumplimiento de requisitos del ejercicio
-El detalle de cumplimiento del ejercicio se documenta en [cumplimiento_ejercicio.md](/home/acabre/projects/AISolutionArchitect/Pr_InfraEscalabe/cumplimiento_ejercicio.md).
+El detalle de cumplimiento del ejercicio se documenta en [cumplimiento_ejercicio.md](./cumplimiento_ejercicio.md).
 
 ## 7. Resumen técnico de la solución
 La solución está compuesta por un frontend desarrollado en React con Vite y un backend implementado en FastAPI. Firestore actúa como persistencia operacional principal; Pinecone soporta recuperación semántica del CV; OpenAI se utiliza para conversación, análisis, entrevista y preparación; Tavily aporta información externa actualizada. El streaming se implementa mediante Server-Sent Events. La solución incorpora además una capa de parametrización administrativa para prompts, proveedores y runtime IA.
