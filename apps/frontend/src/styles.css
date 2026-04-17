@@ -112,7 +112,45 @@ select:focus-visible {
 .lede {
   max-width: 68ch;
   color: var(--text-secondary);
-  font-size: 1rem;
+  font-size: 0.96rem;
+  max-width: 54ch;
+  margin-top: 8px;
+}
+
+.pageToneCandidates {
+  --page-accent: #94a3b8;
+}
+
+.pageToneProfile {
+  --page-accent: #94a3b8;
+}
+
+.pageToneVacancies {
+  --page-accent: #94a3b8;
+}
+
+.pageToneAnalysis {
+  --page-accent: #94a3b8;
+}
+
+.pageToneAdmin {
+  --page-accent: #94a3b8;
+}
+
+.hero.pageToneCandidates .eyebrow,
+.hero.pageToneProfile .eyebrow,
+.hero.pageToneVacancies .eyebrow,
+.hero.pageToneAnalysis .eyebrow,
+.hero.pageToneAdmin .eyebrow {
+  color: var(--page-accent);
+}
+
+.hero.pageToneCandidates h1,
+.hero.pageToneProfile h1,
+.hero.pageToneVacancies h1,
+.hero.pageToneAnalysis h1,
+.hero.pageToneAdmin h1 {
+  max-width: 14ch;
 }
 
 .panel {
@@ -145,6 +183,8 @@ select:focus-visible {
 .panelHeader p {
   margin: 0;
   color: var(--text-secondary);
+  font-size: 0.92rem;
+  max-width: 52ch;
 }
 
 .workspaceTopbar {
@@ -161,6 +201,11 @@ select:focus-visible {
   border-color: color-mix(in srgb, var(--accent) 22%, var(--border-subtle));
   padding-top: var(--space-2);
   padding-bottom: var(--space-2);
+}
+
+.workspaceTopbarCandidates {
+  padding-top: 12px;
+  padding-bottom: 12px;
 }
 
 .workspaceBrand {
@@ -382,7 +427,7 @@ select:focus-visible {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: var(--space-3);
-  padding: 4px 2px 10px;
+  padding: 2px 2px 4px;
 }
 
 .card {
@@ -392,7 +437,7 @@ select:focus-visible {
   border-radius: var(--radius-md);
   padding: var(--space-3);
   background: color-mix(in srgb, var(--surface-card) 90%, #0f172a);
-  min-height: 182px;
+  min-height: 136px;
   min-width: 0;
 }
 
@@ -404,6 +449,43 @@ select:focus-visible {
   cursor: pointer;
   transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
   border-left-color: color-mix(in srgb, var(--border-subtle) 88%, var(--accent));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-card) 92%, #0f172a),
+      color-mix(in srgb, var(--surface-card) 98%, #0b1120)
+    );
+}
+
+.candidatesPanel {
+  padding-top: 12px;
+  padding-bottom: 14px;
+}
+
+.candidatesPanel .panelHeader {
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
+.candidatesPanel .panelHeader h2 {
+  margin-bottom: 3px;
+}
+
+.candidatesPanel .cardHeader {
+  margin-bottom: 6px;
+}
+
+.candidatesPanel .card h3 {
+  margin-bottom: 4px;
+}
+
+.candidatesPanel .card p {
+  margin-bottom: 6px;
+}
+
+.candidatesPanel .candidateAvatar {
+  width: 40px;
+  height: 40px;
 }
 
 .candidateSelectionCard:hover {
@@ -512,6 +594,18 @@ select:focus-visible {
   margin-top: 8px;
 }
 
+.selectedPanel.pageToneCandidates,
+.selectedPanel.pageToneProfile,
+.selectedPanel.pageToneVacancies,
+.selectedPanel.pageToneAnalysis,
+.selectedPanel.pageToneAdmin,
+.panel.pageToneCandidates {
+  border-color: color-mix(in srgb, var(--page-accent) 18%, var(--border-subtle));
+  box-shadow:
+    var(--shadow-soft),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
 .chatDrawerToggle {
   position: fixed;
   right: 22px;
@@ -536,7 +630,12 @@ select:focus-visible {
   z-index: 40;
   padding: 14px;
   border-left: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border-subtle));
-  background: color-mix(in srgb, var(--bg-deep) 92%, black);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-elevated) 52%, var(--bg-deep)),
+      color-mix(in srgb, var(--bg-deep) 96%, black)
+    );
   transform: translateX(100%);
   transition: transform 190ms ease;
   display: grid;
@@ -554,6 +653,8 @@ select:focus-visible {
   justify-content: space-between;
   align-items: flex-start;
   gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 74%, var(--accent));
 }
 
 .chatDrawerHeader h2 {
@@ -826,7 +927,12 @@ button:disabled {
 }
 
 .chatBubbleAssistant {
-  background: color-mix(in srgb, var(--surface-card) 85%, #0f172a);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-card) 88%, #0f172a),
+      color-mix(in srgb, var(--surface-elevated) 26%, #0f172a)
+    );
 }
 
 .chatRole {
@@ -1122,15 +1228,30 @@ button:disabled {
 
 .profileSectionCard {
   gap: 10px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-elevated) 26%, var(--surface-card)),
+      color-mix(in srgb, var(--surface-card) 92%, #0f172a)
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.01);
 }
 
 .manualCard {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   padding: 12px;
-  background: color-mix(in srgb, var(--surface-card) 88%, #0f172a);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-card) 90%, #0f172a),
+      color-mix(in srgb, var(--surface-card) 96%, #0b1120)
+    );
   display: grid;
   gap: 8px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
 
 .artifactPanel {
@@ -1139,6 +1260,13 @@ button:disabled {
 
 .analysisResultsPanel {
   gap: 12px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-card) 82%, #0f172a),
+      color-mix(in srgb, var(--bg-deep) 78%, #0b1120)
+    );
+  border-color: color-mix(in srgb, var(--border-subtle) 74%, var(--accent));
 }
 
 .analysisResultSubTabsWrap {
@@ -1280,6 +1408,12 @@ button:disabled {
   border-color: var(--border-subtle) !important;
   cursor: pointer;
   transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-card) 92%, #0f172a),
+      color-mix(in srgb, var(--surface-card) 98%, #0b1120)
+    );
 }
 
 .analysisOpportunityCard:hover {
@@ -1439,6 +1573,12 @@ button:disabled {
 
 .analysisActiveCard {
   gap: 14px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-elevated) 18%, var(--surface-card)),
+      color-mix(in srgb, var(--surface-card) 94%, #0f172a)
+    );
 }
 
 .analysisStatusRow {
@@ -1473,7 +1613,13 @@ button:disabled {
 .resultBlockCard {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--surface-card) 86%, #0f172a);
+  border-left: 3px solid color-mix(in srgb, var(--border-subtle) 86%, var(--accent));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-deep) 72%, var(--surface-card)),
+      color-mix(in srgb, var(--bg-main) 82%, #0b1120)
+    );
   padding: 11px;
   display: grid;
   gap: 8px;
@@ -1487,15 +1633,22 @@ button:disabled {
 
 .resultBlockCard:hover {
   border-color: color-mix(in srgb, var(--accent) 42%, var(--border-subtle));
+  border-left-color: color-mix(in srgb, var(--accent) 54%, var(--border-subtle));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .resultBlockCardActive {
   border-color: color-mix(in srgb, var(--accent) 92%, white);
+  border-left-color: color-mix(in srgb, var(--accent) 92%, white);
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--accent) 36%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.03);
-  background: color-mix(in srgb, var(--accent) 11%, var(--surface-card));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent) 8%, var(--bg-deep)),
+      color-mix(in srgb, var(--accent) 4%, var(--bg-main))
+    );
 }
 
 .resultBlockTop {
@@ -1656,16 +1809,31 @@ button:disabled {
 .analysisContextSection {
   padding: 12px;
   min-width: 0;
+  border-color: color-mix(in srgb, var(--border-subtle) 88%, var(--text-muted));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-deep) 88%, black),
+      color-mix(in srgb, var(--bg-main) 82%, black)
+    );
 }
 
 .analysisOpportunityOps {
   padding: 10px 12px;
+  border-color: color-mix(in srgb, var(--border-subtle) 82%, var(--text-muted));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-card) 72%, #0f172a),
+      color-mix(in srgb, var(--bg-deep) 74%, #0b1120)
+    );
 }
 
 .analysisRailRight {
   position: sticky;
   top: 84px;
   overflow-x: hidden;
+  padding-left: 2px;
 }
 
 .analysisOpportunityRow .analysisRailRight {
@@ -1876,10 +2044,13 @@ button:disabled {
   border-radius: var(--radius-md);
   background:
     linear-gradient(
-      120deg,
-      color-mix(in srgb, var(--surface-card) 88%, #0f172a),
-      color-mix(in srgb, var(--surface-soft) 42%, #0f172a)
+      180deg,
+      color-mix(in srgb, var(--surface-card) 90%, #0f172a),
+      color-mix(in srgb, var(--surface-card) 97%, #0b1120)
     );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.02),
+    0 8px 18px rgba(2, 6, 23, 0.18);
 }
 
 .savedOpportunityStatus {
@@ -2008,27 +2179,8 @@ button:disabled {
     flex-direction: column;
   }
 
-  .workspaceTopbar {
-    align-items: stretch;
-    flex-direction: column;
-    position: static;
-  }
-
   .workspaceBrand {
     min-width: 0;
-  }
-
-  .workspaceCenter {
-    justify-content: stretch;
-  }
-
-  .contextSelector {
-    width: 100%;
-  }
-
-  .workspaceRight {
-    width: 100%;
-    justify-content: space-between;
   }
 
   .workspaceTabs {
@@ -2103,6 +2255,21 @@ button:disabled {
     border-radius: 16px;
   }
 
+  .workspaceTopbar {
+    align-items: stretch;
+    flex-direction: column;
+    justify-content: flex-start;
+    position: static;
+  }
+
+  .workspaceCenter {
+    justify-content: stretch;
+  }
+
+  .contextSelector {
+    width: 100%;
+  }
+
   .chatContent {
     font-size: 0.97rem;
   }
@@ -2139,8 +2306,10 @@ button:disabled {
   }
 
   .workspaceRight {
+    width: 100%;
     flex-direction: column;
     align-items: stretch;
+    justify-content: space-between;
   }
 
   .workspaceTabs {

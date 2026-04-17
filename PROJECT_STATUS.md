@@ -343,10 +343,14 @@
 - hardening de autenticacion para Safari movil: backend acepta sesion por header `X-Session-Id` como fallback cuando no llega cookie cross-site; frontend persiste token de sesion en `sessionStorage` y lo envia automaticamente
 - vista `Vacantes` ajustada para priorizar `Carga manual` como tab principal y modo por defecto, dejando `Búsqueda` como funcionalidad secundaria en la interfaz
 - alta de perfil en `Perfiles consultados` permanece oculta por defecto y solo se despliega por accion explicita del usuario
+- interfaz general rebajada a tono neutro tipo `Administracion`; el color queda priorizado en elementos funcionales y no por pagina
+- diferenciacion visual por funcion aplicada sobre tema neutro: formularios, tarjetas de seleccion, resultados IA, riel contextual y chat usan superficies y densidades distintas sin volver a colorear por pagina
 - documento raiz `caso_de_uso.md` generado y refinado como sintesis formal del caso de uso, con enfasis en entrevista, parametrizacion operativa y Tavily como proveedor activo actual
 - caso de uso refinado con limitacion operativa de captura automatica de vacantes en portales cerrados y recomendacion vigente de carga manual como via mas confiable
 - matriz de cumplimiento del ejercicio separada a `cumplimiento_ejercicio.md` para mantener `caso_de_uso.md` centrado en el caso de uso
 - guia operativa paso a paso agregada en `guia_uso.md` y enlazada desde el escenario principal de `caso_de_uso.md`
+- documento `pantallas_funcionales.md` agregado en raiz con descripcion detallada de `Perfil`, `Vacantes` y `Analisis`, su composicion y forma de uso
+- `pantallas_funcionales.md` ampliado con `Candidatos` y con la logica del header global, explicando por que el candidato activo se mantiene como contexto transversal
 - ajuste de marca en header: `CareerIQ` ahora separa `IQ` con acento magenta sobrio para mayor diferenciacion visual
 
 ## Mejoras Identificadas (Diferidas)

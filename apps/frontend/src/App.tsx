@@ -1262,6 +1262,15 @@ export default function App() {
   const showConversationSection = showContextualSidebar;
   const shellClassName =
     showConversationSection && isChatDrawerOpen ? "shell shellWithChatDrawer" : "shell";
+  const currentPageToneClass = showCandidatesPage
+    ? "pageToneCandidates"
+    : showAdminPromptsPage
+      ? "pageToneAdmin"
+      : showProfilePage
+        ? "pageToneProfile"
+        : showOpportunitiesPage
+          ? "pageToneVacancies"
+          : "pageToneAnalysis";
   const currentPageLabel = showCandidatesPage
     ? "Seleccion de candidato"
     : showAdminPromptsPage
@@ -1272,19 +1281,23 @@ export default function App() {
           ? "Vacantes"
           : "Análisis";
   const currentPageTitle = showCandidatesPage
-    ? "Selecciona un perfil para abrir su contexto."
+    ? "Candidatos"
     : showAdminPromptsPage
-      ? "Ajusta prompts globales, proveedores y control de retrieval semantico."
+      ? "Administración"
       : showProfilePage
-        ? "Gestiona perfil y CV del perfil activo."
+        ? "Perfil"
         : showOpportunitiesPage
-          ? "Busca, revisa e importa oportunidades para el contexto activo."
-          : "Analiza el perfil y prepara entregables por oportunidad.";
+          ? "Vacantes"
+          : "Análisis";
   const currentPageLede = showContextualSidebar
     ? showProfilePage
-      ? null
-      : "Usa las pestañas para gestionar perfil, busqueda y análisis."
-    : "Este flujo separa acceso del tutor y contexto del perfil consultado.";
+      ? "Ajusta el perfil activo y revisa su CV"
+      : showOpportunitiesPage
+        ? "Carga, busca y guarda vacantes para el perfil activo"
+        : "Genera análisis y materiales por vacante"
+    : showCandidatesPage
+      ? "Elige un perfil para continuar"
+      : "Configura prompts, proveedores y runtime IA";
   const searchRoleKeywords = Array.from(
     new Set(
       (selectedPerson?.target_roles ?? [])
@@ -3301,7 +3314,7 @@ export default function App() {
 
   return (
     <main className={shellClassName}>
-      <section className="panel workspaceTopbar">
+      <section className={showCandidatesPage ? "panel workspaceTopbar workspaceTopbarCandidates" : "panel workspaceTopbar"}>
         <div className="workspaceBrand">
           <p className="eyebrow workspaceBrandWordmark">
             <span>Career</span>
@@ -3459,7 +3472,11 @@ export default function App() {
         </div>
       </section>
 
-      <section className={showProfilePage || showCandidatesPage ? "hero heroCompact" : "hero"}>
+      <section
+        className={`${
+          showProfilePage || showCandidatesPage ? "hero heroCompact" : "hero"
+        } ${currentPageToneClass}`}
+      >
         <p className="eyebrow">{currentPageLabel}</p>
         <h1 className={showProfilePage || showCandidatesPage ? "heroTitleCompact" : undefined}>
           {currentPageTitle}
@@ -3468,12 +3485,9 @@ export default function App() {
       </section>
 
       {showCandidatesPage ? (
-        <section className="panel">
+        <section className={`panel candidatesPanel ${currentPageToneClass}`}>
         <header className="panelHeader">
-          <div>
-            <h2>Perfiles consultados</h2>
-            <p>Selecciona el perfil activo para continuar a busqueda y alineacion.</p>
-          </div>
+          <div />
           <div className="cardActions">
             <p className="metaText">{people.length} registrados</p>
             <button
@@ -3586,14 +3600,11 @@ export default function App() {
       ) : null}
 
       {showAdminPromptsPage ? (
-        <section className="panel selectedPanel">
+        <section className={`panel selectedPanel ${currentPageToneClass}`}>
         <header className="panelHeader">
           <div>
-            <h2>Administracion de proveedores de busqueda</h2>
-            <p>
-              Habilita o deshabilita proveedores de vacantes desde UI para controlar
-              conectividad y diagnostico.
-            </p>
+            <h2>Proveedores de búsqueda</h2>
+            <p>Activa o desactiva proveedores desde la interfaz</p>
           </div>
           <button
             className="ghostButton"
@@ -3647,14 +3658,11 @@ export default function App() {
       ) : null}
 
       {showAdminPromptsPage ? (
-        <section className="panel selectedPanel">
+        <section className={`panel selectedPanel ${currentPageToneClass}`}>
           <header className="panelHeader">
             <div>
-              <h2>Administracion de retrieval semantico (global V1)</h2>
-              <p>
-                Controla top_k por contexto: analisis/preparacion en produccion y entrevista
-                (preconfigurado para proxima fase).
-              </p>
+              <h2>Runtime IA</h2>
+              <p>Controla retrieval, chunking y modo de entrevista</p>
             </div>
           </header>
           {isLoadingAiRuntimeConfig ? (
@@ -3790,14 +3798,11 @@ export default function App() {
       ) : null}
 
       {showAdminPromptsPage ? (
-        <section className="panel selectedPanel">
+        <section className={`panel selectedPanel ${currentPageToneClass}`}>
         <header className="panelHeader">
           <div>
-            <h2>Administracion de prompts (global V1)</h2>
-            <p>
-              Primero se listan prompts IA (guardrails, identidad y tareas). Luego se agrupan
-              consultas externas Tavily con sus prompts asociados.
-            </p>
+            <h2>Prompts</h2>
+            <p>Configura prompts IA y consultas externas</p>
           </div>
           <button
             className="ghostButton"
@@ -4058,7 +4063,7 @@ export default function App() {
       ) : null}
 
       {showProfilePage ? (
-        <section className="panel selectedPanel">
+        <section className={`panel selectedPanel ${currentPageToneClass}`}>
         <h2>Candidato</h2>
         {selectedPerson ? (
           <div className="cvCard">
@@ -4255,7 +4260,7 @@ export default function App() {
         </section>
       ) : null}
       {showProfilePage ? (
-        <section className="panel selectedPanel">
+        <section className={`panel selectedPanel ${currentPageToneClass}`}>
         <header className="panelHeader">
           <div>
             <h2>CV</h2>
@@ -4453,7 +4458,7 @@ export default function App() {
         </>
       ) : null}
       {showOpportunitiesPage ? (
-        <section className="panel selectedPanel">
+        <section className={`panel selectedPanel ${currentPageToneClass}`}>
         <h2>Descubrimiento de vacantes</h2>
         <div className="opportunityModeTabs" role="tablist" aria-label="Modo de descubrimiento">
           <button
@@ -4803,7 +4808,7 @@ export default function App() {
         </section>
       ) : null}
       {showAnalysisPage ? (
-        <section className="panel selectedPanel">
+        <section className={`panel selectedPanel ${currentPageToneClass}`}>
           <div
             className="analysisTopPanel"
           >
@@ -4965,7 +4970,6 @@ export default function App() {
               {selectedOpportunity ? (
                 <>
                   <article className="manualCard analysisResultsPanel">
-                    <h3 className="subheading subheadingCompact">Resultados</h3>
                     <div className="opportunityModeTabs opportunityModeTabsCompact">
                       <button
                         className={
@@ -4994,7 +4998,6 @@ export default function App() {
                     {resultsPanelTab === "analysis" ? (
                       <>
                         <div className="analysisResultSubTabsWrap">
-                          <p className="analysisSubTabHint">Bloques de análisis</p>
                           <div
                             aria-label="Bloques de análisis"
                             className="opportunityModeTabs opportunityModeTabsCompact opportunityModeTabsWrap"
@@ -5505,7 +5508,6 @@ export default function App() {
                     ) : (
                       <>
                         <div className="analysisResultSubTabsWrap">
-                          <p className="analysisSubTabHint">Bloques de postulación</p>
                           <div
                             aria-label="Bloques de postulación"
                             className="opportunityModeTabs opportunityModeTabsCompact opportunityModeTabsWrap"
