@@ -12,6 +12,10 @@ from app.services.candidate_profile_normalizer import (
     candidate_profile_context,
     normalize_candidate_profile,
 )
+from app.services.criterion_evidence_retriever import (
+    build_criterion_evidence,
+    criterion_evidence_context,
+)
 from app.services.cv_store import get_active_cv
 from app.services.cv_vector_service import query_cv_context
 from app.services.guardrail_service import (
@@ -106,6 +110,7 @@ class AnalyzeProfileMatchResult(TypedDict):
     semantic_evidence: SemanticEvidence
     normalized_candidate_profile: dict[str, object]
     mapped_criteria: dict[str, object]
+    criterion_evidence: list[dict[str, object]]
     prompt_meta: dict[str, dict[str, str | bool]]
 
 
@@ -1293,6 +1298,13 @@ def stream_analyze_profile_match_text(
         settings,
         top_k=_semantic_top_k_analysis(),
     )
+    criterion_evidence = build_criterion_evidence(
+        person=person,
+        normalized_candidate_profile=normalized_candidate_profile,
+        mapped_criteria=mapped_criteria,
+        settings=settings,
+        top_k=min(4, _semantic_top_k_analysis()),
+    )
     user_prompt, user_meta = build_prompt_text_with_meta(
         flow_key=FLOW_TASK_ANALYZE_PROFILE_MATCH,
         context={
@@ -1300,6 +1312,7 @@ def stream_analyze_profile_match_text(
             "opportunity_context": _opportunity_context(opportunity),
             "semantic_evidence_context": (
                 f"{candidate_profile_context(normalized_candidate_profile)}\n\n"
+                f"{criterion_evidence_context(criterion_evidence)}\n\n"
                 f"{_semantic_evidence_context(semantic_evidence)}"
             ),
         },
@@ -1330,7 +1343,14 @@ def stream_analyze_profile_match_text(
         flow_key="analyze_profile_match_stream",
         run_id=run_id,
     )
-    return semantic_evidence, normalized_candidate_profile, mapped_criteria, prompt_meta, stream
+    return (
+        semantic_evidence,
+        normalized_candidate_profile,
+        mapped_criteria,
+        criterion_evidence,
+        prompt_meta,
+        stream,
+    )
 
 
 def stream_analyze_cultural_fit_text(
@@ -1496,6 +1516,13 @@ def analyze_profile_match(
         settings,
         top_k=_semantic_top_k_analysis(),
     )
+    criterion_evidence = build_criterion_evidence(
+        person=person,
+        normalized_candidate_profile=normalized_candidate_profile,
+        mapped_criteria=mapped_criteria,
+        settings=settings,
+        top_k=min(4, _semantic_top_k_analysis()),
+    )
     user_prompt, user_meta = build_prompt_text_with_meta(
         flow_key=FLOW_TASK_ANALYZE_PROFILE_MATCH,
         context={
@@ -1503,6 +1530,7 @@ def analyze_profile_match(
             "opportunity_context": _opportunity_context(opportunity),
             "semantic_evidence_context": (
                 f"{candidate_profile_context(normalized_candidate_profile)}\n\n"
+                f"{criterion_evidence_context(criterion_evidence)}\n\n"
                 f"{_semantic_evidence_context(semantic_evidence)}"
             ),
         },
@@ -1544,6 +1572,7 @@ def analyze_profile_match(
         "semantic_evidence": semantic_evidence,
         "normalized_candidate_profile": normalized_candidate_profile,
         "mapped_criteria": mapped_criteria,
+        "criterion_evidence": criterion_evidence,
         "prompt_meta": prompt_meta,
     }
 

@@ -25,6 +25,13 @@ CV_MARKDOWN_EXTRACTION_MODES = {
     CV_MARKDOWN_EXTRACTION_MODE_PYMUPDF4LLM,
 }
 DEFAULT_CV_MARKDOWN_EXTRACTION_MODE = CV_MARKDOWN_EXTRACTION_MODE_HEURISTIC
+RETRIEVAL_EVIDENCE_PERSISTENCE_MODE_MINIMAL = "minimal"
+RETRIEVAL_EVIDENCE_PERSISTENCE_MODE_FULL = "full"
+RETRIEVAL_EVIDENCE_PERSISTENCE_MODES = {
+    RETRIEVAL_EVIDENCE_PERSISTENCE_MODE_MINIMAL,
+    RETRIEVAL_EVIDENCE_PERSISTENCE_MODE_FULL,
+}
+DEFAULT_RETRIEVAL_EVIDENCE_PERSISTENCE_MODE = RETRIEVAL_EVIDENCE_PERSISTENCE_MODE_MINIMAL
 INTERVIEW_RESEARCH_MODE_GUIDED = "guided"
 INTERVIEW_RESEARCH_MODE_ADAPTIVE = "adaptive"
 INTERVIEW_RESEARCH_MODES = {
@@ -43,6 +50,7 @@ class AIRuntimeConfigRecord(TypedDict):
     top_k_semantic_interview: int
     cv_chunking_strategy: str
     cv_markdown_extraction_mode: str
+    retrieval_evidence_persistence_mode: str
     interview_research_mode: str
     interview_research_max_steps: int
     trace_truncation_enabled: bool
@@ -72,6 +80,7 @@ def _default_config() -> AIRuntimeConfigRecord:
         top_k_semantic_interview=DEFAULT_TOP_K_SEMANTIC_INTERVIEW,
         cv_chunking_strategy=DEFAULT_CV_CHUNKING_STRATEGY,
         cv_markdown_extraction_mode=DEFAULT_CV_MARKDOWN_EXTRACTION_MODE,
+        retrieval_evidence_persistence_mode=DEFAULT_RETRIEVAL_EVIDENCE_PERSISTENCE_MODE,
         interview_research_mode=DEFAULT_INTERVIEW_RESEARCH_MODE,
         interview_research_max_steps=DEFAULT_INTERVIEW_RESEARCH_MAX_STEPS,
         trace_truncation_enabled=True,
@@ -112,6 +121,17 @@ def _normalize_firestore_record(payload: dict[str, Any] | None) -> AIRuntimeConf
         if raw_md_mode in CV_MARKDOWN_EXTRACTION_MODES
         else base["cv_markdown_extraction_mode"]
     )
+    raw_retrieval_persistence_mode = str(
+        source.get(
+            "retrieval_evidence_persistence_mode",
+            base["retrieval_evidence_persistence_mode"],
+        )
+    ).strip().lower()
+    normalized_retrieval_persistence_mode = (
+        raw_retrieval_persistence_mode
+        if raw_retrieval_persistence_mode in RETRIEVAL_EVIDENCE_PERSISTENCE_MODES
+        else base["retrieval_evidence_persistence_mode"]
+    )
     raw_mode = str(
         source.get("interview_research_mode", base["interview_research_mode"])
     ).strip().lower()
@@ -144,6 +164,7 @@ def _normalize_firestore_record(payload: dict[str, Any] | None) -> AIRuntimeConf
         ),
         cv_chunking_strategy=normalized_chunking_strategy,
         cv_markdown_extraction_mode=normalized_md_mode,
+        retrieval_evidence_persistence_mode=normalized_retrieval_persistence_mode,
         interview_research_mode=normalized_mode,
         interview_research_max_steps=max_steps,
         trace_truncation_enabled=bool(
@@ -236,12 +257,23 @@ def _validate_cv_markdown_extraction_mode(value: str) -> str:
     return normalized
 
 
+def _validate_retrieval_evidence_persistence_mode(value: str) -> str:
+    normalized = str(value).strip().lower()
+    if normalized not in RETRIEVAL_EVIDENCE_PERSISTENCE_MODES:
+        allowed = ", ".join(sorted(RETRIEVAL_EVIDENCE_PERSISTENCE_MODES))
+        raise ValueError(
+            f"retrieval_evidence_persistence_mode must be one of: {allowed}"
+        )
+    return normalized
+
+
 def update_ai_runtime_config(
     *,
     top_k_semantic_analysis: int | None = None,
     top_k_semantic_interview: int | None = None,
     cv_chunking_strategy: str | None = None,
     cv_markdown_extraction_mode: str | None = None,
+    retrieval_evidence_persistence_mode: str | None = None,
     interview_research_mode: str | None = None,
     interview_research_max_steps: int | None = None,
     trace_truncation_enabled: bool | None = None,
@@ -266,6 +298,12 @@ def update_ai_runtime_config(
     if cv_markdown_extraction_mode is not None:
         current["cv_markdown_extraction_mode"] = _validate_cv_markdown_extraction_mode(
             cv_markdown_extraction_mode
+        )
+    if retrieval_evidence_persistence_mode is not None:
+        current["retrieval_evidence_persistence_mode"] = (
+            _validate_retrieval_evidence_persistence_mode(
+                retrieval_evidence_persistence_mode
+            )
         )
     if interview_research_mode is not None:
         current["interview_research_mode"] = _validate_interview_mode(

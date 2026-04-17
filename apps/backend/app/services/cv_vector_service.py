@@ -40,6 +40,10 @@ SEMANTIC_MIN_SECTION_CHARS = 280
 CANONICAL_SOURCE_FORMAT = "canonical_structured"
 
 
+class CVQueryMatch(dict):
+    pass
+
+
 def normalize_chunking_strategy(value: str | None) -> str:
     candidate = str(value or "").strip().lower()
     if candidate in CHUNKING_STRATEGIES:
@@ -510,6 +514,23 @@ def query_cv_context(
     settings: Settings,
     top_k: int = 24,
 ) -> list[str]:
+    matches = query_cv_matches(
+        person_id=person_id,
+        cv_id=cv_id,
+        query_text=query_text,
+        settings=settings,
+        top_k=top_k,
+    )
+    return [str(item.get("text", "")).strip() for item in matches if str(item.get("text", "")).strip()]
+
+
+def query_cv_matches(
+    person_id: str,
+    cv_id: str,
+    query_text: str,
+    settings: Settings,
+    top_k: int = 24,
+) -> list[dict[str, Any]]:
     if not _is_ready(settings):
         logger.warning("semantic query skipped due to missing vector config person_id=%s", person_id)
         return []
@@ -557,12 +578,27 @@ def query_cv_context(
         logger.exception("pinecone query unexpected error person_id=%s cv_id=%s", person_id, cv_id)
         return []
 
-    snippets: list[str] = []
+    matches_payload: list[dict[str, Any]] = []
     for match in response.get("matches", []):
+        if not isinstance(match, dict):
+            continue
         metadata = match.get("metadata", {})
         if not isinstance(metadata, dict):
             continue
         text = str(metadata.get("text", "")).strip()
         if text:
-            snippets.append(text)
-    return snippets
+            matches_payload.append(
+                {
+                    "text": text,
+                    "score": float(match.get("score", 0.0) or 0.0),
+                    "chunk_id": str(metadata.get("chunk_id", "")).strip(),
+                    "chunk_index": int(metadata.get("chunk_index", 0) or 0),
+                    "section": str(metadata.get("section", "")).strip(),
+                    "source_format": str(metadata.get("source_format", "")).strip(),
+                    "block_type": str(metadata.get("block_type", "")).strip(),
+                    "block_title": str(metadata.get("block_title", "")).strip(),
+                    "block_index": int(metadata.get("block_index", 0) or 0),
+                    "subchunk_index": int(metadata.get("subchunk_index", 0) or 0),
+                }
+            )
+    return matches_payload

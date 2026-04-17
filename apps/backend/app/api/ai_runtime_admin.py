@@ -23,6 +23,7 @@ class AIRuntimeConfigResponse(BaseModel):
     top_k_semantic_interview: int
     cv_chunking_strategy: str
     cv_markdown_extraction_mode: str
+    retrieval_evidence_persistence_mode: str
     interview_research_mode: str
     interview_research_max_steps: int
     trace_truncation_enabled: bool
@@ -44,6 +45,7 @@ class UpdateAIRuntimeConfigRequest(BaseModel):
     )
     cv_chunking_strategy: str | None = Field(default=None)
     cv_markdown_extraction_mode: str | None = Field(default=None)
+    retrieval_evidence_persistence_mode: str | None = Field(default=None)
     interview_research_mode: str | None = Field(default=None)
     interview_research_max_steps: int | None = Field(
         default=None,
@@ -70,6 +72,7 @@ def patch_config(
         and payload.top_k_semantic_interview is None
         and payload.cv_chunking_strategy is None
         and payload.cv_markdown_extraction_mode is None
+        and payload.retrieval_evidence_persistence_mode is None
         and payload.interview_research_mode is None
         and payload.interview_research_max_steps is None
         and payload.trace_truncation_enabled is None
@@ -89,11 +92,18 @@ def patch_config(
             if candidate not in CV_MARKDOWN_EXTRACTION_MODES:
                 allowed = ", ".join(sorted(CV_MARKDOWN_EXTRACTION_MODES))
                 raise ValueError(f"cv_markdown_extraction_mode must be one of: {allowed}")
+        if payload.retrieval_evidence_persistence_mode is not None:
+            candidate = payload.retrieval_evidence_persistence_mode.strip().lower()
+            if candidate not in {"minimal", "full"}:
+                raise ValueError(
+                    "retrieval_evidence_persistence_mode must be one of: full, minimal"
+                )
         updated = update_ai_runtime_config(
             top_k_semantic_analysis=payload.top_k_semantic_analysis,
             top_k_semantic_interview=payload.top_k_semantic_interview,
             cv_chunking_strategy=payload.cv_chunking_strategy,
             cv_markdown_extraction_mode=payload.cv_markdown_extraction_mode,
+            retrieval_evidence_persistence_mode=payload.retrieval_evidence_persistence_mode,
             interview_research_mode=payload.interview_research_mode,
             interview_research_max_steps=payload.interview_research_max_steps,
             trace_truncation_enabled=payload.trace_truncation_enabled,

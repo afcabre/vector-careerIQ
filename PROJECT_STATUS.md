@@ -343,6 +343,9 @@
 - flujo `analyze_profile_match` ahora inyecta `criterios evaluables derivados` dentro de `opportunity_context` y persiste `mapped_criteria` en `result_payload` tanto en ejecucion normal como SSE
 - Fase 5 V1.1 iniciada en implementacion: `CandidateProfileNormalizer` agregado para estabilizar el lado candidato (`identity`, `target_profile`, `salary_expectation`, `cultural_preferences`, `legacy_preferences`, `culture_notes`) antes del retrieval y de la evaluacion por criterio
 - flujo `analyze_profile_match` ahora persiste `normalized_candidate_profile` en `result_payload` y usa su contexto estructurado como parte de la evidencia enviada al prompt del analisis
+- Fase 6 V1.1 iniciada en implementacion: `CriterionEvidenceRetriever` agregado para recuperar evidencia por criterio combinando metadata de bloques en Pinecone y evidencia estructurada del perfil del candidato
+- consulta semantica de CV ampliada con `query_cv_matches` para preservar `score`, `section`, `block_type`, `block_title`, `block_index` y `subchunk_index` en el retrieval
+- `analyze_profile_match` ahora persiste `criterion_evidence` en `result_payload` y soporta politica backend de persistencia `retrieval_evidence_persistence_mode` (`minimal`/`full`) desde `ai_runtime_configs`
 - build frontend revalidado tras integracion de controles `top_k` en administracion: `npm run build` en `OK`
 - fix UX en `Analisis`: `Contextual Intelligence` (Historial IA + Trazas tecnicas) vuelve visible por defecto al versionar la clave de colapso en `localStorage`
 - fix UX en `Analisis`: al colapsar `Contextual Intelligence`, el boton `Mostrar contexto` se muestra en el header central de resultados para recuperacion inmediata de la columna
