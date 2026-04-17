@@ -4,7 +4,7 @@
 - fase_actual: `Implementacion`
 - checkpoint_actual: `deploy productivo en Railway + hardening auth cross-domain + purga de historial git para .specify/instructions`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, analisis por accion, interview brief, importacion manual, CV activo y capa semantica`
-- ultima_actualizacion: `2026-04-15`
+- ultima_actualizacion: `2026-04-17`
 
 ## Progreso Por Fase
 - `Fase 0`: completada
@@ -54,8 +54,12 @@
 - backend incorpora `prompt_config_store` con defaults V1, validacion y persistencia `memory/firestore`
 - backend expone endpoints admin `GET /api/admin/prompt-configs`, `GET /api/admin/prompt-configs/{flow_key}` y `PATCH /api/admin/prompt-configs/{flow_key}`
 - backend agrega historial de versiones en `prompt_config_versions` y endpoints admin `GET /api/admin/prompt-configs/{flow_key}/versions` + `POST /api/admin/prompt-configs/{flow_key}/rollback`
+- extraccion estructurada de vacantes manuales ahora usa flow configurable `task_vacancy_profile_extract` en `Administracion de prompts`
+- extractor de vacantes endurecido para separar `criterion` (etiqueta corta) y `condition` (requisito literal), con deduplicacion y sin tope fijo de 16 por defecto
+- extraccion estructurada de vacante actualizada en V0: se elimina mezcla en `job_level` y se separa en dos campos explicitos `seniority` y `organizational_level` (sin compatibilidad legacy)
 - backend agrega configuracion global por proveedor de busqueda en `search_provider_configs` y endpoints admin `GET /api/admin/search-providers` + `PATCH /api/admin/search-providers/{provider_key}`
 - backend agrega configuracion global de runtime IA en `ai_runtime_configs` y endpoint admin `GET/PATCH /api/admin/ai-runtime-config`
+- extraccion estructurada de vacante simplificada: se elimina `criteria` (`criterion/condition`) por redundancia y ruido en V1
 - busqueda Tavily de vacantes usa construccion de query configurable via `prompt_configs` (`search_jobs_tavily`)
 - busqueda de vacantes respeta habilitacion por proveedor (`tavily`, `adzuna`, `remotive`) definida en admin UI/API
 - query de Tavily para vacantes se recorta a maximo `400` caracteres para evitar `HTTP 400` por longitud
@@ -67,6 +71,7 @@
 - frontend de admin prompts permite consultar versiones por flow y restaurar una version previa (rollback)
 - frontend incorpora seccion de administracion de proveedores de busqueda con checkboxes para habilitar/deshabilitar ejecucion por proveedor
 - frontend incorpora seccion de administracion de retrieval semantico con `top_k` separado para `analisis/preparacion` y `entrevista`
+- frontend ajusta titulo de card a `Resumen estructurado de la vacante`
 - `analyze` y `prepare` consumen `top_k_semantic_analysis` configurable (default V1 `12`) en lugar de valor hardcodeado
 - frontend de busqueda muestra panel de diagnostico por proveedor usando `provider_status` de la ultima ejecucion
 - frontend de busqueda muestra motivo amigable, `HTTP status` (si aplica), detalle tecnico y boton de copia por proveedor para depuracion rapida
@@ -352,6 +357,18 @@
 - documento `pantallas_funcionales.md` agregado en raiz con descripcion detallada de `Perfil`, `Vacantes` y `Analisis`, su composicion y forma de uso
 - `pantallas_funcionales.md` ampliado con `Candidatos` y con la logica del header global, explicando por que el candidato activo se mantiene como contexto transversal
 - ajuste de marca en header: `CareerIQ` ahora separa `IQ` con acento magenta sobrio para mayor diferenciacion visual
+- carga manual de vacantes ahora genera `resumen estructurado` (LLM con fallback heuristico), visible y editable en `Vacantes`, con flujo de `borrador/aprobado`
+- `resumen estructurado` en `Vacantes` ahora soporta doble modo de edicion: `Guiado` (campos) y `JSON avanzado` (objeto completo con validacion antes de guardar)
+- `Vacantes` incorpora accion `Recalcular extraccion` por oportunidad guardada, conectada a endpoint dedicado para regenerar estructura desde la descripcion actual de la vacante
+- `Vacantes` muestra toast explicito `Extracción recalculada` al finalizar recálculo de estructura por oportunidad
+- extractor de vacantes migra a esquema funcional nuevo (sin compatibilidad legacy): `resumen`, `funciones_responsabilidades`, `requisitos_obligatorios`, `requisitos_deseables`, `condiciones_trabajo` (incluye salario estructurado) y `beneficios`
+- vacantes incorpora accion `Borrar extracto` con confirmacion: limpia solo `vacancy_profile`, fuerza `vacancy_profile_status=none` y conserva vacante original (`snapshot_raw_text`, URL, estado, notas) con trazabilidad por `vacancy_profile_updated_at`
+- formulario guiado de estructura en `Vacantes` alineado al nuevo esquema y elimina campos antiguos (`bloqueadores`, `preguntas abiertas`)
+- `task_vacancy_profile_extract` queda gestionado solo por `prompt_configs` (Firestore/Admin) sin auto-migracion en codigo
+- `Administracion de prompts` agrega accion `Restaurar recomendado` para `task_vacancy_profile_extract` (precarga plantilla sugerida en el editor)
+- UX de `Vacantes` ajustada: botones rapidos de estructura (`Recalcular extraccion`, `Completar/Editar estructura`) retornan al estilo estandar de la interfaz
+- UX de `Vacantes` refinada: botones `Recalcular extraccion`, `Completar/Editar estructura` y `Aprobar` en la card de estructura usan tamano reducido para menor peso visual
+- `Análisis` ahora incorpora el `resumen estructurado de vacante` como contexto preferente para reducir ambiguedad en `Perfil-vacante`
 
 ## Mejoras Identificadas (Diferidas)
 - vector `profile_summary` por persona (`type=profile_summary`) para match ejecutivo de alto nivel
