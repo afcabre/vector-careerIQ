@@ -44,6 +44,7 @@ import {
   logout,
   prepareOpportunityStream,
   prepareOpportunity,
+  recomputeOpportunityVacancyProfile,
   saveOpportunityFromSearch,
   searchOpportunities,
   sendMessage,
@@ -241,6 +242,7 @@ const PROMPT_FLOW_LABELS: Record<string, string> = {
   task_analyze_cultural_fit: "Prompt de tarea: Analizar ajuste cultural",
   task_interview_research_plan: "Prompt de tarea: Plan de investigacion entrevista",
   task_interview_brief: "Prompt de tarea: Brief de entrevista",
+  task_vacancy_profile_extract: "Prompt de tarea: Estructurar vacante",
   task_prepare_guidance: "Prompt de tarea: Preparar guia de perfil",
   task_prepare_cover_letter: "Prompt de tarea: Preparar carta",
   task_prepare_experience_summary: "Prompt de tarea: Preparar resumen"
@@ -257,10 +259,57 @@ const PROMPT_FLOW_ORDER: string[] = [
   "task_analyze_cultural_fit",
   "task_interview_research_plan",
   "task_interview_brief",
+  "task_vacancy_profile_extract",
   "task_prepare_guidance",
   "task_prepare_cover_letter",
   "task_prepare_experience_summary"
 ];
+
+const RECOMMENDED_PROMPT_TEMPLATES: Record<string, string> = {
+  task_vacancy_profile_extract: `Extrae la informacion clave de esta vacante y responde SOLO con JSON valido (sin texto adicional).
+
+Devuelve exactamente estas claves:
+{
+  "summary": "",
+  "seniority": "",
+  "organizational_level": "",
+  "funciones_responsabilidades": [],
+  "requisitos_obligatorios": [],
+  "requisitos_deseables": [],
+  "condiciones_trabajo": {
+    "modality": "",
+    "schedule": "",
+    "contract_type": "",
+    "location": "",
+    "salary": {
+      "min": null,
+      "max": null,
+      "currency": "",
+      "period": "",
+      "text_original": ""
+    }
+  },
+  "beneficios": [],
+  "confidence": "",
+  "extraction_source": "llm"
+}
+
+Reglas simples:
+- No inventes informacion.
+- Si un dato no aparece, usa:
+  - [] en listas
+  - "no_especificado" en textos de condiciones y nivel
+  - null en salary.min y salary.max
+- Separa obligatorios y deseables.
+- funciones_responsabilidades = tareas del rol.
+- confidence: low | medium | high
+
+Vacante titulo: {opportunity_title}
+Empresa: {opportunity_company}
+Ubicacion: {opportunity_location}
+URL: {opportunity_url}
+Descripcion: {opportunity_raw_text}`,
+};
 const PROMPT_SOURCE_FLOW_KEYS = new Set([
   "search_jobs_tavily",
   "search_culture_tavily",
@@ -419,6 +468,268 @@ function getOpportunityOriginChipClass(sourceType: string): string {
     return "metaChip metaChipOrigin metaChipOriginSearch";
   }
   return "metaChip metaChipOrigin metaChipOriginManual";
+}
+
+type VacancySalaryRange = {
+  min: number | null;
+  max: number | null;
+  currency: string;
+  period: string;
+  text_original: string;
+};
+
+type VacancyWorkConditions = {
+  modality: string;
+  schedule: string;
+  contract_type: string;
+  location: string;
+  salary: VacancySalaryRange;
+};
+
+type VacancyStructuredProfile = {
+  summary: string;
+  seniority: string;
+  organizational_level: string;
+  funciones_responsabilidades: string[];
+  requisitos_obligatorios: string[];
+  requisitos_deseables: string[];
+  condiciones_trabajo: VacancyWorkConditions;
+  beneficios: string[];
+  confidence: "low" | "medium" | "high";
+  extraction_source: string;
+};
+
+type VacancyStructuredProfileDraft = {
+  summary: string;
+  seniority: string;
+  organizationalLevel: string;
+  funcionesInput: string;
+  requisitosObligatoriosInput: string;
+  requisitosDeseablesInput: string;
+  modalidad: string;
+  horario: string;
+  tipoContrato: string;
+  ubicacionTrabajo: string;
+  salarioMinInput: string;
+  salarioMaxInput: string;
+  salarioMoneda: string;
+  salarioPeriodo: string;
+  salarioTexto: string;
+  beneficiosInput: string;
+};
+
+type VacancyProfileEditorMode = "guided" | "json";
+
+function parseList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const items: string[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    const value = String(item ?? "").trim();
+    if (!value) {
+      continue;
+    }
+    const key = value.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    items.push(value);
+  }
+  return items;
+}
+
+function parseVacancyStructuredProfile(raw: unknown): VacancyStructuredProfile {
+  const source = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const confidenceRaw = String(source.confidence ?? "").trim().toLowerCase();
+  const confidence: "low" | "medium" | "high" =
+    confidenceRaw === "high" || confidenceRaw === "medium" || confidenceRaw === "low"
+      ? confidenceRaw
+      : "low";
+  const rawWorkConditions =
+    source.condiciones_trabajo && typeof source.condiciones_trabajo === "object"
+      ? (source.condiciones_trabajo as Record<string, unknown>)
+      : {};
+  const rawSalary =
+    rawWorkConditions.salary && typeof rawWorkConditions.salary === "object"
+      ? (rawWorkConditions.salary as Record<string, unknown>)
+      : {};
+  const parseNumber = (value: unknown): number | null => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+    if (typeof value === "string") {
+      const clean = value.trim();
+      if (!clean) {
+        return null;
+      }
+      const normalized = clean.replace(/\./g, "").replace(",", ".");
+      const parsed = Number.parseFloat(normalized);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+  };
+  return {
+    summary: String(source.summary ?? "").trim(),
+    seniority: String(source.seniority ?? "").trim() || "no_especificado",
+    organizational_level:
+      String(source.organizational_level ?? "").trim() || "no_especificado",
+    funciones_responsabilidades: parseList(source.funciones_responsabilidades),
+    requisitos_obligatorios: parseList(source.requisitos_obligatorios),
+    requisitos_deseables: parseList(source.requisitos_deseables),
+    condiciones_trabajo: {
+      modality:
+        String(rawWorkConditions.modality ?? rawWorkConditions.modalidad ?? "").trim()
+        || "no_especificado",
+      schedule:
+        String(rawWorkConditions.schedule ?? rawWorkConditions.horario ?? "").trim()
+        || "no_especificado",
+      contract_type:
+        String(
+          rawWorkConditions.contract_type
+          ?? rawWorkConditions.tipo_contrato
+          ?? rawWorkConditions.contract
+          ?? ""
+        ).trim() || "no_especificado",
+      location:
+        String(rawWorkConditions.location ?? rawWorkConditions.ubicacion ?? "").trim()
+        || "no_especificado",
+      salary: {
+        min: parseNumber(rawSalary.min),
+        max: parseNumber(rawSalary.max),
+        currency:
+          String(rawSalary.currency ?? "").trim().toUpperCase() || "no_especificado",
+        period:
+          String(rawSalary.period ?? "").trim().toLowerCase() || "no_especificado",
+        text_original:
+          String(rawSalary.text_original ?? rawWorkConditions.salary_text ?? "").trim(),
+      },
+    },
+    beneficios: parseList(source.beneficios),
+    confidence,
+    extraction_source: String(source.extraction_source ?? "").trim() || "none",
+  };
+}
+
+function listToMultiline(items: string[]): string {
+  return items.join("\n");
+}
+
+function multilineToList(value: string): string[] {
+  return value
+    .split("\n")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
+function profileToDraft(profile: VacancyStructuredProfile): VacancyStructuredProfileDraft {
+  return {
+    summary: profile.summary,
+    seniority: profile.seniority,
+    organizationalLevel: profile.organizational_level,
+    funcionesInput: listToMultiline(profile.funciones_responsabilidades),
+    requisitosObligatoriosInput: listToMultiline(profile.requisitos_obligatorios),
+    requisitosDeseablesInput: listToMultiline(profile.requisitos_deseables),
+    modalidad: profile.condiciones_trabajo.modality,
+    horario: profile.condiciones_trabajo.schedule,
+    tipoContrato: profile.condiciones_trabajo.contract_type,
+    ubicacionTrabajo: profile.condiciones_trabajo.location,
+    salarioMinInput:
+      profile.condiciones_trabajo.salary.min === null
+        ? ""
+        : String(profile.condiciones_trabajo.salary.min),
+    salarioMaxInput:
+      profile.condiciones_trabajo.salary.max === null
+        ? ""
+        : String(profile.condiciones_trabajo.salary.max),
+    salarioMoneda: profile.condiciones_trabajo.salary.currency,
+    salarioPeriodo: profile.condiciones_trabajo.salary.period,
+    salarioTexto: profile.condiciones_trabajo.salary.text_original,
+    beneficiosInput: listToMultiline(profile.beneficios),
+  };
+}
+
+function safePrettyJson(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return "{}";
+  }
+}
+
+function normalizeVacancyProfilePayload(raw: unknown): Record<string, unknown> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return parseVacancyStructuredProfile(raw) as unknown as Record<string, unknown>;
+  }
+  const source = raw as Record<string, unknown>;
+  const normalized = parseVacancyStructuredProfile(raw) as unknown as Record<string, unknown>;
+  return { ...source, ...normalized };
+}
+
+function draftToProfile(draft: VacancyStructuredProfileDraft): VacancyStructuredProfile {
+  const parseNumber = (value: string): number | null => {
+    const clean = value.trim();
+    if (!clean) {
+      return null;
+    }
+    const normalized = clean.replace(/\./g, "").replace(",", ".");
+    const parsed = Number.parseFloat(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+  const funciones = multilineToList(draft.funcionesInput);
+  const requisitosObligatorios = multilineToList(draft.requisitosObligatoriosInput);
+  const requisitosDeseables = multilineToList(draft.requisitosDeseablesInput);
+  const beneficios = multilineToList(draft.beneficiosInput);
+  return {
+    summary: draft.summary.trim(),
+    seniority: draft.seniority.trim() || "no_especificado",
+    organizational_level: draft.organizationalLevel.trim() || "no_especificado",
+    funciones_responsabilidades: funciones,
+    requisitos_obligatorios: requisitosObligatorios,
+    requisitos_deseables: requisitosDeseables,
+    condiciones_trabajo: {
+      modality: draft.modalidad.trim() || "no_especificado",
+      schedule: draft.horario.trim() || "no_especificado",
+      contract_type: draft.tipoContrato.trim() || "no_especificado",
+      location: draft.ubicacionTrabajo.trim() || "no_especificado",
+      salary: {
+        min: parseNumber(draft.salarioMinInput),
+        max: parseNumber(draft.salarioMaxInput),
+        currency: draft.salarioMoneda.trim().toUpperCase() || "no_especificado",
+        period: draft.salarioPeriodo.trim().toLowerCase() || "no_especificado",
+        text_original: draft.salarioTexto.trim(),
+      },
+    },
+    beneficios,
+    confidence: "medium",
+    extraction_source: "manual_edit",
+  };
+}
+
+function getVacancyProfileStatusLabel(status: string): string {
+  if (status === "approved") {
+    return "Aprobado";
+  }
+  if (status === "draft") {
+    return "Borrador";
+  }
+  return "Sin estructurar";
+}
+
+function getVacancyProfileSourceBadge(source: string): { label: string; className: string } {
+  const normalized = source.trim().toLowerCase();
+  if (normalized === "llm") {
+    return { label: "LLM", className: "vacancyProfileSourceChipLLM" };
+  }
+  if (normalized === "heuristic") {
+    return { label: "Fallback", className: "vacancyProfileSourceChipFallback" };
+  }
+  if (normalized === "manual_edit") {
+    return { label: "Manual edit", className: "vacancyProfileSourceChipManual" };
+  }
+  return { label: "Sin extraccion", className: "vacancyProfileSourceChipNone" };
 }
 
 function buildPromptConfigDrafts(
@@ -1017,6 +1328,21 @@ export default function App() {
   const [manualUrlRawText, setManualUrlRawText] = useState("");
   const [isImportingUrl, setIsImportingUrl] = useState(false);
   const [savedOpportunities, setSavedOpportunities] = useState<Opportunity[]>([]);
+  const [editingOpportunityProfileId, setEditingOpportunityProfileId] = useState<string | null>(
+    null
+  );
+  const [savingOpportunityProfileId, setSavingOpportunityProfileId] = useState<string | null>(null);
+  const [recomputingOpportunityProfileId, setRecomputingOpportunityProfileId] = useState<string | null>(null);
+  const [clearingOpportunityProfileId, setClearingOpportunityProfileId] = useState<string | null>(null);
+  const [opportunityProfileDrafts, setOpportunityProfileDrafts] = useState<
+    Record<string, VacancyStructuredProfileDraft>
+  >({});
+  const [opportunityProfileEditorModeById, setOpportunityProfileEditorModeById] = useState<
+    Record<string, VacancyProfileEditorMode>
+  >({});
+  const [opportunityProfileJsonDrafts, setOpportunityProfileJsonDrafts] = useState<
+    Record<string, string>
+  >({});
   const [expandedSavedOpportunityPreview, setExpandedSavedOpportunityPreview] = useState<
     Record<string, boolean>
   >({});
@@ -1096,6 +1422,7 @@ export default function App() {
   const [profileSalaryCurrency, setProfileSalaryCurrency] = useState("");
   const [profileSalaryPeriod, setProfileSalaryPeriod] = useState("");
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isChatDrawerOpen, setIsChatDrawerOpen] = useState(false);
   const [isPersonContextMenuOpen, setIsPersonContextMenuOpen] = useState(false);
   const [isContextRailCollapsed, setIsContextRailCollapsed] = useState<boolean>(() => {
@@ -1400,8 +1727,14 @@ export default function App() {
         setFocusedRunId("");
         setSelectedResultBlockId("");
         setRunCursorByAction({});
-      setOpportunityNotes("");
-      setOpportunityStatus("detected");
+        setOpportunityNotes("");
+        setOpportunityStatus("detected");
+        setEditingOpportunityProfileId(null);
+        setOpportunityProfileDrafts({});
+        setOpportunityProfileEditorModeById({});
+        setOpportunityProfileJsonDrafts({});
+        setSavingOpportunityProfileId(null);
+        setRecomputingOpportunityProfileId(null);
         setAnalyzeExecutedByOpportunity({});
         setArtifactsExecutedByOpportunity({});
         setResultsPanelTab("analysis");
@@ -1789,6 +2122,18 @@ export default function App() {
       window.clearTimeout(timeoutId);
     };
   }, [statusSaveMessage]);
+
+  useEffect(() => {
+    if (!toastMessage) {
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setToastMessage(null);
+    }, 2200);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [toastMessage]);
 
   useEffect(() => {
     if (!selectedPerson) {
@@ -2368,6 +2713,261 @@ export default function App() {
         error instanceof Error ? error.message : "No se pudo copiar la URL";
       setErrorMessage(message);
     }
+  }
+
+  function handleStartEditOpportunityProfile(item: Opportunity) {
+    const profile = parseVacancyStructuredProfile(item.vacancy_profile);
+    setOpportunityProfileDrafts((current) => ({
+      ...current,
+      [item.opportunity_id]: current[item.opportunity_id] ?? profileToDraft(profile),
+    }));
+    setOpportunityProfileEditorModeById((current) => ({
+      ...current,
+      [item.opportunity_id]: current[item.opportunity_id] ?? "guided",
+    }));
+    setOpportunityProfileJsonDrafts((current) => ({
+      ...current,
+      [item.opportunity_id]:
+        current[item.opportunity_id]
+        ?? safePrettyJson(
+          Object.keys(item.vacancy_profile ?? {}).length > 0
+            ? item.vacancy_profile
+            : profile
+        ),
+    }));
+    setEditingOpportunityProfileId(item.opportunity_id);
+  }
+
+  function handleOpportunityProfileDraftChange(
+    opportunityId: string,
+    patch: Partial<VacancyStructuredProfileDraft>
+  ) {
+    setOpportunityProfileDrafts((current) => {
+      const base: VacancyStructuredProfileDraft = current[opportunityId] ?? {
+        summary: "",
+        seniority: "no_especificado",
+        organizationalLevel: "no_especificado",
+        funcionesInput: "",
+        requisitosObligatoriosInput: "",
+        requisitosDeseablesInput: "",
+        modalidad: "no_especificado",
+        horario: "no_especificado",
+        tipoContrato: "no_especificado",
+        ubicacionTrabajo: "no_especificado",
+        salarioMinInput: "",
+        salarioMaxInput: "",
+        salarioMoneda: "no_especificado",
+        salarioPeriodo: "no_especificado",
+        salarioTexto: "",
+        beneficiosInput: "",
+      };
+      return {
+        ...current,
+        [opportunityId]: {
+          ...base,
+          ...patch,
+        },
+      };
+    });
+  }
+
+  async function handleSaveOpportunityProfile(item: Opportunity, approve: boolean) {
+    if (!selectedPersonId || savingOpportunityProfileId) {
+      return;
+    }
+    const editorMode = opportunityProfileEditorModeById[item.opportunity_id] ?? "guided";
+    const draft = opportunityProfileDrafts[item.opportunity_id] ?? profileToDraft(
+      parseVacancyStructuredProfile(item.vacancy_profile)
+    );
+    const jsonDraft = opportunityProfileJsonDrafts[item.opportunity_id] ?? safePrettyJson(
+      Object.keys(item.vacancy_profile ?? {}).length > 0
+        ? item.vacancy_profile
+        : parseVacancyStructuredProfile(item.vacancy_profile)
+    );
+    let vacancyProfilePayload: Record<string, unknown>;
+    if (editorMode === "json") {
+      try {
+        const parsed = JSON.parse(jsonDraft) as unknown;
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          setErrorMessage("El JSON debe ser un objeto valido.");
+          return;
+        }
+        vacancyProfilePayload = normalizeVacancyProfilePayload(parsed);
+      } catch {
+        setErrorMessage("JSON invalido en estructura de vacante. Corrigelo antes de guardar.");
+        return;
+      }
+    } else {
+      vacancyProfilePayload = draftToProfile(draft) as unknown as Record<string, unknown>;
+    }
+    setSavingOpportunityProfileId(item.opportunity_id);
+    setErrorMessage(null);
+    try {
+      await updateOpportunity(selectedPersonId, item.opportunity_id, {
+        vacancy_profile: vacancyProfilePayload,
+        vacancy_profile_status: approve ? "approved" : "draft",
+      });
+      const items = await listOpportunities(selectedPersonId);
+      setSavedOpportunities(items);
+      if (selectedOpportunityId === item.opportunity_id) {
+        const refreshed = items.find((entry) => entry.opportunity_id === item.opportunity_id);
+        if (refreshed) {
+          setOpportunityStatus(refreshed.status);
+          setOpportunityNotes(refreshed.notes);
+        }
+      }
+      setEditingOpportunityProfileId(null);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo guardar la estructura de vacante";
+      setErrorMessage(message);
+    } finally {
+      setSavingOpportunityProfileId(null);
+    }
+  }
+
+  async function handleRecomputeOpportunityProfile(item: Opportunity) {
+    if (!selectedPersonId || recomputingOpportunityProfileId) {
+      return;
+    }
+    setRecomputingOpportunityProfileId(item.opportunity_id);
+    setErrorMessage(null);
+    try {
+      await recomputeOpportunityVacancyProfile(selectedPersonId, item.opportunity_id);
+      const items = await listOpportunities(selectedPersonId);
+      setSavedOpportunities(items);
+      if (selectedOpportunityId === item.opportunity_id) {
+        const refreshed = items.find((entry) => entry.opportunity_id === item.opportunity_id);
+        if (refreshed) {
+          setOpportunityStatus(refreshed.status);
+          setOpportunityNotes(refreshed.notes);
+        }
+      }
+      setEditingOpportunityProfileId(null);
+      setOpportunityProfileDrafts((current) => {
+        const next = { ...current };
+        delete next[item.opportunity_id];
+        return next;
+      });
+      setOpportunityProfileJsonDrafts((current) => {
+        const next = { ...current };
+        delete next[item.opportunity_id];
+        return next;
+      });
+      setOpportunityProfileEditorModeById((current) => {
+        const next = { ...current };
+        delete next[item.opportunity_id];
+        return next;
+      });
+      setToastMessage("Extracción recalculada");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo recalcular la extraccion";
+      setErrorMessage(message);
+    } finally {
+      setRecomputingOpportunityProfileId(null);
+    }
+  }
+
+  async function handleClearOpportunityProfile(item: Opportunity) {
+    if (!selectedPersonId || clearingOpportunityProfileId) {
+      return;
+    }
+    const confirmed = window.confirm(
+      "Se borrara solo el extracto estructurado de esta vacante. "
+      + "La vacante original (URL, descripcion, estado y notas) se mantiene intacta. Continuar?"
+    );
+    if (!confirmed) {
+      return;
+    }
+    setClearingOpportunityProfileId(item.opportunity_id);
+    setErrorMessage(null);
+    try {
+      await updateOpportunity(selectedPersonId, item.opportunity_id, {
+        vacancy_profile: {},
+        vacancy_profile_status: "none",
+      });
+      const items = await listOpportunities(selectedPersonId);
+      setSavedOpportunities(items);
+      if (selectedOpportunityId === item.opportunity_id) {
+        const refreshed = items.find((entry) => entry.opportunity_id === item.opportunity_id);
+        if (refreshed) {
+          setOpportunityStatus(refreshed.status);
+          setOpportunityNotes(refreshed.notes);
+        }
+      }
+      setEditingOpportunityProfileId(null);
+      setOpportunityProfileDrafts((current) => {
+        const next = { ...current };
+        delete next[item.opportunity_id];
+        return next;
+      });
+      setOpportunityProfileJsonDrafts((current) => {
+        const next = { ...current };
+        delete next[item.opportunity_id];
+        return next;
+      });
+      setOpportunityProfileEditorModeById((current) => {
+        const next = { ...current };
+        delete next[item.opportunity_id];
+        return next;
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo borrar el extracto de la vacante";
+      setErrorMessage(message);
+    } finally {
+      setClearingOpportunityProfileId(null);
+    }
+  }
+
+  function handleSetOpportunityProfileEditorMode(
+    item: Opportunity,
+    mode: VacancyProfileEditorMode
+  ) {
+    const opportunityId = item.opportunity_id;
+    if (mode === "json") {
+      const currentDraft = opportunityProfileDrafts[opportunityId] ?? profileToDraft(
+        parseVacancyStructuredProfile(item.vacancy_profile)
+      );
+      setOpportunityProfileJsonDrafts((current) => ({
+        ...current,
+        [opportunityId]: safePrettyJson(draftToProfile(currentDraft)),
+      }));
+    } else {
+      const jsonDraft = opportunityProfileJsonDrafts[opportunityId];
+      if (jsonDraft) {
+        try {
+          const parsed = JSON.parse(jsonDraft) as unknown;
+          const profile = parseVacancyStructuredProfile(parsed);
+          setOpportunityProfileDrafts((current) => ({
+            ...current,
+            [opportunityId]: profileToDraft(profile),
+          }));
+        } catch {
+          // Ignore invalid JSON while switching mode; validation happens on save.
+        }
+      }
+    }
+    setOpportunityProfileEditorModeById((current) => ({
+      ...current,
+      [opportunityId]: mode,
+    }));
+  }
+
+  function handleRestoreRecommendedPrompt(flowKey: string) {
+    const template = RECOMMENDED_PROMPT_TEMPLATES[flowKey];
+    if (!template) {
+      return;
+    }
+    handlePromptDraftChange(flowKey, { template_text: template });
+  }
+
+  function handleOpportunityProfileJsonDraftChange(opportunityId: string, value: string) {
+    setOpportunityProfileJsonDrafts((current) => ({
+      ...current,
+      [opportunityId]: value,
+    }));
   }
 
   async function handleToggleCvPreview() {
@@ -3912,6 +4512,15 @@ export default function App() {
                       >
                         {isSaving ? "Guardando..." : "Guardar configuracion"}
                       </button>
+                      {RECOMMENDED_PROMPT_TEMPLATES[config.flow_key] ? (
+                        <button
+                          disabled={isSaving}
+                          onClick={() => handleRestoreRecommendedPrompt(config.flow_key)}
+                          type="button"
+                        >
+                          Restaurar recomendado
+                        </button>
+                      ) : null}
                       <button
                         disabled={isSaving || isRollingBack}
                         onClick={() => handleTogglePromptVersions(config.flow_key)}
@@ -4732,6 +5341,26 @@ export default function App() {
                 2,
                 isExpanded
               );
+              const profile = parseVacancyStructuredProfile(item.vacancy_profile);
+              const isEditingProfile = editingOpportunityProfileId === item.opportunity_id;
+              const draft = opportunityProfileDrafts[item.opportunity_id] ?? profileToDraft(profile);
+              const editorMode = opportunityProfileEditorModeById[item.opportunity_id] ?? "guided";
+              const jsonDraft = opportunityProfileJsonDrafts[item.opportunity_id] ?? safePrettyJson(
+                Object.keys(item.vacancy_profile ?? {}).length > 0
+                  ? item.vacancy_profile
+                  : profile
+              );
+              const profileStatusLabel = getVacancyProfileStatusLabel(item.vacancy_profile_status);
+              const sourceBadge = getVacancyProfileSourceBadge(profile.extraction_source);
+              const hasStructuredContent = Boolean(
+                profile.summary
+                  || profile.funciones_responsabilidades.length
+                  || profile.requisitos_obligatorios.length
+                  || profile.requisitos_deseables.length
+                  || profile.beneficios.length
+              );
+              const canClearProfile =
+                item.vacancy_profile_status !== "none" || hasStructuredContent;
               return (
                 <article
                   className="chatBubble chatBubbleUser savedOpportunityCard"
@@ -4749,6 +5378,382 @@ export default function App() {
                   {descriptionPreview.previewText ? (
                     <p className="savedOpportunitySnippet">{descriptionPreview.previewText}</p>
                   ) : null}
+                  <article className="vacancyProfileCard">
+                    <div className="vacancyProfileHeader">
+                      <p className="chatRole vacancyProfileTitle">Resumen estructurado de la vacante</p>
+                      <div className="metaChips vacancyProfileHeaderChips">
+                        <span className="metaChip vacancyProfileStatusChip">{profileStatusLabel}</span>
+                        <span className={`metaChip vacancyProfileSourceChip ${sourceBadge.className}`}>
+                          {sourceBadge.label}
+                        </span>
+                      </div>
+                    </div>
+                    {!isEditingProfile ? (
+                      <>
+                        <p className="metaText vacancyProfileSummary">
+                          {profile.summary || "Sin resumen estructurado todavia."}
+                        </p>
+                        {profile.seniority && profile.seniority !== "no_especificado" ? (
+                          <p className="metaText">
+                            <strong>Seniority:</strong> {profile.seniority}
+                          </p>
+                        ) : null}
+                        {profile.organizational_level
+                          && profile.organizational_level !== "no_especificado" ? (
+                          <p className="metaText">
+                            <strong>Nivel organizacional:</strong> {profile.organizational_level}
+                          </p>
+                        ) : null}
+                        {profile.requisitos_obligatorios.length > 0 ? (
+                          <p className="metaText">
+                            <strong>Requisitos obligatorios:</strong>{" "}
+                            {profile.requisitos_obligatorios.slice(0, 4).join("; ")}
+                          </p>
+                        ) : null}
+                        {profile.requisitos_deseables.length > 0 ? (
+                          <p className="metaText">
+                            <strong>Requisitos deseables:</strong>{" "}
+                            {profile.requisitos_deseables.slice(0, 4).join("; ")}
+                          </p>
+                        ) : null}
+                        {(profile.condiciones_trabajo.modality !== "no_especificado"
+                          || profile.condiciones_trabajo.contract_type !== "no_especificado"
+                          || profile.condiciones_trabajo.schedule !== "no_especificado"
+                          || profile.condiciones_trabajo.location !== "no_especificado") ? (
+                          <p className="metaText">
+                            <strong>Condiciones:</strong>{" "}
+                            {[
+                              profile.condiciones_trabajo.modality !== "no_especificado"
+                                ? `modalidad=${profile.condiciones_trabajo.modality}`
+                                : "",
+                              profile.condiciones_trabajo.schedule !== "no_especificado"
+                                ? `horario=${profile.condiciones_trabajo.schedule}`
+                                : "",
+                              profile.condiciones_trabajo.contract_type !== "no_especificado"
+                                ? `contrato=${profile.condiciones_trabajo.contract_type}`
+                                : "",
+                              profile.condiciones_trabajo.location !== "no_especificado"
+                                ? `ubicacion=${profile.condiciones_trabajo.location}`
+                                : "",
+                            ].filter(Boolean).join(" · ")}
+                          </p>
+                        ) : null}
+                        <div className="cardActions">
+                          <button
+                            className="vacancyProfileQuickActionButton"
+                            disabled={recomputingOpportunityProfileId === item.opportunity_id}
+                            onClick={() => void handleRecomputeOpportunityProfile(item)}
+                            type="button"
+                          >
+                            {recomputingOpportunityProfileId === item.opportunity_id
+                              ? "Recalculando..."
+                              : "Recalcular extraccion"}
+                          </button>
+                          <button
+                            className="vacancyProfileQuickActionButton"
+                            onClick={() => handleStartEditOpportunityProfile(item)}
+                            type="button"
+                          >
+                            {hasStructuredContent ? "Editar estructura" : "Completar estructura"}
+                          </button>
+                          <button
+                            className="vacancyProfileQuickActionButton"
+                            disabled={
+                              !canClearProfile
+                              || clearingOpportunityProfileId === item.opportunity_id
+                            }
+                            onClick={() => void handleClearOpportunityProfile(item)}
+                            type="button"
+                          >
+                            {clearingOpportunityProfileId === item.opportunity_id
+                              ? "Borrando..."
+                              : "Borrar extracto"}
+                          </button>
+                          {item.vacancy_profile_status !== "approved" && hasStructuredContent ? (
+                            <button
+                              className="primaryButton vacancyProfileQuickActionButton"
+                              disabled={savingOpportunityProfileId === item.opportunity_id}
+                              onClick={() => void handleSaveOpportunityProfile(item, true)}
+                              type="button"
+                            >
+                              {savingOpportunityProfileId === item.opportunity_id
+                                ? "Guardando..."
+                                : "Aprobar"}
+                            </button>
+                          ) : null}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="vacancyProfileEditorMode">
+                          <span className="metaText">Modo de edicion:</span>
+                          <div className="cardActions">
+                            <button
+                              className={editorMode === "guided" ? "primaryButton" : ""}
+                              onClick={() => handleSetOpportunityProfileEditorMode(item, "guided")}
+                              type="button"
+                            >
+                              Guiado
+                            </button>
+                            <button
+                              className={editorMode === "json" ? "primaryButton" : ""}
+                              onClick={() => handleSetOpportunityProfileEditorMode(item, "json")}
+                              type="button"
+                            >
+                              JSON avanzado
+                            </button>
+                          </div>
+                        </div>
+                        {editorMode === "json" ? (
+                          <>
+                            <label className="field">
+                              JSON de estructura de vacante
+                              <textarea
+                                className="vacancyProfileJsonTextarea"
+                                onChange={(event) =>
+                                  handleOpportunityProfileJsonDraftChange(
+                                    item.opportunity_id,
+                                    event.target.value
+                                  )
+                                }
+                                rows={14}
+                                value={jsonDraft}
+                              />
+                            </label>
+                            <p className="metaText">
+                              Debe ser un objeto JSON valido. Puedes incluir campos adicionales.
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <label className="field">
+                              Resumen
+                              <textarea
+                                onChange={(event) =>
+                                  handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                    summary: event.target.value,
+                                  })
+                                }
+                                rows={2}
+                                value={draft.summary}
+                              />
+                            </label>
+                            <div className="manualRow">
+                              <label className="field">
+                                Seniority
+                                <input
+                                  onChange={(event) =>
+                                    handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                      seniority: event.target.value,
+                                    })
+                                  }
+                                  value={draft.seniority}
+                                />
+                              </label>
+                              <label className="field">
+                                Nivel organizacional
+                                <input
+                                  onChange={(event) =>
+                                    handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                      organizationalLevel: event.target.value,
+                                    })
+                                  }
+                                  value={draft.organizationalLevel}
+                                />
+                              </label>
+                            </div>
+                            <label className="field">
+                              Funciones y responsabilidades (uno por linea)
+                              <textarea
+                                onChange={(event) =>
+                                  handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                    funcionesInput: event.target.value,
+                                  })
+                                }
+                                rows={3}
+                                value={draft.funcionesInput}
+                              />
+                            </label>
+                            <label className="field">
+                              Requisitos obligatorios (uno por linea)
+                              <textarea
+                                onChange={(event) =>
+                                  handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                    requisitosObligatoriosInput: event.target.value,
+                                  })
+                                }
+                                rows={3}
+                                value={draft.requisitosObligatoriosInput}
+                              />
+                            </label>
+                            <label className="field">
+                              Requisitos deseables (uno por linea)
+                              <textarea
+                                onChange={(event) =>
+                                  handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                    requisitosDeseablesInput: event.target.value,
+                                  })
+                                }
+                                rows={3}
+                                value={draft.requisitosDeseablesInput}
+                              />
+                            </label>
+                            <div className="manualRow">
+                              <label className="field">
+                                Modalidad
+                                <input
+                                  onChange={(event) =>
+                                    handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                      modalidad: event.target.value,
+                                    })
+                                  }
+                                  value={draft.modalidad}
+                                />
+                              </label>
+                              <label className="field">
+                                Horario
+                                <input
+                                  onChange={(event) =>
+                                    handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                      horario: event.target.value,
+                                    })
+                                  }
+                                  value={draft.horario}
+                                />
+                              </label>
+                            </div>
+                            <div className="manualRow">
+                              <label className="field">
+                                Tipo de contrato
+                                <input
+                                  onChange={(event) =>
+                                    handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                      tipoContrato: event.target.value,
+                                    })
+                                  }
+                                  value={draft.tipoContrato}
+                                />
+                              </label>
+                              <label className="field">
+                                Ubicacion
+                                <input
+                                  onChange={(event) =>
+                                    handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                      ubicacionTrabajo: event.target.value,
+                                    })
+                                  }
+                                  value={draft.ubicacionTrabajo}
+                                />
+                              </label>
+                            </div>
+                            <div className="manualRow">
+                              <label className="field">
+                                Salario min
+                                <input
+                                  onChange={(event) =>
+                                    handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                      salarioMinInput: event.target.value,
+                                    })
+                                  }
+                                  placeholder="ej: 3500000"
+                                  value={draft.salarioMinInput}
+                                />
+                              </label>
+                              <label className="field">
+                                Salario max
+                                <input
+                                  onChange={(event) =>
+                                    handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                      salarioMaxInput: event.target.value,
+                                    })
+                                  }
+                                  placeholder="ej: 5000000"
+                                  value={draft.salarioMaxInput}
+                                />
+                              </label>
+                            </div>
+                            <div className="manualRow">
+                              <label className="field">
+                                Moneda
+                                <input
+                                  onChange={(event) =>
+                                    handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                      salarioMoneda: event.target.value,
+                                    })
+                                  }
+                                  placeholder="COP / USD / EUR"
+                                  value={draft.salarioMoneda}
+                                />
+                              </label>
+                              <label className="field">
+                                Periodo
+                                <input
+                                  onChange={(event) =>
+                                    handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                      salarioPeriodo: event.target.value,
+                                    })
+                                  }
+                                  placeholder="mensual / anual / hora"
+                                  value={draft.salarioPeriodo}
+                                />
+                              </label>
+                            </div>
+                            <label className="field">
+                              Salario (texto original)
+                              <textarea
+                                onChange={(event) =>
+                                  handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                    salarioTexto: event.target.value,
+                                  })
+                                }
+                                rows={2}
+                                value={draft.salarioTexto}
+                              />
+                            </label>
+                            <label className="field">
+                              Beneficios (uno por linea)
+                              <textarea
+                                onChange={(event) =>
+                                  handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                    beneficiosInput: event.target.value,
+                                  })
+                                }
+                                rows={2}
+                                value={draft.beneficiosInput}
+                              />
+                            </label>
+                          </>
+                        )}
+                        <div className="cardActions">
+                          <button
+                            disabled={savingOpportunityProfileId === item.opportunity_id}
+                            onClick={() => void handleSaveOpportunityProfile(item, false)}
+                            type="button"
+                          >
+                            {savingOpportunityProfileId === item.opportunity_id
+                              ? "Guardando..."
+                              : "Guardar borrador"}
+                          </button>
+                          <button
+                            className="primaryButton"
+                            disabled={savingOpportunityProfileId === item.opportunity_id}
+                            onClick={() => void handleSaveOpportunityProfile(item, true)}
+                            type="button"
+                          >
+                            {savingOpportunityProfileId === item.opportunity_id
+                              ? "Guardando..."
+                              : "Aprobar"}
+                          </button>
+                          <button
+                            onClick={() => setEditingOpportunityProfileId(null)}
+                            type="button"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </article>
                   <div className="savedOpportunityLinkRow">
                     <div className="savedOpportunityLinkExpandSlot">
                       {descriptionPreview.hasOverflow ? (
@@ -6210,6 +7215,11 @@ export default function App() {
             )
             : null}
         </section>
+      ) : null}
+      {toastMessage ? (
+        <div aria-live="polite" className="appToast appToastSuccess" role="status">
+          {toastMessage}
+        </div>
       ) : null}
       {errorMessage ? <p className="errorText">{errorMessage}</p> : null}
     </main>

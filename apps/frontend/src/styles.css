@@ -884,6 +884,26 @@ button:disabled {
   font-weight: 600;
 }
 
+.appToast {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 120;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-float);
+  font-size: 0.86rem;
+  line-height: 1.2;
+  max-width: min(92vw, 360px);
+}
+
+.appToastSuccess {
+  color: color-mix(in srgb, var(--success) 88%, #e6ffef);
+  background: color-mix(in srgb, var(--success) 18%, var(--bg-deep));
+  border-color: color-mix(in srgb, var(--success) 60%, var(--border-subtle));
+}
+
 .chatList {
   display: grid;
   gap: 10px;
@@ -2146,6 +2166,95 @@ button:disabled {
   line-height: 1.4;
   font-size: 0.92rem;
 }
+
+.vacancyProfileCard {
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 85%, var(--accent));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-deep) 72%, var(--surface-card));
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.vacancyProfileHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.vacancyProfileTitle {
+  margin: 0;
+}
+
+.vacancyProfileStatusChip {
+  font-size: 0.74rem;
+}
+
+.vacancyProfileHeaderChips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.vacancyProfileSourceChip {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.vacancyProfileSourceChipLLM {
+  border-color: color-mix(in srgb, var(--success) 70%, var(--border-subtle));
+  color: color-mix(in srgb, var(--success) 78%, #d1fae5);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+
+.vacancyProfileSourceChipFallback {
+  border-color: color-mix(in srgb, var(--warning) 70%, var(--border-subtle));
+  color: color-mix(in srgb, var(--warning) 80%, #fef3c7);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+}
+
+.vacancyProfileSourceChipManual {
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--border-subtle));
+  color: color-mix(in srgb, var(--accent) 84%, #cffafe);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.vacancyProfileSourceChipNone {
+  border-color: color-mix(in srgb, var(--border-subtle) 84%, var(--text-muted));
+  color: color-mix(in srgb, var(--text-muted) 88%, #cbd5e1);
+  background: color-mix(in srgb, var(--surface-card) 85%, transparent);
+}
+
+.vacancyProfileSummary {
+  margin: 0;
+}
+
+.vacancyProfileEditorMode {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.vacancyProfileJsonTextarea {
+  min-height: 220px;
+  font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 0.83rem;
+  line-height: 1.45;
+}
+
+.vacancyProfileQuickActionButton {
+  min-height: 30px !important;
+  padding: 5px 9px !important;
+  font-size: 0.82rem;
+  line-height: 1.15;
+}
+
 
 .savedOpportunityExpandRow {
   display: flex;

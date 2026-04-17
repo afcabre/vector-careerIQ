@@ -82,6 +82,9 @@ export type Opportunity = {
   notes: string;
   snapshot_raw_text: string;
   snapshot_payload: Record<string, unknown>;
+  vacancy_profile: Record<string, unknown>;
+  vacancy_profile_status: "none" | "draft" | "approved";
+  vacancy_profile_updated_at: string;
   created_at: string;
   updated_at: string;
 };
@@ -781,7 +784,12 @@ export async function listOpportunities(personId: string): Promise<Opportunity[]
 export async function updateOpportunity(
   personId: string,
   opportunityId: string,
-  payload: { status?: string; notes?: string }
+  payload: {
+    status?: string;
+    notes?: string;
+    vacancy_profile?: Record<string, unknown>;
+    vacancy_profile_status?: "none" | "draft" | "approved";
+  }
 ): Promise<Opportunity> {
   const response = await safeFetch(
     `${API_BASE}/persons/${personId}/opportunities/${opportunityId}`,
@@ -790,6 +798,20 @@ export async function updateOpportunity(
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
+    }
+  );
+  return parseResponse<Opportunity>(response);
+}
+
+export async function recomputeOpportunityVacancyProfile(
+  personId: string,
+  opportunityId: string
+): Promise<Opportunity> {
+  const response = await safeFetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/vacancy-profile/recompute`,
+    {
+      method: "POST",
+      credentials: "include"
     }
   );
   return parseResponse<Opportunity>(response);
