@@ -16,6 +16,12 @@ OPPORTUNITY_STATUSES = [
     "discarded",
 ]
 
+VACANCY_PROFILE_STATUSES = [
+    "none",
+    "draft",
+    "approved",
+]
+
 
 class OpportunityRecord(TypedDict):
     opportunity_id: str
@@ -30,6 +36,9 @@ class OpportunityRecord(TypedDict):
     notes: str
     snapshot_raw_text: str
     snapshot_payload: dict[str, Any]
+    vacancy_profile: dict[str, Any]
+    vacancy_profile_status: str
+    vacancy_profile_updated_at: str
     created_at: str
     updated_at: str
 
@@ -66,6 +75,9 @@ def _normalize(payload: dict | None) -> OpportunityRecord:
         "notes": str(source.get("notes", "")),
         "snapshot_raw_text": str(source.get("snapshot_raw_text", "")),
         "snapshot_payload": dict(source.get("snapshot_payload", {})),
+        "vacancy_profile": dict(source.get("vacancy_profile", {})),
+        "vacancy_profile_status": str(source.get("vacancy_profile_status", "none")),
+        "vacancy_profile_updated_at": str(source.get("vacancy_profile_updated_at", "")),
         "created_at": str(source.get("created_at", "")),
         "updated_at": str(source.get("updated_at", "")),
     }
@@ -155,6 +167,9 @@ def create_opportunity(
         "notes": "",
         "snapshot_raw_text": snapshot_raw_text.strip(),
         "snapshot_payload": snapshot_payload or {},
+        "vacancy_profile": {},
+        "vacancy_profile_status": "none",
+        "vacancy_profile_updated_at": "",
         "created_at": now,
         "updated_at": now,
     }
@@ -244,6 +259,8 @@ def update_opportunity(
     opportunity_id: str,
     status: str | None,
     notes: str | None,
+    vacancy_profile: dict[str, Any] | None = None,
+    vacancy_profile_status: str | None = None,
 ) -> OpportunityRecord | None:
     existing = find_opportunity(person_id, opportunity_id)
     if not existing:
@@ -256,6 +273,17 @@ def update_opportunity(
 
     if notes is not None:
         existing["notes"] = notes
+
+    if vacancy_profile is not None:
+        existing["vacancy_profile"] = dict(vacancy_profile)
+        existing["vacancy_profile_updated_at"] = _now_iso()
+
+    if vacancy_profile_status is not None:
+        if vacancy_profile_status not in VACANCY_PROFILE_STATUSES:
+            return None
+        existing["vacancy_profile_status"] = vacancy_profile_status
+        if vacancy_profile is None:
+            existing["vacancy_profile_updated_at"] = _now_iso()
 
     existing["updated_at"] = _now_iso()
     return _save(existing)

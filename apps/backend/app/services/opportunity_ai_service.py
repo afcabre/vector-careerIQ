@@ -321,11 +321,75 @@ def _person_context(person: PersonRecord) -> str:
 
 
 def _opportunity_context(opportunity: OpportunityRecord) -> str:
+    structured = opportunity.get("vacancy_profile", {})
+    structured_status = str(opportunity.get("vacancy_profile_status", "")).strip() or "none"
+    structured_lines: list[str] = []
+    if isinstance(structured, dict) and structured:
+        summary = str(structured.get("summary", "")).strip()
+        if summary:
+            structured_lines.append(f"Resumen: {summary}")
+        seniority = str(structured.get("seniority", "")).strip()
+        if seniority:
+            structured_lines.append(f"Seniority: {seniority}")
+        organizational_level = str(structured.get("organizational_level", "")).strip()
+        if organizational_level:
+            structured_lines.append(f"Nivel organizacional: {organizational_level}")
+        for label, key in (
+            ("Funciones y responsabilidades", "funciones_responsabilidades"),
+            ("Requisitos obligatorios", "requisitos_obligatorios"),
+            ("Requisitos deseables", "requisitos_deseables"),
+            ("Beneficios", "beneficios"),
+        ):
+            values = structured.get(key, [])
+            if isinstance(values, list):
+                cleaned = [str(item).strip() for item in values if str(item).strip()]
+                if cleaned:
+                    structured_lines.append(f"{label}: " + "; ".join(cleaned))
+        conditions = structured.get("condiciones_trabajo", {})
+        if isinstance(conditions, dict):
+            conditions_parts: list[str] = []
+            modality = str(conditions.get("modality", "")).strip()
+            schedule = str(conditions.get("schedule", "")).strip()
+            contract_type = str(conditions.get("contract_type", "")).strip()
+            location = str(conditions.get("location", "")).strip()
+            salary = conditions.get("salary", {})
+            if modality:
+                conditions_parts.append(f"modalidad={modality}")
+            if schedule:
+                conditions_parts.append(f"horario={schedule}")
+            if contract_type:
+                conditions_parts.append(f"contrato={contract_type}")
+            if location:
+                conditions_parts.append(f"ubicacion={location}")
+            if isinstance(salary, dict):
+                salary_min = salary.get("min")
+                salary_max = salary.get("max")
+                salary_currency = str(salary.get("currency", "")).strip()
+                salary_period = str(salary.get("period", "")).strip()
+                salary_text = str(salary.get("text_original", "")).strip()
+                if salary_min is not None or salary_max is not None:
+                    conditions_parts.append(
+                        "salario="
+                        + f"{salary_min if salary_min is not None else '?'}-"
+                        + f"{salary_max if salary_max is not None else '?'}"
+                        + (f" {salary_currency}" if salary_currency else "")
+                        + (f" ({salary_period})" if salary_period else "")
+                    )
+                elif salary_text:
+                    conditions_parts.append(f"salario_texto={salary_text}")
+            if conditions_parts:
+                structured_lines.append("Condiciones de trabajo: " + "; ".join(conditions_parts))
+    structured_context = (
+        "Resumen estructurado de vacante (estado: "
+        f"{structured_status}):\n"
+        + "\n".join(structured_lines)
+    ) if structured_lines else "Resumen estructurado de vacante: no disponible."
     return (
         f"Vacante: {opportunity['title']}\n"
         f"Empresa: {opportunity['company']}\n"
         f"Ubicacion: {opportunity['location']}\n"
         f"URL: {opportunity['source_url']}\n"
+        f"{structured_context}\n"
         f"Descripcion: {opportunity['snapshot_raw_text']}"
     )
 

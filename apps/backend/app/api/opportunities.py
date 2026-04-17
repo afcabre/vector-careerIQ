@@ -42,6 +42,7 @@ from app.services.opportunity_ai_service import (
 )
 from app.services.opportunity_store import (
     OPPORTUNITY_STATUSES,
+    VACANCY_PROFILE_STATUSES,
     create_opportunity,
     find_opportunity,
     import_text_opportunity,
@@ -50,6 +51,7 @@ from app.services.opportunity_store import (
     save_from_search,
     update_opportunity as update_saved_opportunity,
 )
+from app.services.opportunity_profile_service import extract_structured_opportunity_profile
 from app.services.person_store import get_person
 
 
@@ -69,6 +71,9 @@ class OpportunityResponse(BaseModel):
     notes: str
     snapshot_raw_text: str
     snapshot_payload: dict[str, Any]
+    vacancy_profile: dict[str, Any]
+    vacancy_profile_status: str
+    vacancy_profile_updated_at: str
     created_at: str
     updated_at: str
 
@@ -122,6 +127,8 @@ class CreateOpportunityRequest(BaseModel):
 class UpdateOpportunityRequest(BaseModel):
     status: str | None = Field(default=None)
     notes: str | None = Field(default=None)
+    vacancy_profile: dict[str, Any] | None = Field(default=None)
+    vacancy_profile_status: str | None = Field(default=None)
 
 
 class ActionRequest(BaseModel):
@@ -365,6 +372,7 @@ def import_url(
     person_id: str,
     payload: ImportUrlRequest,
     _: SessionData = Depends(require_operator_session),
+    settings: Settings = Depends(get_settings),
 ) -> FromSearchResponse:
     _require_person(person_id)
     item, created = import_url_opportunity(
@@ -375,6 +383,18 @@ def import_url(
         location=payload.location,
         raw_text=payload.raw_text,
     )
+    if created:
+        structured = extract_structured_opportunity_profile(item, settings)
+        updated = update_saved_opportunity(
+            person_id=person_id,
+            opportunity_id=item["opportunity_id"],
+            status=None,
+            notes=None,
+            vacancy_profile=structured,
+            vacancy_profile_status="draft",
+        )
+        if updated:
+            item = updated
     return FromSearchResponse(item=_to_response(item), created=created)
 
 
@@ -442,12 +462,22 @@ def update_opportunity(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Invalid status",
         )
+    if (
+        payload.vacancy_profile_status is not None
+        and payload.vacancy_profile_status not in VACANCY_PROFILE_STATUSES
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid vacancy_profile_status",
+        )
 
     item = update_saved_opportunity(
         person_id=person_id,
         opportunity_id=opportunity_id,
         status=payload.status,
         notes=payload.notes,
+        vacancy_profile=payload.vacancy_profile,
+        vacancy_profile_status=payload.vacancy_profile_status,
     )
     if not item:
         existing = find_opportunity(person_id, opportunity_id)
@@ -461,6 +491,37 @@ def update_opportunity(
             detail="Invalid status transition",
         )
     return _to_response(item)
+
+
+@router.post("/{opportunity_id}/vacancy-profile/recompute")
+def recompute_vacancy_profile(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+    settings: Settings = Depends(get_settings),
+) -> OpportunityResponse:
+    _require_person(person_id)
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+    structured = extract_structured_opportunity_profile(opportunity, settings)
+    updated = update_saved_opportunity(
+        person_id=person_id,
+        opportunity_id=opportunity_id,
+        status=None,
+        notes=None,
+        vacancy_profile=structured,
+        vacancy_profile_status="draft",
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Could not recompute vacancy profile",
+        )
+    return _to_response(updated)
 
 
 @router.get("/{opportunity_id}")

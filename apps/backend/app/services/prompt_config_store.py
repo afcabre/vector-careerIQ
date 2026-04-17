@@ -18,6 +18,7 @@ FLOW_TASK_ANALYZE_PROFILE_MATCH = "task_analyze_profile_match"
 FLOW_TASK_ANALYZE_CULTURAL_FIT = "task_analyze_cultural_fit"
 FLOW_TASK_INTERVIEW_RESEARCH_PLAN = "task_interview_research_plan"
 FLOW_TASK_INTERVIEW_BRIEF = "task_interview_brief"
+FLOW_TASK_VACANCY_PROFILE_EXTRACT = "task_vacancy_profile_extract"
 FLOW_TASK_PREPARE_GUIDANCE = "task_prepare_guidance"
 FLOW_TASK_PREPARE_COVER_LETTER = "task_prepare_cover_letter"
 FLOW_TASK_PREPARE_EXPERIENCE_SUMMARY = "task_prepare_experience_summary"
@@ -107,6 +108,8 @@ def _required_placeholders(flow_key: str) -> set[str]:
         return {"person_context", "opportunity_context"}
     if flow_key == FLOW_TASK_INTERVIEW_BRIEF:
         return {"person_context", "opportunity_context"}
+    if flow_key == FLOW_TASK_VACANCY_PROFILE_EXTRACT:
+        return {"opportunity_title", "opportunity_raw_text"}
     if flow_key == FLOW_TASK_PREPARE_GUIDANCE:
         return {"person_context", "opportunity_context"}
     if flow_key == FLOW_TASK_PREPARE_COVER_LETTER:
@@ -330,6 +333,29 @@ def _default_configs() -> dict[str, PromptConfigRecord]:
                 "Evidencia semantica CV:\n{semantic_evidence_context}\n\n"
                 "Evidencia externa pre-entrevista:\n{interview_evidence_context}\n\n"
                 "Advertencias de investigacion:\n{research_warnings}"
+            ),
+            "target_sources": [],
+            "is_active": True,
+            "updated_by": "system",
+            "created_at": now,
+            "updated_at": now,
+        },
+        {
+            "config_id": f"pc-{FLOW_TASK_VACANCY_PROFILE_EXTRACT}",
+            "scope": "global",
+            "flow_key": FLOW_TASK_VACANCY_PROFILE_EXTRACT,
+            "template_text": (
+                "Extrae informacion clave de esta vacante y responde SOLO JSON valido. "
+                "Usa exactamente estas claves: summary, seniority, organizational_level, funciones_responsabilidades, "
+                "requisitos_obligatorios, requisitos_deseables, condiciones_trabajo, beneficios, "
+                "confidence, extraction_source. "
+                "Reglas: no inventes datos ausentes; si no hay evidencia deja listas vacias; "
+                "en condiciones_trabajo usa no_especificado si aplica. "
+                "Vacante titulo: {opportunity_title}. "
+                "Empresa: {opportunity_company}. "
+                "Ubicacion: {opportunity_location}. "
+                "URL: {opportunity_url}. "
+                "Descripcion: {opportunity_raw_text}"
             ),
             "target_sources": [],
             "is_active": True,
