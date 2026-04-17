@@ -339,6 +339,8 @@
 - API de CV ampliada para exponer `canonical_cv` en `GET /cv/active/text`, dejando lista la entrada para `CvSemanticChunkerV2`
 - Fase 3 V1.1 iniciada en implementacion: `CvSemanticChunkerV2` integrado dentro del camino `semantic_sections` para priorizar bloques canonicamente tipados (`profile_summary`, `experience_item`, `education_item`, `skills_block`, `language_item`, `certification_item`, `unknown_block`) antes de caer al split por headings
 - indexacion vectorial del CV ahora versiona chunking en `v2` y persiste metadata adicional por bloque (`block_type`, `block_title`, `block_index`, `subchunk_index`), ademas de `vector_source_format=canonical_structured` cuando la indexacion usa estructura canonica
+- Fase 4 V1.1 iniciada en implementacion: `JobCriteriaMapper` agregado como capa derivada sobre `vacancy_profile`, generando criterios evaluables con `category`, `origin`, `source_field` y `criterion_payload` sin redisenar el extractor de vacantes
+- flujo `analyze_profile_match` ahora inyecta `criterios evaluables derivados` dentro de `opportunity_context` y persiste `mapped_criteria` en `result_payload` tanto en ejecucion normal como SSE
 - build frontend revalidado tras integracion de controles `top_k` en administracion: `npm run build` en `OK`
 - fix UX en `Analisis`: `Contextual Intelligence` (Historial IA + Trazas tecnicas) vuelve visible por defecto al versionar la clave de colapso en `localStorage`
 - fix UX en `Analisis`: al colapsar `Contextual Intelligence`, el boton `Mostrar contexto` se muestra en el header central de resultados para recuperacion inmediata de la columna

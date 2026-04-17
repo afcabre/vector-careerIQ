@@ -15,6 +15,7 @@ from app.services.guardrail_service import (
     enforce_output_guardrails,
     guardrail_floor_text,
 )
+from app.services.job_criteria_mapper import job_criteria_context, map_job_criteria
 from app.services.llm_service import FALLBACK_MESSAGE, complete_prompt, stream_prompt
 from app.services.opportunity_store import OpportunityRecord
 from app.services.person_store import PersonRecord
@@ -99,6 +100,7 @@ class PreparationResult(TypedDict):
 class AnalyzeProfileMatchResult(TypedDict):
     analysis_text: str
     semantic_evidence: SemanticEvidence
+    mapped_criteria: dict[str, object]
     prompt_meta: dict[str, dict[str, str | bool]]
 
 
@@ -323,6 +325,7 @@ def _person_context(person: PersonRecord) -> str:
 def _opportunity_context(opportunity: OpportunityRecord) -> str:
     structured = opportunity.get("vacancy_profile", {})
     structured_status = str(opportunity.get("vacancy_profile_status", "")).strip() or "none"
+    mapped_criteria = map_job_criteria(opportunity)
     structured_lines: list[str] = []
     if isinstance(structured, dict) and structured:
         summary = str(structured.get("summary", "")).strip()
@@ -390,6 +393,7 @@ def _opportunity_context(opportunity: OpportunityRecord) -> str:
         f"Ubicacion: {opportunity['location']}\n"
         f"URL: {opportunity['source_url']}\n"
         f"{structured_context}\n"
+        f"{job_criteria_context(mapped_criteria)}\n"
         f"Descripcion: {opportunity['snapshot_raw_text']}"
     )
 
@@ -1276,6 +1280,7 @@ def stream_analyze_profile_match_text(
     settings: Settings,
     run_id: str = "",
 ):
+    mapped_criteria = map_job_criteria(opportunity)
     semantic_evidence = _build_semantic_evidence(
         person,
         opportunity,
@@ -1316,7 +1321,7 @@ def stream_analyze_profile_match_text(
         flow_key="analyze_profile_match_stream",
         run_id=run_id,
     )
-    return semantic_evidence, prompt_meta, stream
+    return semantic_evidence, mapped_criteria, prompt_meta, stream
 
 
 def stream_analyze_cultural_fit_text(
@@ -1474,6 +1479,7 @@ def analyze_profile_match(
     settings: Settings,
     run_id: str = "",
 ) -> AnalyzeProfileMatchResult:
+    mapped_criteria = map_job_criteria(opportunity)
     semantic_evidence = _build_semantic_evidence(
         person,
         opportunity,
@@ -1523,6 +1529,7 @@ def analyze_profile_match(
     return {
         "analysis_text": response,
         "semantic_evidence": semantic_evidence,
+        "mapped_criteria": mapped_criteria,
         "prompt_meta": prompt_meta,
     }
 
