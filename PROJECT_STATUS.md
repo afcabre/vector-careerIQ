@@ -2,8 +2,8 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `deploy productivo en Railway + hardening auth cross-domain + purga de historial git para .specify/instructions`
-- repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, analisis por accion, interview brief, importacion manual, CV activo y capa semantica`
+- checkpoint_actual: `cierre de definicion funcional/tactica para refactor V1.1 de analisis perfil-vacante`
+- repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, analisis por accion, interview brief, importacion manual, CV activo, capa semantica y linea de refactor V1.1 formalizada`
 - ultima_actualizacion: `2026-04-17`
 
 ## Progreso Por Fase
@@ -328,6 +328,9 @@
 - pagina `Analisis` remaquetada para legibilidad: `Oportunidades guardadas` pasa a bloque superior con preview corta de descripcion de cargo por card
 - en `Analisis`, columnas de resultados y `Contextual Intelligence` ahora se renderizan en bloque inferior para lectura mas amplia del contenido principal
 - salida de `Alineacion perfil-vacante` ahora interpreta Markdown (titulos, listas, tablas, links y code inline) en lugar de render plano
+- V1.1 formalizado en documentos normativos como refactor del flujo `perfil-vacante` centrado en: `PdfParseValidator`, `CvCanonicalizer`, `CvSemanticChunkerV2`, `JobCriteriaMapper`, `CandidateProfileNormalizer`, `CriterionEvidenceRetriever`, `CriterionEvaluator`, `AssessmentConsolidator` y `AssessmentRendererAdapter`
+- V1.1 deja cerradas estas decisiones de diseno: `vacante estructurada` como fuente rectora, texto libre de vacante solo auxiliar, sin uso de historial/artefactos previos, evaluacion por criterio persistida en `result_payload`, consolidacion deterministica, fallback LLM solo en ambiguedad y recomendaciones finales normalizadas (`Avanzar`, `Avanzar con reservas`, `Avanzar si se valida X`, `No priorizar`, `Descartar`)
+- arquitectura actualizada para soportar persistencia configurable de evidencia de retrieval (`minimal`/`full`) y pipeline de analisis `deterministic_first -> llm_on_ambiguity -> deterministic_consolidation -> llm_render_final`
 - build frontend revalidado tras integracion de controles `top_k` en administracion: `npm run build` en `OK`
 - fix UX en `Analisis`: `Contextual Intelligence` (Historial IA + Trazas tecnicas) vuelve visible por defecto al versionar la clave de colapso en `localStorage`
 - fix UX en `Analisis`: al colapsar `Contextual Intelligence`, el boton `Mostrar contexto` se muestra en el header central de resultados para recuperacion inmediata de la columna
