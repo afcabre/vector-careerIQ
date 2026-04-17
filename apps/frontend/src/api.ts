@@ -188,12 +188,15 @@ export type ActiveCV = {
   mime_type: string;
   extraction_status: string;
   extraction_format: string;
+  parse_quality: string;
+  parse_issues: string[];
+  parse_recommended_mode: string;
   vector_index_status: string;
   vector_chunks_indexed: number;
   vector_last_indexed_at: string;
   vector_chunking_strategy: "token_window" | "semantic_sections";
   vector_chunking_version: string;
-  vector_source_format: "plain_text" | "markdown_structured";
+  vector_source_format: "plain_text" | "markdown_structured" | "canonical_structured";
   text_length: number;
   text_truncated: boolean;
   extracted_text_preview: string;
@@ -208,8 +211,12 @@ export type ActiveCVText = {
   person_id: string;
   text_length: number;
   text_truncated: boolean;
+  parse_quality: string;
+  parse_issues: string[];
+  parse_recommended_mode: string;
   extracted_text: string;
   structured_markdown: string;
+  canonical_cv: Record<string, unknown>;
 };
 
 export type PromptConfig = {

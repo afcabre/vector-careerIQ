@@ -7,11 +7,16 @@ import uuid
 
 from app.core.settings import get_settings
 from app.services.ai_runtime_config_store import get_ai_runtime_config
+from app.services.cv_canonicalizer import canonicalize_cv
 from app.services.firestore_client import get_firestore_client
 from app.services.cv_vector_service import (
     CHUNKING_STRATEGY_TOKEN_WINDOW,
     CHUNKING_VERSION,
     upsert_cv_vectors,
+)
+from app.services.pdf_parse_validator import (
+    RECOMMENDED_MODE_FALLBACK_PLAIN_TEXT,
+    validate_pdf_parse,
 )
 
 try:
@@ -45,10 +50,14 @@ class CVRecord(TypedDict):
     mime_type: str
     extracted_text: str
     structured_markdown: str
+    canonical_cv: dict
     text_length: int
     text_truncated: bool
     extraction_status: str
     extraction_format: str
+    parse_quality: str
+    parse_issues: list[str]
+    parse_recommended_mode: str
     vector_index_status: str
     vector_chunks_indexed: int
     vector_last_indexed_at: str
@@ -238,10 +247,16 @@ def _normalize(record: dict | None) -> CVRecord:
         "mime_type": str(source.get("mime_type", "")),
         "extracted_text": str(source.get("extracted_text", "")),
         "structured_markdown": str(source.get("structured_markdown", "")),
+        "canonical_cv": dict(source.get("canonical_cv", {})),
         "text_length": int(source.get("text_length", 0)),
         "text_truncated": bool(source.get("text_truncated", False)),
         "extraction_status": str(source.get("extraction_status", "unknown")),
         "extraction_format": str(source.get("extraction_format", EXTRACTION_FORMAT_PLAIN_TEXT)),
+        "parse_quality": str(source.get("parse_quality", "unknown")),
+        "parse_issues": [str(item) for item in source.get("parse_issues", [])],
+        "parse_recommended_mode": str(
+            source.get("parse_recommended_mode", "structured_markdown")
+        ),
         "vector_index_status": str(source.get("vector_index_status", "not_indexed")),
         "vector_chunks_indexed": int(source.get("vector_chunks_indexed", 0)),
         "vector_last_indexed_at": str(source.get("vector_last_indexed_at", "")),
@@ -321,6 +336,22 @@ def upsert_active_cv(
     )
     if markdown_status != "ok":
         extraction_status = f"{extraction_status}|md:{markdown_status}"
+    canonical_cv = canonicalize_cv(
+        raw_text=extracted_text,
+        structured_markdown=structured_markdown,
+    )
+    parse_validation = (
+        validate_pdf_parse(
+            raw_text=extracted_text,
+            structured_markdown=structured_markdown,
+        )
+        if is_pdf
+        else {
+            "parse_quality": "high",
+            "issues": [],
+            "recommended_mode": "structured_markdown",
+        }
+    )
 
     record: CVRecord = {
         "cv_id": _new_id(),
@@ -329,10 +360,14 @@ def upsert_active_cv(
         "mime_type": mime_type,
         "extracted_text": extracted_text,
         "structured_markdown": structured_markdown,
+        "canonical_cv": canonical_cv,
         "text_length": original_length,
         "text_truncated": text_truncated,
         "extraction_status": extraction_status,
         "extraction_format": extraction_format,
+        "parse_quality": str(parse_validation["parse_quality"]),
+        "parse_issues": [str(item) for item in parse_validation["issues"]],
+        "parse_recommended_mode": str(parse_validation["recommended_mode"]),
         "vector_index_status": "pending",
         "vector_chunks_indexed": 0,
         "vector_last_indexed_at": "",
@@ -346,14 +381,24 @@ def upsert_active_cv(
     saved = _save(record)
 
     settings = get_settings()
+    vector_record = {
+        **saved,
+        "structured_markdown": (
+            ""
+            if saved["parse_recommended_mode"] == RECOMMENDED_MODE_FALLBACK_PLAIN_TEXT
+            else structured_markdown
+        ),
+    }
+    vector_chunking_strategy = runtime_config.get(
+        "cv_chunking_strategy", CHUNKING_STRATEGY_TOKEN_WINDOW
+    )
+    if saved["parse_recommended_mode"] == RECOMMENDED_MODE_FALLBACK_PLAIN_TEXT:
+        vector_chunking_strategy = CHUNKING_STRATEGY_TOKEN_WINDOW
     vector_status, chunks_indexed, applied_strategy, chunking_version, source_format = (
         upsert_cv_vectors(
-            {
-                **saved,
-                "structured_markdown": structured_markdown,
-            },
+            vector_record,
             settings,
-            chunking_strategy=runtime_config.get("cv_chunking_strategy", CHUNKING_STRATEGY_TOKEN_WINDOW),
+            chunking_strategy=vector_chunking_strategy,
         )
     )
     saved["vector_index_status"] = vector_status

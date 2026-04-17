@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
+from typing import Any
 
 from app.core.security import SessionData, require_operator_session
 from app.services.cv_store import get_active_cv, upsert_active_cv
@@ -19,6 +20,9 @@ class CVResponse(BaseModel):
     mime_type: str
     extraction_status: str
     extraction_format: str
+    parse_quality: str
+    parse_issues: list[str]
+    parse_recommended_mode: str
     vector_index_status: str
     vector_chunks_indexed: int
     vector_last_indexed_at: str
@@ -39,8 +43,12 @@ class CVTextResponse(BaseModel):
     person_id: str
     text_length: int
     text_truncated: bool
+    parse_quality: str
+    parse_issues: list[str]
+    parse_recommended_mode: str
     extracted_text: str
     structured_markdown: str
+    canonical_cv: dict[str, Any]
 
 
 def _require_person(person_id: str) -> None:
@@ -60,6 +68,9 @@ def _to_response(record: dict) -> CVResponse:
         mime_type=str(record.get("mime_type", "")),
         extraction_status=str(record.get("extraction_status", "")),
         extraction_format=str(record.get("extraction_format", "plain_text")),
+        parse_quality=str(record.get("parse_quality", "unknown")),
+        parse_issues=[str(item) for item in record.get("parse_issues", [])],
+        parse_recommended_mode=str(record.get("parse_recommended_mode", "structured_markdown")),
         vector_index_status=str(record.get("vector_index_status", "")),
         vector_chunks_indexed=int(record.get("vector_chunks_indexed", 0)),
         vector_last_indexed_at=str(record.get("vector_last_indexed_at", "")),
@@ -136,6 +147,10 @@ def get_active_text(
         person_id=str(record.get("person_id", "")),
         text_length=int(record.get("text_length", 0)),
         text_truncated=bool(record.get("text_truncated", False)),
+        parse_quality=str(record.get("parse_quality", "unknown")),
+        parse_issues=[str(item) for item in record.get("parse_issues", [])],
+        parse_recommended_mode=str(record.get("parse_recommended_mode", "structured_markdown")),
         extracted_text=str(record.get("extracted_text", "")),
         structured_markdown=str(record.get("structured_markdown", "")),
+        canonical_cv=dict(record.get("canonical_cv", {})),
     )
