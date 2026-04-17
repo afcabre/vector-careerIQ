@@ -28,7 +28,7 @@ CHAR_FALLBACK_PER_TOKEN = 4
 CHUNK_TARGET_CHARS = CHUNK_TARGET_TOKENS * CHAR_FALLBACK_PER_TOKEN
 CHUNK_OVERLAP_CHARS = CHUNK_OVERLAP_TOKENS * CHAR_FALLBACK_PER_TOKEN
 MAX_CHUNKS = 120
-CHUNKING_VERSION = "v1"
+CHUNKING_VERSION = "v2"
 CHUNKING_STRATEGY_TOKEN_WINDOW = "token_window"
 CHUNKING_STRATEGY_SEMANTIC_SECTIONS = "semantic_sections"
 CHUNKING_STRATEGIES = {
@@ -37,6 +37,7 @@ CHUNKING_STRATEGIES = {
 }
 DEFAULT_CHUNK_SECTION = "general"
 SEMANTIC_MIN_SECTION_CHARS = 280
+CANONICAL_SOURCE_FORMAT = "canonical_structured"
 
 
 def normalize_chunking_strategy(value: str | None) -> str:
@@ -111,6 +112,30 @@ def _chunk_text_token_window(
             chunks.append({"text": chunk, "section": section})
         start += step
     return chunks
+
+
+def _chunk_block_token_window(
+    raw_text: str,
+    settings: Settings,
+    *,
+    section: str,
+    block_type: str,
+    block_title: str,
+    block_index: int,
+) -> list[dict[str, str]]:
+    chunks = _chunk_text_token_window(raw_text, settings, section=section)
+    enriched: list[dict[str, str]] = []
+    for subchunk_index, chunk in enumerate(chunks):
+        enriched.append(
+            {
+                **chunk,
+                "block_type": block_type,
+                "block_title": block_title,
+                "block_index": str(block_index),
+                "subchunk_index": str(subchunk_index),
+            }
+        )
+    return enriched
 
 
 def _split_markdown_sections(markdown_text: str) -> list[tuple[str, str]]:
@@ -191,14 +216,126 @@ def _chunk_text_semantic_sections(
     return chunks[:MAX_CHUNKS]
 
 
+def _canonical_text_for_block(title: str, dates: str, content: str) -> str:
+    lines: list[str] = []
+    if title.strip():
+        lines.append(title.strip())
+    if dates.strip():
+        lines.append(f"Dates: {dates.strip()}")
+    if content.strip():
+        lines.append(content.strip())
+    return "\n".join(lines).strip()
+
+
+def _chunk_canonical_cv_semantic_blocks(
+    canonical_cv: dict[str, Any],
+    settings: Settings,
+) -> list[dict[str, str]]:
+    if not canonical_cv:
+        return []
+
+    chunks: list[dict[str, str]] = []
+
+    profile_summary = str(canonical_cv.get("profile_summary", "")).strip()
+    if profile_summary:
+        chunks.extend(
+            _chunk_block_token_window(
+                profile_summary,
+                settings,
+                section="profile_summary",
+                block_type="profile_summary",
+                block_title="profile_summary",
+                block_index=0,
+            )
+        )
+
+    def append_blocks(
+        items: list[dict[str, Any]],
+        *,
+        section: str,
+        block_type: str,
+        uses_dates: bool,
+    ) -> None:
+        nonlocal chunks
+        for index, item in enumerate(items):
+            if len(chunks) >= MAX_CHUNKS:
+                return
+            title = str(item.get("title", item.get("label", ""))).strip()
+            content = str(item.get("content", "")).strip()
+            dates = str(item.get("dates", "")).strip() if uses_dates else ""
+            text = _canonical_text_for_block(title, dates, content)
+            if not text:
+                continue
+            chunks.extend(
+                _chunk_block_token_window(
+                    text,
+                    settings,
+                    section=section,
+                    block_type=block_type,
+                    block_title=title or block_type,
+                    block_index=index,
+                )
+            )
+
+    append_blocks(
+        list(canonical_cv.get("experience_blocks", [])),
+        section="experience",
+        block_type="experience_item",
+        uses_dates=True,
+    )
+    append_blocks(
+        list(canonical_cv.get("education_blocks", [])),
+        section="education",
+        block_type="education_item",
+        uses_dates=True,
+    )
+
+    skills_block = str(canonical_cv.get("skills_block", "")).strip()
+    if skills_block and len(chunks) < MAX_CHUNKS:
+        chunks.extend(
+            _chunk_block_token_window(
+                skills_block,
+                settings,
+                section="skills",
+                block_type="skills_block",
+                block_title="skills",
+                block_index=0,
+            )
+        )
+
+    append_blocks(
+        list(canonical_cv.get("language_blocks", [])),
+        section="languages",
+        block_type="language_item",
+        uses_dates=False,
+    )
+    append_blocks(
+        list(canonical_cv.get("certification_blocks", [])),
+        section="certifications",
+        block_type="certification_item",
+        uses_dates=False,
+    )
+    append_blocks(
+        list(canonical_cv.get("unknown_blocks", [])),
+        section="unknown",
+        block_type="unknown_block",
+        uses_dates=False,
+    )
+    return chunks[:MAX_CHUNKS]
+
+
 def _chunk_text(
     raw_text: str,
     markdown_text: str,
+    canonical_cv: dict[str, Any],
     settings: Settings,
     chunking_strategy: str,
 ) -> tuple[list[dict[str, str]], str]:
     normalized_strategy = normalize_chunking_strategy(chunking_strategy)
     if normalized_strategy == CHUNKING_STRATEGY_SEMANTIC_SECTIONS:
+        canonical_chunks = _chunk_canonical_cv_semantic_blocks(canonical_cv, settings)
+        if canonical_chunks:
+            return canonical_chunks, CHUNKING_STRATEGY_SEMANTIC_SECTIONS
         semantic_chunks = _chunk_text_semantic_sections(raw_text, markdown_text, settings)
         if semantic_chunks:
             return semantic_chunks, CHUNKING_STRATEGY_SEMANTIC_SECTIONS
@@ -273,16 +410,22 @@ def upsert_cv_vectors(
 
     text = str(record.get("extracted_text", "")).strip()
     markdown_text = str(record.get("structured_markdown", "")).strip()
+    canonical_cv = dict(record.get("canonical_cv", {}))
     chunks, applied_strategy = _chunk_text(
         text,
         markdown_text,
+        canonical_cv,
         settings,
         normalized_strategy,
     )
     vector_source_format = (
-        "markdown_structured"
-        if applied_strategy == CHUNKING_STRATEGY_SEMANTIC_SECTIONS and bool(markdown_text)
-        else "plain_text"
+        CANONICAL_SOURCE_FORMAT
+        if applied_strategy == CHUNKING_STRATEGY_SEMANTIC_SECTIONS and bool(canonical_cv)
+        else (
+            "markdown_structured"
+            if applied_strategy == CHUNKING_STRATEGY_SEMANTIC_SECTIONS and bool(markdown_text)
+            else "plain_text"
+        )
     )
     if not chunks:
         logger.warning(
@@ -327,6 +470,10 @@ def upsert_cv_vectors(
                     "chunking_strategy": applied_strategy,
                     "chunking_version": CHUNKING_VERSION,
                     "source_format": vector_source_format,
+                    "block_type": str(chunk.get("block_type", "")).strip(),
+                    "block_title": str(chunk.get("block_title", "")).strip(),
+                    "block_index": int(str(chunk.get("block_index", "0")).strip() or "0"),
+                    "subchunk_index": int(str(chunk.get("subchunk_index", "0")).strip() or "0"),
                     "text": str(chunk.get("text", "")).strip(),
                 },
             }
