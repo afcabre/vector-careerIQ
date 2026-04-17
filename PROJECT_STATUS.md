@@ -341,6 +341,8 @@
 - indexacion vectorial del CV ahora versiona chunking en `v2` y persiste metadata adicional por bloque (`block_type`, `block_title`, `block_index`, `subchunk_index`), ademas de `vector_source_format=canonical_structured` cuando la indexacion usa estructura canonica
 - Fase 4 V1.1 iniciada en implementacion: `JobCriteriaMapper` agregado como capa derivada sobre `vacancy_profile`, generando criterios evaluables con `category`, `origin`, `source_field` y `criterion_payload` sin redisenar el extractor de vacantes
 - flujo `analyze_profile_match` ahora inyecta `criterios evaluables derivados` dentro de `opportunity_context` y persiste `mapped_criteria` en `result_payload` tanto en ejecucion normal como SSE
+- Fase 5 V1.1 iniciada en implementacion: `CandidateProfileNormalizer` agregado para estabilizar el lado candidato (`identity`, `target_profile`, `salary_expectation`, `cultural_preferences`, `legacy_preferences`, `culture_notes`) antes del retrieval y de la evaluacion por criterio
+- flujo `analyze_profile_match` ahora persiste `normalized_candidate_profile` en `result_payload` y usa su contexto estructurado como parte de la evidencia enviada al prompt del analisis
 - build frontend revalidado tras integracion de controles `top_k` en administracion: `npm run build` en `OK`
 - fix UX en `Analisis`: `Contextual Intelligence` (Historial IA + Trazas tecnicas) vuelve visible por defecto al versionar la clave de colapso en `localStorage`
 - fix UX en `Analisis`: al colapsar `Contextual Intelligence`, el boton `Mostrar contexto` se muestra en el header central de resultados para recuperacion inmediata de la columna

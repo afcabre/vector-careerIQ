@@ -621,6 +621,7 @@ def analyze_profile_match_action(
         result_payload={
             "analysis_text": result["analysis_text"],
             "semantic_evidence": result["semantic_evidence"],
+            "normalized_candidate_profile": result.get("normalized_candidate_profile", {}),
             "mapped_criteria": result.get("mapped_criteria", {}),
             "prompt_meta": result.get("prompt_meta", {}),
         },
@@ -881,7 +882,7 @@ async def analyze_profile_match_stream(
                 },
             )
             run_id = new_ai_run_id()
-            semantic_evidence, mapped_criteria, prompt_meta, stream = stream_analyze_profile_match_text(
+            semantic_evidence, normalized_candidate_profile, mapped_criteria, prompt_meta, stream = stream_analyze_profile_match_text(
                 person,
                 opportunity,
                 settings,
@@ -909,6 +910,7 @@ async def analyze_profile_match_stream(
                 result_payload={
                     "analysis_text": analysis_text,
                     "semantic_evidence": semantic_evidence,
+                    "normalized_candidate_profile": normalized_candidate_profile,
                     "mapped_criteria": mapped_criteria,
                     "prompt_meta": prompt_meta,
                 },

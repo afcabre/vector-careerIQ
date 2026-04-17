@@ -8,6 +8,10 @@ from urllib.request import Request, urlopen
 
 from app.core.settings import Settings
 from app.services.ai_runtime_config_store import get_ai_runtime_config
+from app.services.candidate_profile_normalizer import (
+    candidate_profile_context,
+    normalize_candidate_profile,
+)
 from app.services.cv_store import get_active_cv
 from app.services.cv_vector_service import query_cv_context
 from app.services.guardrail_service import (
@@ -100,6 +104,7 @@ class PreparationResult(TypedDict):
 class AnalyzeProfileMatchResult(TypedDict):
     analysis_text: str
     semantic_evidence: SemanticEvidence
+    normalized_candidate_profile: dict[str, object]
     mapped_criteria: dict[str, object]
     prompt_meta: dict[str, dict[str, str | bool]]
 
@@ -1280,6 +1285,7 @@ def stream_analyze_profile_match_text(
     settings: Settings,
     run_id: str = "",
 ):
+    normalized_candidate_profile = normalize_candidate_profile(person)
     mapped_criteria = map_job_criteria(opportunity)
     semantic_evidence = _build_semantic_evidence(
         person,
@@ -1292,7 +1298,10 @@ def stream_analyze_profile_match_text(
         context={
             "person_context": _person_context(person),
             "opportunity_context": _opportunity_context(opportunity),
-            "semantic_evidence_context": _semantic_evidence_context(semantic_evidence),
+            "semantic_evidence_context": (
+                f"{candidate_profile_context(normalized_candidate_profile)}\n\n"
+                f"{_semantic_evidence_context(semantic_evidence)}"
+            ),
         },
         fallback=(
             "Analiza ajuste perfil-vacante.\n"
@@ -1321,7 +1330,7 @@ def stream_analyze_profile_match_text(
         flow_key="analyze_profile_match_stream",
         run_id=run_id,
     )
-    return semantic_evidence, mapped_criteria, prompt_meta, stream
+    return semantic_evidence, normalized_candidate_profile, mapped_criteria, prompt_meta, stream
 
 
 def stream_analyze_cultural_fit_text(
@@ -1479,6 +1488,7 @@ def analyze_profile_match(
     settings: Settings,
     run_id: str = "",
 ) -> AnalyzeProfileMatchResult:
+    normalized_candidate_profile = normalize_candidate_profile(person)
     mapped_criteria = map_job_criteria(opportunity)
     semantic_evidence = _build_semantic_evidence(
         person,
@@ -1491,7 +1501,10 @@ def analyze_profile_match(
         context={
             "person_context": _person_context(person),
             "opportunity_context": _opportunity_context(opportunity),
-            "semantic_evidence_context": _semantic_evidence_context(semantic_evidence),
+            "semantic_evidence_context": (
+                f"{candidate_profile_context(normalized_candidate_profile)}\n\n"
+                f"{_semantic_evidence_context(semantic_evidence)}"
+            ),
         },
         fallback=(
             "Analiza ajuste perfil-vacante.\n"
@@ -1529,6 +1542,7 @@ def analyze_profile_match(
     return {
         "analysis_text": response,
         "semantic_evidence": semantic_evidence,
+        "normalized_candidate_profile": normalized_candidate_profile,
         "mapped_criteria": mapped_criteria,
         "prompt_meta": prompt_meta,
     }
