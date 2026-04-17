@@ -6,7 +6,9 @@ import {
   AIRun,
   ActiveCV,
   ApplicationArtifact,
+  ConsolidatedAssessment,
   Conversation,
+  CriterionEvaluationRow,
   CulturalFieldPreference,
   CulturalSignal,
   InterviewIteration,
@@ -15,6 +17,7 @@ import {
   PromptConfig,
   PromptConfigVersion,
   RequestTrace,
+  RenderedAssessmentOutput,
   SearchProviderConfig,
   SearchProviderStatus,
   SearchResult,
@@ -164,6 +167,35 @@ const AI_RUN_ACTION_LABELS: Record<string, string> = {
   prepare_guidance_text: "Preparar guia de perfil",
   prepare_cover_letter: "Preparar carta de presentacion",
   prepare_experience_summary: "Preparar resumen de experiencia"
+};
+const CRITERION_STATUS_LABELS: Record<string, string> = {
+  meets: "Cumple",
+  partial: "Parcial",
+  unknown: "Sin informacion",
+  conflict: "En conflicto",
+  not_evidenced_desirable: "Deseable no evidenciado"
+};
+const CRITERION_STATUS_CLASSNAMES: Record<string, string> = {
+  meets: "criteriaStatusChip criteriaStatusChipMeets",
+  partial: "criteriaStatusChip criteriaStatusChipPartial",
+  unknown: "criteriaStatusChip criteriaStatusChipUnknown",
+  conflict: "criteriaStatusChip criteriaStatusChipConflict",
+  not_evidenced_desirable: "criteriaStatusChip criteriaStatusChipDesirable"
+};
+const CRITERION_ORIGIN_LABELS: Record<string, string> = {
+  vacante_obligatoria: "Vacante obligatoria",
+  vacante_deseable: "Vacante deseable",
+  vacante_condicion: "Vacante condicion",
+  preferencia_candidato: "Preferencia del candidato"
+};
+const CRITERION_CATEGORY_LABELS: Record<string, string> = {
+  seniority_y_trayectoria: "Seniority y trayectoria",
+  responsabilidades_del_rol: "Responsabilidades del rol",
+  habilidades_y_competencias: "Habilidades y competencias",
+  herramientas_y_tecnologias: "Herramientas y tecnologias",
+  idiomas_y_formacion: "Idiomas y formacion",
+  condiciones_de_trabajo: "Condiciones de trabajo",
+  preferencias_del_candidato: "Preferencias del candidato"
 };
 const ANALYSIS_CONTEXT_RAIL_COLLAPSE_KEY = "analysis_context_rail_collapsed_v2";
 const ACTION_TO_FLOW_KEY: Record<string, string> = {
@@ -746,7 +778,23 @@ function buildPromptConfigDrafts(
   return drafts;
 }
 
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((item) => String(item).trim())
+    .filter((item) => item.length > 0);
+}
+
 function getAiRunPreviewText(run: AIRun): string {
+  const renderedOutput = run.result_payload["rendered_output"];
+  if (renderedOutput && typeof renderedOutput === "object") {
+    const markdown = String((renderedOutput as Record<string, unknown>).markdown ?? "").trim();
+    if (markdown) {
+      return markdown;
+    }
+  }
   const analysisText = run.result_payload["analysis_text"];
   if (typeof analysisText === "string" && analysisText.trim()) {
     return analysisText;
@@ -768,6 +816,128 @@ function getAiRunPreviewText(run: AIRun): string {
     return content;
   }
   return "";
+}
+
+function getAiRunAnalysisText(run: AIRun): string {
+  const analysisText = run.result_payload["analysis_text"];
+  if (typeof analysisText === "string" && analysisText.trim()) {
+    return analysisText;
+  }
+  return getAiRunPreviewText(run);
+}
+
+function asFitSummary(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const raw = value as Record<string, unknown>;
+  const countsRaw = raw.counts;
+  const counts: Record<string, number> = {};
+  if (countsRaw && typeof countsRaw === "object") {
+    for (const [key, item] of Object.entries(countsRaw as Record<string, unknown>)) {
+      counts[key] = Number(item) || 0;
+    }
+  }
+  return {
+    level: String(raw.level ?? ""),
+    score: Number(raw.score ?? 0) || 0,
+    total: Number(raw.total ?? 0) || 0,
+    counts,
+    summary: String(raw.summary ?? "")
+  };
+}
+
+function asConsolidatedAssessment(value: unknown): ConsolidatedAssessment | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const raw = value as Record<string, unknown>;
+  const objectiveFit = asFitSummary(raw.objective_fit);
+  const preferenceFit = asFitSummary(raw.preference_fit);
+  if (!objectiveFit || !preferenceFit) {
+    return null;
+  }
+  return {
+    objective_fit: objectiveFit,
+    preference_fit: preferenceFit,
+    blocking_issues: asStringArray(raw.blocking_issues),
+    relevant_alerts: asStringArray(raw.relevant_alerts),
+    strengths: asStringArray(raw.strengths),
+    gaps: asStringArray(raw.gaps),
+    unknowns: asStringArray(raw.unknowns),
+    recommended_decision: String(raw.recommended_decision ?? "").trim(),
+    recommended_decision_reason: String(raw.recommended_decision_reason ?? "").trim()
+  };
+}
+
+function asRenderedAssessmentOutput(value: unknown): RenderedAssessmentOutput | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const raw = value as Record<string, unknown>;
+  const sectionsRaw = raw.sections;
+  const sections = Array.isArray(sectionsRaw)
+    ? sectionsRaw
+        .filter((item) => item && typeof item === "object")
+        .map((item) => {
+          const section = item as Record<string, unknown>;
+          return {
+            section_id: String(section.section_id ?? "").trim(),
+            title: String(section.title ?? "").trim(),
+            body: String(section.body ?? "").trim()
+          };
+        })
+        .filter((item) => item.section_id || item.title || item.body)
+    : [];
+  return {
+    markdown: String(raw.markdown ?? "").trim(),
+    sections
+  };
+}
+
+function asCriterionEvaluationRows(value: unknown): CriterionEvaluationRow[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const rows: CriterionEvaluationRow[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const raw = item as Record<string, unknown>;
+    const evaluationRaw = raw.evaluation;
+    if (!evaluationRaw || typeof evaluationRaw !== "object") {
+      continue;
+    }
+    const evaluation = evaluationRaw as Record<string, unknown>;
+    rows.push({
+      criterion_id: String(raw.criterion_id ?? "").trim(),
+      criterion_label: String(raw.criterion_label ?? "").trim(),
+      category: String(raw.category ?? "").trim(),
+      origin: String(raw.origin ?? "").trim(),
+      criterion_payload:
+        raw.criterion_payload && typeof raw.criterion_payload === "object"
+          ? (raw.criterion_payload as Record<string, unknown>)
+          : {},
+      retrieval_evidence:
+        raw.retrieval_evidence && typeof raw.retrieval_evidence === "object"
+          ? (raw.retrieval_evidence as Record<string, unknown>)
+          : {},
+      evaluation: {
+        status: String(evaluation.status ?? "").trim(),
+        confidence: String(evaluation.confidence ?? "").trim(),
+        evidence_strength: String(evaluation.evidence_strength ?? "").trim(),
+        gap_type: String(evaluation.gap_type ?? "").trim(),
+        is_blocking: Boolean(evaluation.is_blocking),
+        affects_objective_fit: Boolean(evaluation.affects_objective_fit),
+        affects_preference_fit: Boolean(evaluation.affects_preference_fit),
+        resolution_source: String(evaluation.resolution_source ?? "").trim(),
+        semantic_notes: String(evaluation.semantic_notes ?? "").trim(),
+        missing_information: asStringArray(evaluation.missing_information)
+      }
+    });
+  }
+  return rows;
 }
 
 type PromptBadge = {
@@ -1275,6 +1445,7 @@ export default function App() {
   const [aiRuntimeConfig, setAiRuntimeConfig] = useState<AIRuntimeConfig | null>(null);
   const [aiRuntimeTopKAnalysisInput, setAiRuntimeTopKAnalysisInput] = useState("");
   const [aiRuntimeTopKInterviewInput, setAiRuntimeTopKInterviewInput] = useState("");
+  const [aiRuntimeTopKPerCriterionInput, setAiRuntimeTopKPerCriterionInput] = useState("");
   const [aiRuntimeCvChunkingStrategyInput, setAiRuntimeCvChunkingStrategyInput] = useState<
     "token_window" | "semantic_sections"
   >("semantic_sections");
@@ -1513,6 +1684,7 @@ export default function App() {
         setAiRuntimeConfig(null);
         setAiRuntimeTopKAnalysisInput("");
         setAiRuntimeTopKInterviewInput("");
+        setAiRuntimeTopKPerCriterionInput("");
         setAiRuntimeCvChunkingStrategyInput("semantic_sections");
         setAiRuntimeCvMarkdownExtractionModeInput("heuristic");
         setAiRuntimeInterviewResearchModeInput("guided");
@@ -1540,6 +1712,7 @@ export default function App() {
         setAiRuntimeConfig(runtimeConfig);
         setAiRuntimeTopKAnalysisInput(String(runtimeConfig.top_k_semantic_analysis));
         setAiRuntimeTopKInterviewInput(String(runtimeConfig.top_k_semantic_interview));
+        setAiRuntimeTopKPerCriterionInput(String(runtimeConfig.top_k_semantic_per_criterion));
         setAiRuntimeCvChunkingStrategyInput(runtimeConfig.cv_chunking_strategy);
         setAiRuntimeCvMarkdownExtractionModeInput(runtimeConfig.cv_markdown_extraction_mode);
         setAiRuntimeInterviewResearchModeInput(runtimeConfig.interview_research_mode);
@@ -1789,13 +1962,6 @@ export default function App() {
 
   const selectedOpportunity =
     savedOpportunities.find((item) => item.opportunity_id === selectedOpportunityId) ?? null;
-
-  function asStringArray(value: unknown): string[] {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-    return value.map((item) => String(item)).filter((item) => item.trim().length > 0);
-  }
 
   function asCulturalSignals(value: unknown): CulturalSignal[] {
     if (!Array.isArray(value)) {
@@ -2434,6 +2600,7 @@ export default function App() {
 
     const parsedAnalysis = Number.parseInt(aiRuntimeTopKAnalysisInput, 10);
     const parsedInterview = Number.parseInt(aiRuntimeTopKInterviewInput, 10);
+    const parsedPerCriterion = Number.parseInt(aiRuntimeTopKPerCriterionInput, 10);
     const parsedInterviewSteps = Number.parseInt(aiRuntimeInterviewMaxStepsInput, 10);
 
     if (
@@ -2453,6 +2620,16 @@ export default function App() {
     ) {
       setErrorMessage(
         `top_k entrevista debe estar entre ${AI_RUNTIME_TOP_K_MIN} y ${AI_RUNTIME_TOP_K_MAX}.`
+      );
+      return;
+    }
+    if (
+      !Number.isFinite(parsedPerCriterion) ||
+      parsedPerCriterion < AI_RUNTIME_TOP_K_MIN ||
+      parsedPerCriterion > AI_RUNTIME_TOP_K_MAX
+    ) {
+      setErrorMessage(
+        `top_k por criterio debe estar entre ${AI_RUNTIME_TOP_K_MIN} y ${AI_RUNTIME_TOP_K_MAX}.`
       );
       return;
     }
@@ -2495,6 +2672,7 @@ export default function App() {
       const updated = await updateAiRuntimeConfigApi({
         top_k_semantic_analysis: parsedAnalysis,
         top_k_semantic_interview: parsedInterview,
+        top_k_semantic_per_criterion: parsedPerCriterion,
         cv_chunking_strategy: aiRuntimeCvChunkingStrategyInput,
         cv_markdown_extraction_mode: aiRuntimeCvMarkdownExtractionModeInput,
         interview_research_mode: aiRuntimeInterviewResearchModeInput,
@@ -2504,6 +2682,7 @@ export default function App() {
       setAiRuntimeConfig(updated);
       setAiRuntimeTopKAnalysisInput(String(updated.top_k_semantic_analysis));
       setAiRuntimeTopKInterviewInput(String(updated.top_k_semantic_interview));
+      setAiRuntimeTopKPerCriterionInput(String(updated.top_k_semantic_per_criterion));
       setAiRuntimeCvChunkingStrategyInput(updated.cv_chunking_strategy);
       setAiRuntimeCvMarkdownExtractionModeInput(updated.cv_markdown_extraction_mode);
       setAiRuntimeInterviewResearchModeInput(updated.interview_research_mode);
@@ -3762,6 +3941,22 @@ export default function App() {
   const coverRuns = getRunsForBlock("artifact_cover_letter");
   const summaryRuns = getRunsForBlock("artifact_experience_summary");
   const getRunPreview = (run: AIRun | null) => (run ? getAiRunPreviewText(run) : "");
+  const focusedRunPayload = (focusedRun?.result_payload ?? {}) as Record<string, unknown>;
+  const focusedConsolidatedAssessment = asConsolidatedAssessment(
+    focusedRunPayload["consolidated_assessment"]
+  );
+  const focusedCriteriaEvaluation = asCriterionEvaluationRows(
+    focusedRunPayload["criteria_evaluation"]
+  );
+  const focusedRenderedOutput = asRenderedAssessmentOutput(focusedRunPayload["rendered_output"]);
+  const focusedParseValidation =
+    focusedRunPayload["parse_validation"] && typeof focusedRunPayload["parse_validation"] === "object"
+      ? (focusedRunPayload["parse_validation"] as Record<string, unknown>)
+      : null;
+  const focusedInputSnapshot =
+    focusedRunPayload["input_snapshot"] && typeof focusedRunPayload["input_snapshot"] === "object"
+      ? (focusedRunPayload["input_snapshot"] as Record<string, unknown>)
+      : null;
 
   const liveProfileContent = isAnalyzingProfile ? profileAnalysisText : "";
   const liveCulturalContent = isAnalyzingCultural ? cultureAnalysisText : "";
@@ -3770,7 +3965,7 @@ export default function App() {
   const liveCoverContent = getArtifactFallbackContent("cover_letter");
   const liveSummaryContent = getArtifactFallbackContent("experience_summary");
 
-  const profileContent = liveProfileContent || getRunPreview(profileRun);
+  const profileContent = liveProfileContent || (profileRun ? getAiRunAnalysisText(profileRun) : "");
   const culturalContent = liveCulturalContent || getRunPreview(culturalRun);
   const interviewContent = liveInterviewContent || getRunPreview(interviewRun);
   const guidanceContent = liveGuidanceContent || getRunPreview(guidanceRun) || guidanceText;
@@ -4298,6 +4493,18 @@ export default function App() {
                     step={1}
                     type="number"
                     value={aiRuntimeTopKInterviewInput}
+                  />
+                </label>
+                <label className="field">
+                  top_k semantico por criterio (perfil-vacante)
+                  <input
+                    disabled={isSavingAiRuntimeConfig}
+                    max={AI_RUNTIME_TOP_K_MAX}
+                    min={AI_RUNTIME_TOP_K_MIN}
+                    onChange={(event) => setAiRuntimeTopKPerCriterionInput(event.target.value)}
+                    step={1}
+                    type="number"
+                    value={aiRuntimeTopKPerCriterionInput}
                   />
                 </label>
                 <label className="field">
@@ -7138,6 +7345,149 @@ export default function App() {
                             </span>
                           ) : null;
                         })() : null}
+                        {focusedConsolidatedAssessment ? (
+                          <section className="analysisContextBlock">
+                            <div className="analysisDecisionSummary">
+                              <span className="analysisDecisionChip">
+                                {focusedConsolidatedAssessment.recommended_decision}
+                              </span>
+                              <span className="metaText">
+                                objetivo: {focusedConsolidatedAssessment.objective_fit.level} ·
+                                preferencial: {focusedConsolidatedAssessment.preference_fit.level}
+                              </span>
+                            </div>
+                            <p className="metaText">
+                              {focusedConsolidatedAssessment.recommended_decision_reason}
+                            </p>
+                            <div className="analysisFitGrid">
+                              <article className="analysisFitCard">
+                                <p className="chatRole">Fit objetivo</p>
+                                <p className="analysisFitValue">
+                                  {focusedConsolidatedAssessment.objective_fit.level}
+                                </p>
+                                <p className="metaText">
+                                  score {focusedConsolidatedAssessment.objective_fit.score} ·{" "}
+                                  {focusedConsolidatedAssessment.objective_fit.summary}
+                                </p>
+                              </article>
+                              <article className="analysisFitCard">
+                                <p className="chatRole">Fit preferencial</p>
+                                <p className="analysisFitValue">
+                                  {focusedConsolidatedAssessment.preference_fit.level}
+                                </p>
+                                <p className="metaText">
+                                  score {focusedConsolidatedAssessment.preference_fit.score} ·{" "}
+                                  {focusedConsolidatedAssessment.preference_fit.summary}
+                                </p>
+                              </article>
+                            </div>
+                          </section>
+                        ) : null}
+                        {focusedCriteriaEvaluation.length > 0 ? (
+                          <details className="payloadDetails" open={focusedRun.action_key === "analyze_profile_match"}>
+                            <summary>Evaluacion por criterio</summary>
+                            <div className="analysisCriteriaList">
+                              {focusedCriteriaEvaluation.map((row) => {
+                                const status = row.evaluation.status;
+                                const statusLabel =
+                                  CRITERION_STATUS_LABELS[status] ?? status ?? "Sin estado";
+                                const statusClassName =
+                                  CRITERION_STATUS_CLASSNAMES[status] ?? "criteriaStatusChip";
+                                const originLabel =
+                                  CRITERION_ORIGIN_LABELS[row.origin] ?? row.origin ?? "Sin origen";
+                                const categoryLabel =
+                                  CRITERION_CATEGORY_LABELS[row.category] ?? row.category ?? "Sin categoria";
+                                return (
+                                  <article className="analysisCriterionCard" key={row.criterion_id}>
+                                    <div className="analysisCriterionHeader">
+                                      <div>
+                                        <p className="chatRole">{row.criterion_label}</p>
+                                        <p className="metaText">
+                                          {originLabel} · {categoryLabel}
+                                        </p>
+                                      </div>
+                                      <div className="analysisCriterionBadges">
+                                        <span className={statusClassName}>{statusLabel}</span>
+                                        <span className="criteriaMetaChip">
+                                          {row.evaluation.resolution_source === "llm_assisted"
+                                            ? "LLM ambiguity"
+                                            : "Regla"}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    {row.evaluation.semantic_notes ? (
+                                      <p className="analysisCriterionNote">{row.evaluation.semantic_notes}</p>
+                                    ) : null}
+                                    <p className="metaText">
+                                      confianza: {row.evaluation.confidence} · evidencia:{" "}
+                                      {row.evaluation.evidence_strength} · brecha: {row.evaluation.gap_type}
+                                    </p>
+                                    {row.evaluation.missing_information.length > 0 ? (
+                                      <p className="metaText">
+                                        faltantes: {row.evaluation.missing_information.join(", ")}
+                                      </p>
+                                    ) : null}
+                                  </article>
+                                );
+                              })}
+                            </div>
+                          </details>
+                        ) : null}
+                        {focusedRenderedOutput?.sections.length ? (
+                          <details className="payloadDetails">
+                            <summary>Salida estructurada renderizable</summary>
+                            <div className="analysisRenderedSections">
+                              {focusedRenderedOutput.sections.map((section) => (
+                                <article className="analysisRenderedSection" key={section.section_id}>
+                                  <p className="chatRole">{section.title}</p>
+                                  <MarkdownContent
+                                    className="chatContent resultBlockContent resultBlockMarkdown"
+                                    content={section.body}
+                                  />
+                                </article>
+                              ))}
+                            </div>
+                          </details>
+                        ) : null}
+                        {focusedInputSnapshot || focusedParseValidation ? (
+                          <details className="payloadDetails">
+                            <summary>Snapshot tecnico</summary>
+                            <div className="analysisSnapshotGrid">
+                              {focusedInputSnapshot ? (
+                                <article className="analysisSnapshotCard">
+                                  <p className="chatRole">Entrada</p>
+                                  <p className="metaText">
+                                    perfil: {String(focusedInputSnapshot.person_profile_ref ?? "n/a")}
+                                  </p>
+                                  <p className="metaText">
+                                    oportunidad: {String(focusedInputSnapshot.opportunity_ref ?? "n/a")}
+                                  </p>
+                                  <p className="metaText">
+                                    cv activo: {String(focusedInputSnapshot.active_cv_id ?? "n/a")}
+                                  </p>
+                                  <p className="metaText">
+                                    vacancy profile: {String(focusedInputSnapshot.vacancy_profile_status ?? "n/a")}
+                                  </p>
+                                </article>
+                              ) : null}
+                              {focusedParseValidation ? (
+                                <article className="analysisSnapshotCard">
+                                  <p className="chatRole">Validacion parse CV</p>
+                                  <p className="metaText">
+                                    calidad: {String(focusedParseValidation.parse_quality ?? "unknown")}
+                                  </p>
+                                  <p className="metaText">
+                                    modo sugerido:{" "}
+                                    {String(focusedParseValidation.recommended_mode ?? "n/a")}
+                                  </p>
+                                  <p className="metaText">
+                                    issues: {asStringArray(focusedParseValidation.issues).join(", ") || "ninguno"}
+                                  </p>
+                                </article>
+                              ) : null}
+                            </div>
+                          </details>
+                        ) : null}
                         <details className="payloadDetails">
                           <summary>Ver response payload persistido</summary>
                           <pre className="payloadPre">

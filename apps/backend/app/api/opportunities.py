@@ -621,9 +621,14 @@ def analyze_profile_match_action(
         result_payload={
             "analysis_text": result["analysis_text"],
             "semantic_evidence": result["semantic_evidence"],
+            "input_snapshot": result.get("input_snapshot", {}),
+            "parse_validation": result.get("parse_validation", {}),
             "normalized_candidate_profile": result.get("normalized_candidate_profile", {}),
             "mapped_criteria": result.get("mapped_criteria", {}),
             "criterion_evidence": result.get("criterion_evidence", []),
+            "criteria_evaluation": result.get("criteria_evaluation", []),
+            "consolidated_assessment": result.get("consolidated_assessment", {}),
+            "rendered_output": result.get("rendered_output", {}),
             "prompt_meta": result.get("prompt_meta", {}),
         },
     )
@@ -883,7 +888,19 @@ async def analyze_profile_match_stream(
                 },
             )
             run_id = new_ai_run_id()
-            semantic_evidence, normalized_candidate_profile, mapped_criteria, criterion_evidence, prompt_meta, stream = stream_analyze_profile_match_text(
+            (
+                semantic_evidence,
+                input_snapshot,
+                parse_validation,
+                normalized_candidate_profile,
+                mapped_criteria,
+                criterion_evidence,
+                criteria_evaluation,
+                consolidated_assessment,
+                rendered_output,
+                prompt_meta,
+                stream,
+            ) = stream_analyze_profile_match_text(
                 person,
                 opportunity,
                 settings,
@@ -911,9 +928,14 @@ async def analyze_profile_match_stream(
                 result_payload={
                     "analysis_text": analysis_text,
                     "semantic_evidence": semantic_evidence,
+                    "input_snapshot": input_snapshot,
+                    "parse_validation": parse_validation,
                     "normalized_candidate_profile": normalized_candidate_profile,
                     "mapped_criteria": mapped_criteria,
                     "criterion_evidence": criterion_evidence,
+                    "criteria_evaluation": criteria_evaluation,
+                    "consolidated_assessment": consolidated_assessment,
+                    "rendered_output": rendered_output,
                     "prompt_meta": prompt_meta,
                 },
             )

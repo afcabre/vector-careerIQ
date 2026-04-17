@@ -8,13 +8,23 @@ from urllib.request import Request, urlopen
 
 from app.core.settings import Settings
 from app.services.ai_runtime_config_store import get_ai_runtime_config
+from app.services.assessment_consolidator import (
+    consolidated_assessment_context,
+    consolidate_assessment,
+)
+from app.services.assessment_renderer_adapter import render_assessment_output
 from app.services.candidate_profile_normalizer import (
     candidate_profile_context,
     normalize_candidate_profile,
 )
+from app.services.criterion_ambiguity_resolver import resolve_criteria_ambiguity
 from app.services.criterion_evidence_retriever import (
     build_criterion_evidence,
     criterion_evidence_context,
+)
+from app.services.criterion_evaluator import (
+    criteria_evaluation_context,
+    evaluate_criteria,
 )
 from app.services.cv_store import get_active_cv
 from app.services.cv_vector_service import query_cv_context
@@ -108,9 +118,14 @@ class PreparationResult(TypedDict):
 class AnalyzeProfileMatchResult(TypedDict):
     analysis_text: str
     semantic_evidence: SemanticEvidence
+    input_snapshot: dict[str, object]
+    parse_validation: dict[str, object]
     normalized_candidate_profile: dict[str, object]
     mapped_criteria: dict[str, object]
     criterion_evidence: list[dict[str, object]]
+    criteria_evaluation: list[dict[str, object]]
+    consolidated_assessment: dict[str, object]
+    rendered_output: dict[str, object]
     prompt_meta: dict[str, dict[str, str | bool]]
 
 
@@ -198,6 +213,10 @@ def _semantic_top_k_analysis() -> int:
 
 def _semantic_top_k_interview() -> int:
     return int(get_ai_runtime_config()["top_k_semantic_interview"])
+
+
+def _semantic_top_k_per_criterion() -> int:
+    return int(get_ai_runtime_config()["top_k_semantic_per_criterion"])
 
 
 def _interview_research_mode() -> str:
@@ -577,6 +596,36 @@ def _semantic_evidence_context(evidence: SemanticEvidence) -> str:
     for index, snippet in enumerate(evidence["snippets"], start=1):
         lines.append(f"[CV-{index}] {snippet}")
     return _join_snippets(lines, max_chars=4200)
+
+
+def _profile_match_input_snapshot(
+    person: PersonRecord,
+    opportunity: OpportunityRecord,
+    active_cv: dict[str, object] | None,
+) -> dict[str, object]:
+    return {
+        "person_profile_ref": person["person_id"],
+        "opportunity_ref": opportunity["opportunity_id"],
+        "active_cv_id": str((active_cv or {}).get("cv_id", "")),
+        "vacancy_profile_status": str(opportunity.get("vacancy_profile_status", "none")),
+    }
+
+
+def _profile_match_parse_validation(active_cv: dict[str, object] | None) -> dict[str, object]:
+    return {
+        "parse_quality": str((active_cv or {}).get("parse_quality", "unknown")),
+        "issues": [str(item) for item in (active_cv or {}).get("parse_issues", [])],
+        "recommended_mode": str(
+            (active_cv or {}).get("parse_recommended_mode", "structured_markdown")
+        ),
+    }
+
+
+def _fallback_profile_match_analysis(rendered_output: dict[str, object]) -> str:
+    markdown = str(rendered_output.get("markdown", "")).strip()
+    if markdown:
+        return markdown
+    return "## Resumen ejecutivo\n\nNo fue posible construir salida estructurada de fallback."
 
 
 def _extract_json_object(raw_text: str) -> dict[str, object] | None:
@@ -1290,6 +1339,7 @@ def stream_analyze_profile_match_text(
     settings: Settings,
     run_id: str = "",
 ):
+    active_cv = get_active_cv(person["person_id"])
     normalized_candidate_profile = normalize_candidate_profile(person)
     mapped_criteria = map_job_criteria(opportunity)
     semantic_evidence = _build_semantic_evidence(
@@ -1303,7 +1353,32 @@ def stream_analyze_profile_match_text(
         normalized_candidate_profile=normalized_candidate_profile,
         mapped_criteria=mapped_criteria,
         settings=settings,
-        top_k=min(4, _semantic_top_k_analysis()),
+        top_k=_semantic_top_k_per_criterion(),
+    )
+    criteria_evaluation = evaluate_criteria(
+        normalized_candidate_profile=normalized_candidate_profile,
+        mapped_criteria=mapped_criteria,
+        criterion_evidence=criterion_evidence,
+    )
+    system_prompt, system_meta = _system_prompt_bundle(
+        person,
+        suspicious_input=_is_suspicious_opportunity_input(opportunity),
+    )
+    criteria_evaluation = resolve_criteria_ambiguity(
+        rows=criteria_evaluation,
+        person_context=_person_context(person),
+        opportunity_context=_opportunity_context(opportunity),
+        vacancy_raw_text=str(opportunity.get("snapshot_raw_text", "")).strip(),
+        system_prompt=system_prompt,
+        settings=settings,
+        person_id=person["person_id"],
+        opportunity_id=opportunity["opportunity_id"],
+        run_id=run_id,
+    )
+    consolidated_assessment = consolidate_assessment(criteria_evaluation)
+    rendered_output = render_assessment_output(
+        consolidated_assessment=consolidated_assessment,
+        criteria_evaluation=criteria_evaluation,
     )
     user_prompt, user_meta = build_prompt_text_with_meta(
         flow_key=FLOW_TASK_ANALYZE_PROFILE_MATCH,
@@ -1313,6 +1388,8 @@ def stream_analyze_profile_match_text(
             "semantic_evidence_context": (
                 f"{candidate_profile_context(normalized_candidate_profile)}\n\n"
                 f"{criterion_evidence_context(criterion_evidence)}\n\n"
+                f"{criteria_evaluation_context(criteria_evaluation)}\n\n"
+                f"{consolidated_assessment_context(consolidated_assessment)}\n\n"
                 f"{_semantic_evidence_context(semantic_evidence)}"
             ),
         },
@@ -1328,10 +1405,6 @@ def stream_analyze_profile_match_text(
             f"Evidencia semantica CV:\n{_semantic_evidence_context(semantic_evidence)}"
         ),
     )
-    system_prompt, system_meta = _system_prompt_bundle(
-        person,
-        suspicious_input=_is_suspicious_opportunity_input(opportunity),
-    )
     prompt_meta = {**system_meta, FLOW_TASK_ANALYZE_PROFILE_MATCH: user_meta}
     stream = stream_prompt(
         system_prompt,
@@ -1345,9 +1418,14 @@ def stream_analyze_profile_match_text(
     )
     return (
         semantic_evidence,
+        _profile_match_input_snapshot(person, opportunity, active_cv),
+        _profile_match_parse_validation(active_cv),
         normalized_candidate_profile,
         mapped_criteria,
         criterion_evidence,
+        criteria_evaluation,
+        consolidated_assessment,
+        rendered_output,
         prompt_meta,
         stream,
     )
@@ -1508,6 +1586,7 @@ def analyze_profile_match(
     settings: Settings,
     run_id: str = "",
 ) -> AnalyzeProfileMatchResult:
+    active_cv = get_active_cv(person["person_id"])
     normalized_candidate_profile = normalize_candidate_profile(person)
     mapped_criteria = map_job_criteria(opportunity)
     semantic_evidence = _build_semantic_evidence(
@@ -1521,7 +1600,32 @@ def analyze_profile_match(
         normalized_candidate_profile=normalized_candidate_profile,
         mapped_criteria=mapped_criteria,
         settings=settings,
-        top_k=min(4, _semantic_top_k_analysis()),
+        top_k=_semantic_top_k_per_criterion(),
+    )
+    criteria_evaluation = evaluate_criteria(
+        normalized_candidate_profile=normalized_candidate_profile,
+        mapped_criteria=mapped_criteria,
+        criterion_evidence=criterion_evidence,
+    )
+    system_prompt, system_meta = _system_prompt_bundle(
+        person,
+        suspicious_input=_is_suspicious_opportunity_input(opportunity),
+    )
+    criteria_evaluation = resolve_criteria_ambiguity(
+        rows=criteria_evaluation,
+        person_context=_person_context(person),
+        opportunity_context=_opportunity_context(opportunity),
+        vacancy_raw_text=str(opportunity.get("snapshot_raw_text", "")).strip(),
+        system_prompt=system_prompt,
+        settings=settings,
+        person_id=person["person_id"],
+        opportunity_id=opportunity["opportunity_id"],
+        run_id=run_id,
+    )
+    consolidated_assessment = consolidate_assessment(criteria_evaluation)
+    rendered_output = render_assessment_output(
+        consolidated_assessment=consolidated_assessment,
+        criteria_evaluation=criteria_evaluation,
     )
     user_prompt, user_meta = build_prompt_text_with_meta(
         flow_key=FLOW_TASK_ANALYZE_PROFILE_MATCH,
@@ -1531,6 +1635,8 @@ def analyze_profile_match(
             "semantic_evidence_context": (
                 f"{candidate_profile_context(normalized_candidate_profile)}\n\n"
                 f"{criterion_evidence_context(criterion_evidence)}\n\n"
+                f"{criteria_evaluation_context(criteria_evaluation)}\n\n"
+                f"{consolidated_assessment_context(consolidated_assessment)}\n\n"
                 f"{_semantic_evidence_context(semantic_evidence)}"
             ),
         },
@@ -1546,10 +1652,6 @@ def analyze_profile_match(
             f"Evidencia semantica CV:\n{_semantic_evidence_context(semantic_evidence)}"
         ),
     )
-    system_prompt, system_meta = _system_prompt_bundle(
-        person,
-        suspicious_input=_is_suspicious_opportunity_input(opportunity),
-    )
     prompt_meta = {**system_meta, FLOW_TASK_ANALYZE_PROFILE_MATCH: user_meta}
     response = complete_prompt(
         system_prompt,
@@ -1563,16 +1665,18 @@ def analyze_profile_match(
     )
     response = enforce_output_guardrails(response)
     if response == FALLBACK_MESSAGE:
-        response = (
-            "No fue posible ejecutar analisis perfil-vacante con LLM. "
-            "Como fallback, revisa manualmente ajuste entre experiencia, skills y requisitos."
-        )
+        response = _fallback_profile_match_analysis(rendered_output)
     return {
         "analysis_text": response,
         "semantic_evidence": semantic_evidence,
+        "input_snapshot": _profile_match_input_snapshot(person, opportunity, active_cv),
+        "parse_validation": _profile_match_parse_validation(active_cv),
         "normalized_candidate_profile": normalized_candidate_profile,
         "mapped_criteria": mapped_criteria,
         "criterion_evidence": criterion_evidence,
+        "criteria_evaluation": criteria_evaluation,
+        "consolidated_assessment": consolidated_assessment,
+        "rendered_output": rendered_output,
         "prompt_meta": prompt_meta,
     }
 

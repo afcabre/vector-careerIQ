@@ -111,6 +111,60 @@ export type AIRun = {
   updated_at: string;
 };
 
+export type CriterionEvaluationDetail = {
+  status: string;
+  confidence: string;
+  evidence_strength: string;
+  gap_type: string;
+  is_blocking: boolean;
+  affects_objective_fit: boolean;
+  affects_preference_fit: boolean;
+  resolution_source?: string;
+  semantic_notes: string;
+  missing_information: string[];
+};
+
+export type CriterionEvaluationRow = {
+  criterion_id: string;
+  criterion_label: string;
+  category: string;
+  origin: string;
+  criterion_payload: Record<string, unknown>;
+  retrieval_evidence: Record<string, unknown>;
+  evaluation: CriterionEvaluationDetail;
+};
+
+export type FitSummary = {
+  level: string;
+  score: number;
+  total: number;
+  counts: Record<string, number>;
+  summary: string;
+};
+
+export type ConsolidatedAssessment = {
+  objective_fit: FitSummary;
+  preference_fit: FitSummary;
+  blocking_issues: string[];
+  relevant_alerts: string[];
+  strengths: string[];
+  gaps: string[];
+  unknowns: string[];
+  recommended_decision: string;
+  recommended_decision_reason: string;
+};
+
+export type RenderedAssessmentSection = {
+  section_id: string;
+  title: string;
+  body: string;
+};
+
+export type RenderedAssessmentOutput = {
+  markdown: string;
+  sections: RenderedAssessmentSection[];
+};
+
 export type CulturalSignal = {
   source_provider: string;
   source_url: string;
@@ -276,6 +330,7 @@ export type AIRuntimeConfig = {
   config_key: string;
   top_k_semantic_analysis: number;
   top_k_semantic_interview: number;
+  top_k_semantic_per_criterion: number;
   cv_chunking_strategy: "token_window" | "semantic_sections";
   cv_markdown_extraction_mode: "heuristic" | "pymupdf4llm";
   interview_research_mode: "guided" | "adaptive";
@@ -454,6 +509,7 @@ export async function getAiRuntimeConfig(): Promise<AIRuntimeConfig> {
 export async function updateAiRuntimeConfig(payload: {
   top_k_semantic_analysis?: number;
   top_k_semantic_interview?: number;
+  top_k_semantic_per_criterion?: number;
   cv_chunking_strategy?: "token_window" | "semantic_sections";
   cv_markdown_extraction_mode?: "heuristic" | "pymupdf4llm";
   interview_research_mode?: "guided" | "adaptive";

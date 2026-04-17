@@ -1694,6 +1694,26 @@ button:disabled {
   width: fit-content;
 }
 
+.analysisDecisionSummary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.analysisDecisionChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 46%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface-card));
+  color: var(--text-primary);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
 .resultBlockPager {
   display: flex;
   align-items: center;
@@ -1836,6 +1856,148 @@ button:disabled {
       color-mix(in srgb, var(--bg-deep) 88%, black),
       color-mix(in srgb, var(--bg-main) 82%, black)
     );
+}
+
+.analysisContextBlock {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.profileMatchOverview {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.profileMatchFitGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.profileMatchHighlightsGrid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.analysisFitCardPrimary {
+  border-color: color-mix(in srgb, var(--accent) 90%, var(--border-subtle));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent) 10%, var(--surface-card)),
+      color-mix(in srgb, var(--accent) 4%, var(--bg-deep))
+    );
+}
+
+.profileRenderedSectionsCentral {
+  margin-top: 10px;
+}
+
+.profileRenderedDetails {
+  margin-top: 2px;
+}
+
+.analysisFitGrid {
+  display: grid;
+  gap: 8px;
+}
+
+.analysisFitCard,
+.analysisSnapshotCard,
+.analysisCriterionCard,
+.analysisRenderedSection {
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, var(--accent));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-main) 72%, #0f172a);
+  padding: 10px 12px;
+}
+
+.analysisFitValue {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-transform: capitalize;
+}
+
+.analysisCriteriaList,
+.analysisRenderedSections {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.analysisCriterionHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.analysisCriterionBadges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.criteriaStatusChip,
+.criteriaMetaChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.criteriaMetaChip {
+  border: 1px solid color-mix(in srgb, var(--text-muted) 55%, var(--border-subtle));
+  background: color-mix(in srgb, var(--surface-card) 84%, #0f172a);
+  color: var(--text-secondary);
+}
+
+.criteriaStatusChipMeets {
+  border: 1px solid color-mix(in srgb, var(--success) 50%, var(--border-subtle));
+  background: color-mix(in srgb, var(--success) 18%, var(--surface-card));
+  color: #b6f3df;
+}
+
+.criteriaStatusChipPartial {
+  border: 1px solid color-mix(in srgb, var(--warning) 48%, var(--border-subtle));
+  background: color-mix(in srgb, var(--warning) 15%, var(--surface-card));
+  color: #fde3a7;
+}
+
+.criteriaStatusChipUnknown {
+  border: 1px solid color-mix(in srgb, var(--text-muted) 50%, var(--border-subtle));
+  background: color-mix(in srgb, var(--surface-soft) 40%, var(--surface-card));
+  color: var(--text-secondary);
+}
+
+.criteriaStatusChipConflict {
+  border: 1px solid color-mix(in srgb, var(--danger) 52%, var(--border-subtle));
+  background: color-mix(in srgb, var(--danger) 16%, var(--surface-card));
+  color: #ffc1d2;
+}
+
+.criteriaStatusChipDesirable {
+  border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--border-subtle));
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface-card));
+  color: #b7eef8;
+}
+
+.analysisCriterionNote {
+  margin: 8px 0 6px;
+  color: color-mix(in srgb, var(--text-primary) 82%, #dbe3f2);
+  line-height: 1.38;
+}
+
+.analysisSnapshotGrid {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .analysisOpportunityOps {
@@ -2439,6 +2601,12 @@ button:disabled {
   }
 
   .analysisBottomGridCollapsed {
+    grid-template-columns: 1fr;
+  }
+
+  .profileMatchFitGrid,
+  .profileMatchHighlightsGrid,
+  .analysisFitGrid {
     grid-template-columns: 1fr;
   }
 

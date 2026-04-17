@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `cierre de definicion funcional/tactica para refactor V1.1 de analisis perfil-vacante`
+- checkpoint_actual: `implementacion activa del motor analitico V1.1 para perfil-vacante (evaluacion y consolidacion deterministica)`
 - repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, analisis por accion, interview brief, importacion manual, CV activo, capa semantica y linea de refactor V1.1 formalizada`
 - ultima_actualizacion: `2026-04-17`
 
@@ -258,6 +258,26 @@
 - UI permite crear nuevas personas consultadas con baseline V1 (`full_name`, `target_roles`, `location`, `years_experience`, `skills`) consumiendo `POST /api/persons`
 - perfil de persona permite configurar preferencias culturales/condiciones de trabajo por campo (`enabled`, `selected_values`, `criticality`) y notas abiertas
 - el analisis cultural trata falta de evidencia en campos criticos como `indeterminado` con red flag (no exclusion automatica)
+- `PdfParseValidator` integrado a la ingesta de CV: persiste `parse_quality`, `parse_issues` y `parse_recommended_mode`, y fuerza indexacion conservadora cuando el parse no es confiable
+- `CvCanonicalizer` integrado: el CV activo ahora persiste `canonical_cv` como estructura intermedia para chunking semantico
+- `CvSemanticChunkerV2` integrado sobre bloques canonicos (`profile_summary`, `experience_item`, `education_item`, `skills_block`, `language_item`, `certification_item`) con metadata por bloque en Pinecone
+- `JobCriteriaMapper` integrado: `vacancy_profile` se transforma en criterios evaluables persistidos como `mapped_criteria`
+- `CandidateProfileNormalizer` integrado: el perfil se estabiliza en estructura comparativa persistida como `normalized_candidate_profile`
+- `CriterionEvidenceRetriever` integrado: el retrieval pasa a ser por criterio y su persistencia tecnica se gobierna por `retrieval_evidence_persistence_mode` (`minimal`/`full`)
+- `CriterionEvaluator` integrado: `analyze_profile_match` ya persiste `criteria_evaluation` deterministica por criterio
+- `CriterionAmbiguityResolver` integrado: criterios ambiguos (`unknown`/`partial` segun reglas) se envian a una resolucion selectiva con LLM antes de consolidar, marcando `resolution_source` por criterio
+- latencia de arranque SSE en `perfil-vacante` optimizada: la resolucion de ambiguedad ahora prioriza un subconjunto acotado de criterios, reduce evidencia enviada y recorta texto libre de vacante para evitar bloqueos largos antes del primer stream
+- runtime IA separa `top_k` por contexto: ahora existe `top_k_semantic_per_criterion` (independiente de `top_k_semantic_analysis`) y `perfil-vacante` lo usa de forma directa para retrieval por criterio
+- administracion UI/API de runtime IA actualizada para editar `top_k_semantic_per_criterion` desde la pantalla de administracion
+- `AssessmentConsolidator` integrado: `analyze_profile_match` ya persiste `consolidated_assessment` con `objective_fit`, `preference_fit`, `blocking_issues`, `relevant_alerts`, `strengths`, `gaps`, `unknowns` y recomendacion final deterministica
+- `AssessmentRendererAdapter` integrado: cada corrida de `analyze_profile_match` ya persiste `rendered_output` (`markdown` + `sections`) como capa desacoplada para UI/fallback
+- `result_payload` de `analyze_profile_match` se acerca al contrato V1.1: ahora persiste `input_snapshot`, `parse_validation`, `mapped_criteria`, `criterion_evidence`, `criteria_evaluation` y `consolidated_assessment`
+- `result_payload` de `analyze_profile_match` ya incluye tambien `rendered_output`
+- fallback de `analyze_profile_match` endurecido: si falla el LLM, la respuesta visible se construye desde la consolidacion deterministica en lugar de un texto generico
+- frontend `Analysis` mantiene `rendered_output` y `consolidated_assessment` para soporte tecnico, pero la presentacion central de `perfil-vacante` vuelve a priorizar `analysis_text` y la narrativa del prompt
+- `Contextual Intelligence` ahora muestra para `perfil-vacante` la capa estructurada: decision consolidada, fit objetivo/preferencial, evaluacion por criterio, `resolution_source`, snapshot tecnico y salida renderizable por secciones
+- bloque central de `perfil-vacante` en `Analysis` se simplifica de nuevo a lectura narrativa/Markdown; la capa estructurada queda concentrada en el rail derecho para no competir con la salida del prompt
+- oportunidad de mejora pendiente antes de cierre V1.1: aprovechar mejor `vacancy_profile` en la pantalla `Vacantes` para exponer la estructura de la vacante y alimentar con mayor claridad el analisis posterior
 - backend incorpora logs basicos de fallos por proveedor y fallback semantico (`search`, `cv_vector`, `opportunity_ai`)
 - pruebas de integracion API+store para aislamiento por `person_id` en oportunidades y `analyze` agregadas en `apps/backend/tests/test_person_isolation.py`
 - pruebas unitarias de transiciones de estado (`is_valid_transition`, `update_opportunity`) agregadas en `apps/backend/tests/test_opportunity_transitions.py`
@@ -346,6 +366,8 @@
 - Fase 6 V1.1 iniciada en implementacion: `CriterionEvidenceRetriever` agregado para recuperar evidencia por criterio combinando metadata de bloques en Pinecone y evidencia estructurada del perfil del candidato
 - consulta semantica de CV ampliada con `query_cv_matches` para preservar `score`, `section`, `block_type`, `block_title`, `block_index` y `subchunk_index` en el retrieval
 - `analyze_profile_match` ahora persiste `criterion_evidence` en `result_payload` y soporta politica backend de persistencia `retrieval_evidence_persistence_mode` (`minimal`/`full`) desde `ai_runtime_configs`
+- Fase 7 V1.1 iniciada en implementacion: `CriterionEvaluator` agregado con reglas deterministicas iniciales para seniority, modalidad, salario, ubicacion y matching generico basado en evidencia CV/perfil
+- `analyze_profile_match` ahora persiste `criteria_evaluation` en `result_payload` y alimenta el prompt con una capa previa de `evaluacion deterministica preliminar por criterio`
 - build frontend revalidado tras integracion de controles `top_k` en administracion: `npm run build` en `OK`
 - fix UX en `Analisis`: `Contextual Intelligence` (Historial IA + Trazas tecnicas) vuelve visible por defecto al versionar la clave de colapso en `localStorage`
 - fix UX en `Analisis`: al colapsar `Contextual Intelligence`, el boton `Mostrar contexto` se muestra en el header central de resultados para recuperacion inmediata de la columna

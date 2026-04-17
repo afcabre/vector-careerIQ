@@ -21,6 +21,7 @@ class AIRuntimeConfigResponse(BaseModel):
     config_key: str
     top_k_semantic_analysis: int
     top_k_semantic_interview: int
+    top_k_semantic_per_criterion: int
     cv_chunking_strategy: str
     cv_markdown_extraction_mode: str
     retrieval_evidence_persistence_mode: str
@@ -39,6 +40,11 @@ class UpdateAIRuntimeConfigRequest(BaseModel):
         le=AI_RUNTIME_TOP_K_MAX,
     )
     top_k_semantic_interview: int | None = Field(
+        default=None,
+        ge=AI_RUNTIME_TOP_K_MIN,
+        le=AI_RUNTIME_TOP_K_MAX,
+    )
+    top_k_semantic_per_criterion: int | None = Field(
         default=None,
         ge=AI_RUNTIME_TOP_K_MIN,
         le=AI_RUNTIME_TOP_K_MAX,
@@ -70,6 +76,7 @@ def patch_config(
     if (
         payload.top_k_semantic_analysis is None
         and payload.top_k_semantic_interview is None
+        and payload.top_k_semantic_per_criterion is None
         and payload.cv_chunking_strategy is None
         and payload.cv_markdown_extraction_mode is None
         and payload.retrieval_evidence_persistence_mode is None
@@ -101,6 +108,7 @@ def patch_config(
         updated = update_ai_runtime_config(
             top_k_semantic_analysis=payload.top_k_semantic_analysis,
             top_k_semantic_interview=payload.top_k_semantic_interview,
+            top_k_semantic_per_criterion=payload.top_k_semantic_per_criterion,
             cv_chunking_strategy=payload.cv_chunking_strategy,
             cv_markdown_extraction_mode=payload.cv_markdown_extraction_mode,
             retrieval_evidence_persistence_mode=payload.retrieval_evidence_persistence_mode,

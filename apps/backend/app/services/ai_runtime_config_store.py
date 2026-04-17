@@ -11,6 +11,7 @@ AI_RUNTIME_TOP_K_MIN = 4
 AI_RUNTIME_TOP_K_MAX = 30
 DEFAULT_TOP_K_SEMANTIC_ANALYSIS = 12
 DEFAULT_TOP_K_SEMANTIC_INTERVIEW = 8
+DEFAULT_TOP_K_SEMANTIC_PER_CRITERION = 4
 CV_CHUNKING_STRATEGY_TOKEN_WINDOW = "token_window"
 CV_CHUNKING_STRATEGY_SEMANTIC_SECTIONS = "semantic_sections"
 CV_CHUNKING_STRATEGIES = {
@@ -48,6 +49,7 @@ class AIRuntimeConfigRecord(TypedDict):
     config_key: str
     top_k_semantic_analysis: int
     top_k_semantic_interview: int
+    top_k_semantic_per_criterion: int
     cv_chunking_strategy: str
     cv_markdown_extraction_mode: str
     retrieval_evidence_persistence_mode: str
@@ -78,6 +80,7 @@ def _default_config() -> AIRuntimeConfigRecord:
         config_key=AI_RUNTIME_CONFIG_KEY,
         top_k_semantic_analysis=DEFAULT_TOP_K_SEMANTIC_ANALYSIS,
         top_k_semantic_interview=DEFAULT_TOP_K_SEMANTIC_INTERVIEW,
+        top_k_semantic_per_criterion=DEFAULT_TOP_K_SEMANTIC_PER_CRITERION,
         cv_chunking_strategy=DEFAULT_CV_CHUNKING_STRATEGY,
         cv_markdown_extraction_mode=DEFAULT_CV_MARKDOWN_EXTRACTION_MODE,
         retrieval_evidence_persistence_mode=DEFAULT_RETRIEVAL_EVIDENCE_PERSISTENCE_MODE,
@@ -161,6 +164,10 @@ def _normalize_firestore_record(payload: dict[str, Any] | None) -> AIRuntimeConf
         top_k_semantic_interview=_coerce_top_k(
             source.get("top_k_semantic_interview"),
             base["top_k_semantic_interview"],
+        ),
+        top_k_semantic_per_criterion=_coerce_top_k(
+            source.get("top_k_semantic_per_criterion"),
+            base["top_k_semantic_per_criterion"],
         ),
         cv_chunking_strategy=normalized_chunking_strategy,
         cv_markdown_extraction_mode=normalized_md_mode,
@@ -271,6 +278,7 @@ def update_ai_runtime_config(
     *,
     top_k_semantic_analysis: int | None = None,
     top_k_semantic_interview: int | None = None,
+    top_k_semantic_per_criterion: int | None = None,
     cv_chunking_strategy: str | None = None,
     cv_markdown_extraction_mode: str | None = None,
     retrieval_evidence_persistence_mode: str | None = None,
@@ -290,6 +298,11 @@ def update_ai_runtime_config(
         current["top_k_semantic_interview"] = _validate_top_k(
             top_k_semantic_interview,
             "top_k_semantic_interview",
+        )
+    if top_k_semantic_per_criterion is not None:
+        current["top_k_semantic_per_criterion"] = _validate_top_k(
+            top_k_semantic_per_criterion,
+            "top_k_semantic_per_criterion",
         )
     if cv_chunking_strategy is not None:
         current["cv_chunking_strategy"] = _validate_cv_chunking_strategy(

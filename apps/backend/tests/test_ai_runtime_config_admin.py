@@ -14,6 +14,7 @@ from app.services.ai_runtime_config_store import (
     DEFAULT_CV_CHUNKING_STRATEGY,
     DEFAULT_TOP_K_SEMANTIC_ANALYSIS,
     DEFAULT_TOP_K_SEMANTIC_INTERVIEW,
+    DEFAULT_TOP_K_SEMANTIC_PER_CRITERION,
     DEFAULT_INTERVIEW_RESEARCH_MODE,
     DEFAULT_INTERVIEW_RESEARCH_MAX_STEPS,
     reset_ai_runtime_config,
@@ -48,6 +49,7 @@ class AIRuntimeConfigAdminTests(unittest.TestCase):
         self.assertEqual(response.config_key, "global")
         self.assertEqual(response.top_k_semantic_analysis, DEFAULT_TOP_K_SEMANTIC_ANALYSIS)
         self.assertEqual(response.top_k_semantic_interview, DEFAULT_TOP_K_SEMANTIC_INTERVIEW)
+        self.assertEqual(response.top_k_semantic_per_criterion, DEFAULT_TOP_K_SEMANTIC_PER_CRITERION)
         self.assertEqual(response.cv_chunking_strategy, DEFAULT_CV_CHUNKING_STRATEGY)
         self.assertEqual(response.interview_research_mode, DEFAULT_INTERVIEW_RESEARCH_MODE)
         self.assertEqual(response.interview_research_max_steps, DEFAULT_INTERVIEW_RESEARCH_MAX_STEPS)
@@ -58,6 +60,7 @@ class AIRuntimeConfigAdminTests(unittest.TestCase):
             payload=ai_runtime_admin_api.UpdateAIRuntimeConfigRequest(
                 top_k_semantic_analysis=15,
                 top_k_semantic_interview=10,
+                top_k_semantic_per_criterion=6,
                 cv_chunking_strategy="token_window",
                 interview_research_mode="adaptive",
                 interview_research_max_steps=6,
@@ -67,6 +70,7 @@ class AIRuntimeConfigAdminTests(unittest.TestCase):
         )
         self.assertEqual(updated.top_k_semantic_analysis, 15)
         self.assertEqual(updated.top_k_semantic_interview, 10)
+        self.assertEqual(updated.top_k_semantic_per_criterion, 6)
         self.assertEqual(updated.cv_chunking_strategy, "token_window")
         self.assertEqual(updated.interview_research_mode, "adaptive")
         self.assertEqual(updated.interview_research_max_steps, 6)
