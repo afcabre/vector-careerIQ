@@ -24,7 +24,7 @@ def _bullets(values: list[str], *, empty_message: str, limit: int = 8) -> str:
     return "\n".join(f"- {item}" for item in cleaned[:limit])
 
 
-def _criteria_snapshot(rows: list[CriterionEvaluationRow], limit: int = 12) -> str:
+def _criteria_snapshot(rows: list[CriterionEvaluationRow]) -> str:
     if not rows:
         return "- Sin criterios evaluados"
     ordered = sorted(
@@ -36,7 +36,7 @@ def _criteria_snapshot(rows: list[CriterionEvaluationRow], limit: int = 12) -> s
         ),
     )
     lines: list[str] = []
-    for row in ordered[:limit]:
+    for row in ordered:
         evaluation = row.get("evaluation", {})
         lines.append(
             f"- {row.get('criterion_label', '')} "

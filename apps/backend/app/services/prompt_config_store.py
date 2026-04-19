@@ -258,12 +258,17 @@ def _default_configs() -> dict[str, PromptConfigRecord]:
             "scope": "global",
             "flow_key": FLOW_TASK_ANALYZE_PROFILE_MATCH,
             "template_text": (
-                "Analiza ajuste perfil-vacante.\n"
-                "Formato:\n"
-                "1) Ajuste general\n"
-                "2) Fortalezas\n"
-                "3) Brechas\n"
-                "4) Recomendacion accionable\n\n"
+                "Analiza ajuste perfil-vacante con lenguaje ejecutivo y criterio comparativo.\n"
+                "Debes basarte en perfil estructurado, vacante estructurada y evidencia semantica del CV.\n"
+                "Usa el texto libre de la vacante solo como apoyo contextual.\n"
+                "La matriz de alineacion debe ser exhaustiva: incluye todos los criterios evaluados, sin omitir filas.\n"
+                "No limites la matriz a top 10, muestras o subconjuntos.\n"
+                "Separa cuando aplique:\n"
+                "1) Ajuste frente a la vacante\n"
+                "2) Ajuste frente a preferencias y condiciones del candidato\n"
+                "3) Fortalezas\n"
+                "4) Brechas\n"
+                "5) Recomendacion accionable\n\n"
                 "Persona:\n{person_context}\n\n"
                 "Vacante:\n{opportunity_context}\n\n"
                 "Evidencia semantica CV:\n{semantic_evidence_context}"
