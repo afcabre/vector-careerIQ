@@ -354,7 +354,6 @@ def _person_context(person: PersonRecord) -> str:
 def _opportunity_context(opportunity: OpportunityRecord) -> str:
     structured = opportunity.get("vacancy_profile", {})
     structured_status = str(opportunity.get("vacancy_profile_status", "")).strip() or "none"
-    mapped_criteria = map_job_criteria(opportunity)
     structured_lines: list[str] = []
     if isinstance(structured, dict) and structured:
         summary = str(structured.get("summary", "")).strip()
@@ -422,7 +421,6 @@ def _opportunity_context(opportunity: OpportunityRecord) -> str:
         f"Ubicacion: {opportunity['location']}\n"
         f"URL: {opportunity['source_url']}\n"
         f"{structured_context}\n"
-        f"{job_criteria_context(mapped_criteria)}\n"
         f"Descripcion: {opportunity['snapshot_raw_text']}"
     )
 

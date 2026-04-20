@@ -5561,10 +5561,17 @@ export default function App() {
               const sourceBadge = getVacancyProfileSourceBadge(profile.extraction_source);
               const hasStructuredContent = Boolean(
                 profile.summary
+                  || profile.seniority !== "no_especificado"
+                  || profile.organizational_level !== "no_especificado"
                   || profile.funciones_responsabilidades.length
                   || profile.requisitos_obligatorios.length
                   || profile.requisitos_deseables.length
                   || profile.beneficios.length
+                  || profile.condiciones_trabajo.modality !== "no_especificado"
+                  || profile.condiciones_trabajo.schedule !== "no_especificado"
+                  || profile.condiciones_trabajo.contract_type !== "no_especificado"
+                  || profile.condiciones_trabajo.location !== "no_especificado"
+                  || profile.condiciones_trabajo.salary.text_original
               );
               const canClearProfile =
                 item.vacancy_profile_status !== "none" || hasStructuredContent;
@@ -5611,6 +5618,12 @@ export default function App() {
                             <strong>Nivel organizacional:</strong> {profile.organizational_level}
                           </p>
                         ) : null}
+                        {profile.funciones_responsabilidades.length > 0 ? (
+                          <p className="metaText">
+                            <strong>Funciones y responsabilidades:</strong>{" "}
+                            {profile.funciones_responsabilidades.slice(0, 4).join("; ")}
+                          </p>
+                        ) : null}
                         {profile.requisitos_obligatorios.length > 0 ? (
                           <p className="metaText">
                             <strong>Requisitos obligatorios:</strong>{" "}
@@ -5626,7 +5639,8 @@ export default function App() {
                         {(profile.condiciones_trabajo.modality !== "no_especificado"
                           || profile.condiciones_trabajo.contract_type !== "no_especificado"
                           || profile.condiciones_trabajo.schedule !== "no_especificado"
-                          || profile.condiciones_trabajo.location !== "no_especificado") ? (
+                          || profile.condiciones_trabajo.location !== "no_especificado"
+                          || Boolean(profile.condiciones_trabajo.salary.text_original)) ? (
                           <p className="metaText">
                             <strong>Condiciones:</strong>{" "}
                             {[
@@ -5642,7 +5656,16 @@ export default function App() {
                               profile.condiciones_trabajo.location !== "no_especificado"
                                 ? `ubicacion=${profile.condiciones_trabajo.location}`
                                 : "",
+                              profile.condiciones_trabajo.salary.text_original
+                                ? `salario=${profile.condiciones_trabajo.salary.text_original}`
+                                : "",
                             ].filter(Boolean).join(" · ")}
+                          </p>
+                        ) : null}
+                        {profile.beneficios.length > 0 ? (
+                          <p className="metaText">
+                            <strong>Beneficios:</strong>{" "}
+                            {profile.beneficios.slice(0, 4).join("; ")}
                           </p>
                         ) : null}
                         <div className="cardActions">

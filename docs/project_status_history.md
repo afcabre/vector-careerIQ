@@ -1,0 +1,527 @@
+# Project Status History
+
+Snapshot historico migrado desde `PROJECT_STATUS.md` el `2026-04-20` para conservar trazabilidad sin sobrecargar el estado vigente.
+
+# Project Status
+
+## Estado
+- fase_actual: `Implementacion`
+- checkpoint_actual: `implementacion activa del motor analitico V1.1 para perfil-vacante (evaluacion y consolidacion deterministica)`
+- repo_status: `implementacion activa con login, gestion de personas, chat OpenAI, busqueda multi-provider, analisis por accion, interview brief, importacion manual, CV activo, capa semantica y linea de refactor V1.1 formalizada`
+- ultima_actualizacion: `2026-04-19`
+
+## Progreso Por Fase
+- `Fase 0`: completada
+- `Fase 1`: completada
+- `Fase 2`: completada
+- `Fase 3`: completada
+- `Fase 4`: completada
+- `Reorganizacion documental`: completada
+- `Implementacion`: iniciada
+
+## Artefactos Normativos
+- `.specify/00.Caso-de-Uso-y-Alcance.md`
+- `.specify/01.Constitucion.md`
+- `.specify/02.Spec.md`
+- `.specify/03.Arquitectura-y-Plan.md`
+- `caso_de_uso.md`
+- `cumplimiento_ejercicio.md`
+- `guia_uso.md`
+
+## Estado Tecnico
+- scaffold base existente en `apps/frontend` y `apps/backend`
+- documentos normativos activos en `.specify/`
+- contratos minimos de `auth` y `persons` implementados en backend
+- flujo vertical inicial implementado en modo local: login tutor + seleccion de persona consultada
+- `persons` y validacion de operador soportan backend `memory` o `firestore`
+- sesion backend soporta backend `memory` o `firestore`
+- conversacion por `person_id` implementada en backend y conectada en frontend
+- `/chat` y `/chat/stream` integrados con OpenAI (fallback seguro si falta key/dependencia)
+- `/search` implementado con Tavily (fallback seguro)
+- guardado explicito desde busqueda a oportunidades persistidas por `person_id`
+- `analyze` por oportunidad implementado
+- `interview_brief` por oportunidad implementado como accion IA separada, con cache por defecto (`force_recompute` opcional), historico por accion y endpoint SSE dedicado
+- `prepare` implementado con artefactos persistidos (`cover_letter`, `experience_summary`)
+- importacion manual de vacantes por `URL` y por `texto pegado` habilitada en frontend
+- toolchain frontend local operativo (`npm install` + `npm run build` exitoso)
+- carga de CV por persona implementada (`POST /api/persons/{person_id}/cv`)
+- consulta de CV activo por persona implementada (`GET /api/persons/{person_id}/cv/active`)
+- regla V1 de un solo CV activo por persona aplicada en store (`memory` y `firestore`)
+- extraccion base de texto de CV habilitada con soporte PDF/texto y preview en UI
+- configuracion OpenAI alineada para V1: `gpt-4o-mini` (inferencia) y `text-embedding-3-small` (embeddings)
+- decision de proveedor: `Adzuna` se integrara via `RapidAPI` (`RAPIDAPI_KEY` + `RAPIDAPI_ADZUNA_HOST`)
+- busqueda multi-provider implementada en backend (`Adzuna via RapidAPI`, `Remotive`, `Tavily`)
+- UI permite abrir detalle efimero de resultados de busqueda sin persistir; el guardado sigue como accion separada `Guardar como oportunidad`
+- UX de `Abrir detalle` ajustada para mostrar/ocultar detalle inline en la misma tarjeta de resultado (feedback inmediato visible)
+- requerimientos normativos actualizados para incluir modulo/seccion de administracion de prompts en V1
+- arquitectura actualizada con `Prompt Admin`, `Prompt Config Router/Service` y endpoints admin de configuracion
+- backend incorpora `prompt_config_store` con defaults V1, validacion y persistencia `memory/firestore`
+- backend expone endpoints admin `GET /api/admin/prompt-configs`, `GET /api/admin/prompt-configs/{flow_key}` y `PATCH /api/admin/prompt-configs/{flow_key}`
+- backend agrega historial de versiones en `prompt_config_versions` y endpoints admin `GET /api/admin/prompt-configs/{flow_key}/versions` + `POST /api/admin/prompt-configs/{flow_key}/rollback`
+- extraccion estructurada de vacantes manuales ahora usa flow configurable `task_vacancy_profile_extract` en `Administracion de prompts`
+- extractor de vacantes endurecido para separar `criterion` (etiqueta corta) y `condition` (requisito literal), con deduplicacion y sin tope fijo de 16 por defecto
+- extraccion estructurada de vacante actualizada en V0: se elimina mezcla en `job_level` y se separa en dos campos explicitos `seniority` y `organizational_level` (sin compatibilidad legacy)
+- backend agrega configuracion global por proveedor de busqueda en `search_provider_configs` y endpoints admin `GET /api/admin/search-providers` + `PATCH /api/admin/search-providers/{provider_key}`
+- backend agrega configuracion global de runtime IA en `ai_runtime_configs` y endpoint admin `GET/PATCH /api/admin/ai-runtime-config`
+- extraccion estructurada de vacante simplificada: se elimina `criteria` (`criterion/condition`) por redundancia y ruido en V1
+- extraccion estructurada de vacante ajustada para evitar clasificacion forzada: `category` ahora admite `unknown` y deja de forzar `knowledge` cuando no hay certeza de taxonomia
+- busqueda Tavily de vacantes usa construccion de query configurable via `prompt_configs` (`search_jobs_tavily`)
+- busqueda de vacantes respeta habilitacion por proveedor (`tavily`, `adzuna`, `remotive`) definida en admin UI/API
+- query de Tavily para vacantes se recorta a maximo `400` caracteres para evitar `HTTP 400` por longitud
+- respuesta de busqueda expone `provider_status` por ejecucion (estado, razon y conteo por proveedor)
+- fit cultural Tavily usa construccion de query configurable via `prompt_configs` (`search_culture_tavily`)
+- pruebas de contrato/admin de prompt configs agregadas en `apps/backend/tests/test_prompt_config_admin.py` (`5 tests` en `OK`)
+- frontend incorpora seccion `Administracion de prompts (global V1)` para listar/editar `template_text`, `target_sources` e `is_active`
+- frontend consume endpoints admin de prompt configs y aplica validaciones basicas antes de guardar
+- frontend de admin prompts permite consultar versiones por flow y restaurar una version previa (rollback)
+- frontend incorpora seccion de administracion de proveedores de busqueda con checkboxes para habilitar/deshabilitar ejecucion por proveedor
+- frontend incorpora seccion de administracion de retrieval semantico con `top_k` separado para `analisis/preparacion` y `entrevista`
+- frontend ajusta titulo de card a `Resumen estructurado de la vacante`
+- `analyze` y `prepare` consumen `top_k_semantic_analysis` configurable (default V1 `12`) en lugar de valor hardcodeado
+- recomputo de `vacancy_profile` ahora soporta SSE de estado (`/vacancy-profile/recompute/stream`) con etapas `started/extracting/saving` y fallback frontend al endpoint sin streaming
+- contrato de `vacancy_profile` realineado al esquema estructural V1.1 sin reintroducir heuristicas de clasificacion: `summary`, `company_properties`, `role_properties`, `vacancy_structure`, `confidence`, `extraction_source`
+- `role_properties` consolida `seniority` y `organizational_level`; `company_properties` queda disponible para hidratacion posterior sin afectar la extraccion base
+- frontend de vacantes rehidrata el formulario guiado y el resumen desde `vacancy_structure`, incluyendo responsabilidades, requisitos, condiciones y salario
+- `vacancy_structure` admite `category` opcional por item para capturar subcategoria util (`education`, `experience`, `language`, `technical_knowledge`, `tool`, etc.) y se omite cuando no aporta valor
+- frontend de busqueda muestra panel de diagnostico por proveedor usando `provider_status` de la ultima ejecucion
+- frontend de busqueda muestra motivo amigable, `HTTP status` (si aplica), detalle tecnico y boton de copia por proveedor para depuracion rapida
+- backend endurece `provider_status` para errores de proveedor con `reason` estable + `reason_detail` + `http_status` + `error_class`
+- API `search` valida `provider_status` con esquema tipado y serializa salida estable para frontend (`dict`), evitando respuestas ambiguas
+- insumo de refactor UI multipagina registrado en memoria para aclaraciones y posterior implementacion incremental
+- aclaracion cerrada del refactor UI: `Administracion de prompts` se mantiene global y disponible sin candidato activo
+- aclaracion cerrada del refactor UI: sidebar contextual solo con candidato activo; accesos globales en header/menu global
+- aclaracion cerrada del refactor UI: dark mode fijo en V1 (sin toggle), con CSS preparado por tema/tokens para evolucion futura
+- aclaracion cerrada del refactor UI: navegacion multipagina con URLs explicitas por vista
+- input ampliado de UI (`Speech Brand DNA` + componentes visuales) registrado en memoria para aterrizar mapa de navegacion y backlog de ajuste
+- aclaracion cerrada del refactor UI: indicador radial de match porcentual oculto en V1 hasta tener scoring numerico formal
+- aclaracion cerrada del refactor UI: `guidance_text` se mostrara como `Guia de perfil` en UI, sin target/artefacto nuevo en backend V1
+- correccion del refactor UI: `Contacto` queda fuera de V1 y se difiere para una version posterior
+- aclaracion cerrada del refactor UI: `AI_CHAT_DRAWER` disponible en todas las vistas contextuales, manteniendo contexto estable del candidato activo
+- aclaracion cerrada del refactor UI: historial de chat unico por candidato, compartido entre todas las paginas contextuales
+- aclaracion cerrada del refactor UI: carrusel de candidatos manual (sin auto-rotacion), responsive movil con swipe/scroll horizontal
+- mapa de navegacion UI aprobado y aterrizado a shells/componentes/lotes de implementacion en memoria operativa
+- frontend implementa rutas multipagina de workspace (`/candidates`, `/admin/prompts`, `/c/:person_id/profile`, `/c/:person_id/opportunities`, `/c/:person_id/analysis`) con sincronizacion `history/popstate`
+- frontend aplica guards de ruta por sesion/persona y sincroniza `selectedPersonId` con URL contextual
+- frontend incorpora navegacion global (candidatos/admin) y navegacion contextual por candidato (perfil/oportunidades/analisis)
+- secciones principales quedan segmentadas por pagina: seleccion de candidatos, administracion global, perfil+CV, explorador de oportunidades, analisis+trazas
+- build frontend revalidado tras lote de navegacion multipagina: `npm run build` en `OK`
+- frontend aplica tema oscuro base `Speech Brand DNA` en `styles.css` (tokens de color, superficies, tipografia y estados interactivos)
+- frontend refuerza componentes visuales de V1: avatar en tarjetas de candidatos + chips de metadatos en tarjetas de oportunidades
+- build frontend revalidado tras ajustes dark mode: `npm run build` en `OK`
+- pagina `analysis` ahora contiene su propia lista de oportunidades guardadas con acciones IA por fila (`Analyze perfil`, `Analyze cultura`, `Prepare`, `Artifacts`)
+- pagina `opportunities` mantiene foco de exploracion y guardado; sus guardadas ahora priorizan apertura y derivacion a `analysis`
+- al entrar a `analysis` sin oportunidad activa, se selecciona automaticamente la primera oportunidad guardada para reducir friccion
+- build frontend revalidado tras desacople de `analysis`: `npm run build` en `OK`
+- `AI_CHAT_DRAWER` implementado en frontend para vistas contextuales (`profile`, `opportunities`, `analysis`) con boton flotante, panel derecho y quick starts
+- drawer de chat mantiene historial unico por persona y reutiliza pipeline SSE existente de `chat/stream` con fallback no-stream
+- layout con drawer aplica patron push en desktop (`shellWithChatDrawer`) y comportamiento responsive en movil
+- build frontend revalidado tras implementacion de chat drawer: `npm run build` en `OK`
+- microcopy frontend unificado en espanol para acciones principales de analisis/preparacion/artefactos y etiquetas de resultados
+- drawer de chat refinado para movil como panel inferior (`bottom sheet`) con quick starts scrollables y mejor usabilidad
+- build frontend revalidado tras cierre de microcopy/UX: `npm run build` en `OK`
+- `ARTEFACT_EDITOR_PANEL` simplificado implementado en `analysis`: lectura estructurada por tipo de material + accion de copiado por bloque
+- pagina `analysis` reorganizada para reducir densidad: bloque principal de resultados + `Historico IA` y `Trazas IA/API` colapsables por defecto
+- build frontend revalidado tras ajuste de jerarquia visual en `analysis`: `npm run build` en `OK`
+- ajustes de legibilidad aplicados en frontend: mayor contraste en burbujas de usuario (`chatBubbleUser`), mejora de textos secundarios y tipografia/espaciado en movil
+- hardening visual adicional aplicado en frontend: refinamiento de contraste (`text-secondary`/`text-muted`), mejora de legibilidad en bloques `pre`, placeholders y estados interactivos (`hover/active`) para controles y secciones colapsables
+- evidencia semantica CV en `analysis` ajustada con estilo dedicado (`semanticSnippetBubble`) para reducir protagonismo visual: texto deja de ser blanco y pasa a un tono legible de menor contraste
+- calibracion fina adicional en `semanticSnippetBubble`: menor contraste de borde/acento y texto de contenido para dar mas jerarquia al analisis principal
+- UX de analisis refinada para reducir carga cognitiva: `Senales culturales` y `Evidencia semantica CV` ahora se muestran colapsadas por defecto
+- UX de navegacion externa mejorada: URLs de resultados, oportunidades y senales culturales ahora son enlaces clicables (`target=_blank`) con estilo visual consistente
+- topbar de workspace replanteado para operacion diaria: marca a la izquierda, selector central de candidato con menu (incluye `Cambiar candidato` hacia `/candidates`), navegacion contextual (`Perfil`, `Oportunidades`, `Analisis`) y acciones globales por icono (`Administracion`, `Cerrar sesion`) a la derecha
+- nomenclatura de tabs contextuales ajustada para flujo real V1: `Perfil | Busqueda | Analisis`
+- regla UX explicita aplicada: sin candidato activo se ocultan tabs contextuales; con candidato activo se muestran tabs de contexto
+- pasada fina UX en header desktop/movil: legibilidad de tab largo, `nowrap`, scroll horizontal de tabs en pantallas pequenas y refinamiento visual del estado activo
+- vista de candidatos refinada: `Agregar perfil` ahora abre/cierra el formulario de alta bajo demanda; cuando no hay registros el formulario se abre automaticamente
+- copy UX ajustado en candidatos para foco en `perfil` (labels de alto nivel) manteniendo el modelo de datos por `person_id`
+- seleccion de candidato ajustada a patron interactivo de cards: se elimina boton interno, no hay preseleccion en `/candidates`, seleccion por click en tarjeta y estado visual `hover/active`
+- contraste visual de seleccion reforzado en cards interactivas (`candidatos`, `opportunidades`, `resultados`): borde activo mas fuerte, halo ampliado y fondo activo mas distinguible
+- correccion de seleccion en `/candidates`: se elimina reset reactivo de `selectedPersonId` que anulaba el click sobre cards
+- preferencias culturales simplificadas: seleccion directa de opciones por campo; se elimina criticidad explicita en UI V1
+- bloque `CV activo` compactado: resumen en chips de estado, boton `Subir CV` mas compacto y vista previa en seccion colapsable
+- estilo global de botones compactado (menos redondeo, menor alto/padding) para reducir peso visual
+- pagina `Perfil` remaquetada en dos columnas en desktop (`Perfil base editable` a la izquierda y `Preferencias culturales` a la derecha), con degradacion responsiva a una sola columna en movil
+- microcopy de perfil depurado: se eliminan textos redundantes (`Perfil activo`, `Skills base`, `Contexto activo`) y se mantiene foco en acciones
+- jerarquia de secciones en pagina de perfil ajustada: segmentos separados `Perfil` y `CV` (sin encabezados redundantes tipo `Contexto activo`/`CV activo`)
+- hero de pagina de perfil compactado: `Perfil` + titulo corto y sin parrafo secundario para reducir altura vertical
+- flujo de carga de CV ajustado: selector de archivo custom en espanol (`Seleccionar archivo`) para evitar texto nativo en ingles (`No file chosen`)
+- copy de experiencia normalizado a `Años de experiencia` en formularios y validaciones
+- flujo de CV reorganizado segun uso real: si ya existe CV activo se prioriza resumen + vista previa breve (8 lineas) con `Ver mas`; la carga/reemplazo queda como accion secundaria (`Reemplazar CV`)
+- API de CV ampliada: nuevo endpoint `GET /api/persons/{person_id}/cv/active/text` para recuperar texto extraido completo del CV activo
+- `Ver mas` en UI de CV ahora carga y muestra texto extraido completo (no solo preview truncado), permitiendo verificar perdida de informacion en extraccion PDF
+- seccion de perfil simplificada en microcopy: eliminacion de redundancia de titulos y textos para reducir ruido visual y espacio vertical
+- nomenclatura de vista contextual refinada para reducir repeticion local: se mantiene `Perfil` en navegacion y se usa `Candidato` solo en el encabezado interno de la seccion principal
+- hero de la vista de perfil compactado (titulo con menor peso y menor separacion respecto al topbar/panel)
+- hero de perfil ajustado a texto instruccional (no nombre propio), para mantener consistencia operacional en la vista
+- analisis cultural alineado para V1 via plantillas de prompt configurables: enfoque en `coincide/no coincide/indeterminado`, sin descarte automatico por vacios de evidencia y con conclusion abierta
+- busqueda de oportunidades refinada en UI: `target_roles` del perfil visibles como chips seleccionables que agregan/quitan terminos al query
+- carga manual de vacantes simplificada en UI: un solo formulario por `URL` en bloque colapsable
+- panel de estado de proveedores compactado en bloque colapsable para priorizar visualizacion inmediata de resultados
+- campo de busqueda en oportunidades ajustado a copy `Buscar roles de interés` y boton `Buscar` reubicado debajo del selector de roles
+- flujo de importacion manual simplificado en UI: se elimina formulario `desde texto` y se conserva formulario unificado por URL
+- regla V1 reforzada para carga manual por URL: `descripcion/snapshot` obligatorio (frontend + backend), ya que no hay scraping automatico
+- bloque `Carga manual de oportunidades` reubicado junto al segmento de `Oportunidades guardadas` para reducir ruido en la zona superior de resultados
+- `Log de proveedores (ultima busqueda)` refinado como panel colapsable con estilo monospace y menor densidad vertical
+- estructura de descubrimiento de oportunidades alineada a layout unificado: tabs `Busqueda` y `Carga manual`, con render condicional por modo
+- composicion de busqueda refinada: etiqueta `Buscar oportunidades, roles o empresas`, chips de roles en cabecera y boton `Buscar` full-width en el bloque superior
+- carga manual integrada como segundo tab (`Carga manual`) manteniendo formulario unificado por URL, snapshot obligatorio y CTA `Cargar`
+- `Oportunidades guardadas` ajustado en jerarquia visual: heading con mayor presencia, cards con tipografia/espaciado refinado y sin acciones redundantes dentro de la vista de busqueda
+- pantalla `Analisis` replanteada a composicion de 3 columnas: izquierda oportunidades guardadas con acciones IA, centro oportunidad activa + resultados, derecha `Contextual Intelligence`
+- `Historial IA` y `Trazas tecnicas` integrados en el rail derecho de `Analisis`, eliminando la separacion previa en un segundo panel inferior
+- lista de oportunidades de `Analisis` alineada visualmente a la familia de cards de oportunidades guardadas, conservando barra de acciones por fila
+- bloque central de `Analisis` reorganizado: estado, notas, `Forzar recalculo IA`, seleccion de materiales y panel de resultados/artefactos en una sola columna principal
+- pasada fina UX en `Analisis`: columnas reequilibradas, barra de acciones por oportunidad compactada y rail derecho fijado en desktop para mantener contexto visible
+- interaccion en cards de `Analisis` refinada: seleccion por click en tarjeta (sin boton `Seleccionar`) con marco activo y controles compactos
+- acciones por oportunidad simplificadas a `Analizar` y `Artefactos` con icono+texto, dejando el recalc mediante icono `refresh` dentro del panel de resultados
+- bloque de ejecucion central ahora es modal por accion (`Analizar`/`Artefactos`) con checkboxes y boton de lanzamiento por flujo
+- botones `Copiar` en artefactos reemplazados por iconos discretos para reducir ruido visual
+- panel central de `Resultados` reorganizado con tabs `Analisis` y `Postulacion`
+- recalc movido al lugar correcto: icono `refresh` en cada bloque de analisis y en cada artefacto generado
+- seleccion de oportunidad ahora hidrata resultados persistidos (`ai_runs` + artefactos actuales) para evitar vacios en oportunidades ya `analyzed`
+- rail derecho de contexto ajustado para evitar desborde horizontal de contenido tecnico
+- cards de oportunidades guardadas en `Analisis` alineadas visualmente con bordes redondeados consistentes con el resto de la interfaz
+- `Analisis` cambia a seleccion explicita: ingreso sin oportunidad activa seleccionada y toggle de seleccion/deseleccion por click en card
+- acciones IA removidas de las cards de oportunidades; ejecucion se centraliza por bloque en `Resultados` (`Analisis` y `Artefactos`)
+- cada bloque de resultado soporta estado `sin generar/generado`, `refresh`, vista previa de `7` lineas con `Ver mas` y paginacion por historico de `run_id`
+- panel central de `Resultados` agrega submenu explicito en `Analisis` para acceso directo a `Perfil-vacante`, `Fit cultural` y `Entrevista`
+- panel central de `Resultados` agrega submenu explicito en `Postulacion` para acceso directo a `Guia de perfil`, `Carta de presentacion` y `Resumen adaptado`
+- navegacion de submenus en `Resultados` reforzada con estilo de tabs visibles (estado activo mas evidente), seleccion inmediata al cambiar entre `Análisis/Postulación` y etiqueta corregida a `Postulación`
+- tabs de `Resultados` ajustados a comportamiento real: solo se visualiza el contenedor del bloque seleccionado; los demas bloques quedan ocultos
+- gestion de estado en `Analisis` ajustada: guardado de estado libre entre estados validos V1 (sin restriccion de secuencia), manteniendo validacion solo de estado invalido
+- `Gestion de oportunidad` agrega confirmacion visual de guardado de estado (`Estado actualizado`) con auto-ocultado para feedback inmediato
+- columna derecha de `Contextual Intelligence` queda filtrada al bloque/run activo (request+response vinculados) y se vacia cuando no hay seleccion activa
+- al lanzar `Entrevista` desde `Analisis`, el drawer de chat se abre automaticamente para continuar conversacion contextual sobre la oportunidad activa
+- se eliminan en V1 las sugerencias predefinidas (`quick starts`) del chat para reducir ruido y mantener interaccion directa por mensaje libre
+- hardening del fallback de entrevista en frontend: si falla SSE, el fallback no fuerza recomputo (`force=false`) para evitar doble generacion y mensajes duplicados en chat
+- bugfix UX aplicado: streaming SSE visible en `analyze_profile_match` y `analyze_cultural_fit` durante ejecucion (priorizando buffer en vivo sobre ultimo persistido)
+- oportunidades guardadas en `Busqueda` ahora muestran preview de `snapshot_raw_text` (2 lineas) con expand/collapse por card
+- oportunidades guardadas muestran badge de origen (`Busqueda` vs `Manual`) en `Busqueda` y en la lista lateral de `Analisis`
+- columna `Contextual Intelligence` se puede colapsar/expandir con control iconografico y persistencia local (`localStorage`)
+- hardening de layout en `Analisis`: eliminacion de error global `Opportunity not found` por IDs stale al cambiar perfil y alineacion visual consistente de headers/columnas
+- build frontend revalidado tras hardening visual de contraste: `npm run build` en `OK`
+- contratos API de `search` reforzados para validar `provider_status` (fallo total, degradacion parcial y config faltante)
+- contratos API/admin de `search-providers` reforzados para `GET`/`PATCH` y manejo `404` en proveedor desconocido
+- `prepare/stream` en frontend muestra deltas no solo de `guidance_text`, tambien de `cover_letter` y `experience_summary`
+- build frontend verificado localmente tras integracion UI admin: `npm run build` en `OK`
+- prompt configs ampliados para V1 con capas editables: `guardrails_core` (global), `system_identity` (global) y `task_*` por accion (`chat`, `analyze`, `interview_brief`, `prepare`)
+- arquitectura normativa actualizada con matriz operativa de prompts/parametros V1 (destino, objetivo, placeholders, alcance, riesgo y control de consumo)
+- arquitectura normativa extendida con trazabilidad endpoint->composicion->variables y reglas de fallback por flow
+- backend incorpora store `ai_action_runs` para persistir resultado vigente + historico por accion IA
+- backend expone consulta de historico por accion IA: `GET /api/persons/{person_id}/opportunities/{opportunity_id}/ai-runs` con filtro opcional `action_key`
+- frontend incorpora consulta explicita de historico IA persistido por oportunidad con filtro opcional por accion y refresco manual
+- backend persiste request payload exacto enviado a proveedores IA/busqueda en `request_traces` (sin API keys/secretos)
+- backend expone trazas por persona con filtros: `GET /api/persons/{person_id}/request-traces` (`destination`, `opportunity_id`, `run_id`, `limit`)
+- frontend incorpora panel de trazas para visualizar request exacto por destino y filtrar por oportunidad activa
+- trazas `request_traces` ahora soportan `run_id` para vinculo 1:1 con ejecuciones persistidas (`ai_action_runs`)
+- backend permite filtrar trazas por `run_id` y frontend habilita foco desde `Historico IA` con boton `Ver request exacto`
+- `request_traces` ampliado con timeline de ejecucion por paso (`step_order`, `tool_name`, `stage`, `status`, `input_summary`, `output_summary`, `started_at`, `finished_at`)
+- `interview_brief` cambia de consulta unica a investigacion iterativa multi-topico en Tavily (noticias, contratacion, riesgo, sentimiento), con deduplicacion de fuentes y pasos persistidos por `run_id`
+- frontend de `Contextual Intelligence` ordena trazas por `step_order` y muestra metadata operativa por tool para depuracion del ciclo agentico
+- primera ejecucion generada de `interview_brief` se registra en conversacion como mensaje de asistente del perfil activo
+- `request_traces` endurecido con saneo de payload: redaccion automatica de secretos (api_key/token/password/authorization) y truncamiento seguro por cap de tamano
+- frontend agrupa trazas por `run_id`, habilita navegacion bidireccional `request <-> response` y muestra vista unificada por ejecucion
+- `request_traces` ahora persiste `response_payload` saneado (ademas de `request_payload`) para depurar respuestas reales de tools/proveedores, incluyendo Tavily
+- UI `Contextual Intelligence` ahora muestra `Ver response exacto` por traza, junto a `Ver request exacto`
+- `ai_runtime_config` incorpora `interview_research_mode` (`guided`/`adaptive`) y `interview_research_max_steps` para controlar autonomia de entrevista
+- `interview_brief` soporta modo `adaptive`: planifica queries dinamicas con OpenAI (`task_interview_research_plan`) y luego ejecuta Tavily con presupuesto de pasos
+- admin UI expone `modo de investigacion entrevista` y `max steps` junto con `top_k` semantico
+- `target_sources` en flows Tavily deja de ser obligatorio: backend/admin/frontend ahora aceptan lista vacia para busqueda sin restriccion por fuentes
+- arquitectura documenta politica de ventana de contexto y cantidad de mensajes por flujo OpenAI (`chat`, `analyze`, `interview_brief`, `prepare`, legacy combinado)
+- README incluye resumen operativo de reglas de contexto OpenAI V1 y referencia al detalle normativo
+- API agrega acciones separadas de analisis: `POST .../analyze/profile-match` y `POST .../analyze/cultural-fit`
+- API agrega accion separada de entrevista: `POST .../interview/brief` y `POST .../interview/brief/stream`
+- API `prepare` permite `targets` seleccionables (`guidance_text`, `cover_letter`, `experience_summary`) y `force_recompute`
+- comportamiento por defecto de acciones IA: leer ultimo resultado persistido; regenerar solo con `force_recompute=true`
+- rate limiting de login implementado con ventana temporal, max intentos y bloqueo temporal configurable por variables seguras
+- frontend agrega switch global `Forzar recalculo IA` y botones separados para `Analyze perfil` y `Analyze cultura`
+- frontend agrega seleccion de materiales para `prepare seleccionado` y consume respuesta vigente por cache cuando aplica
+- capa de prompt en chat/analyze/interview/prepare alineada a composicion: `guardrails_core + system_identity + task_prompt`
+- capa de prompt extendida para entrevista: `guardrails_core + system_identity + task_interview_brief`, con query Tavily configurable en `search_interview_tavily`
+- hardening de guardrails implementado: piso no editable, deteccion basica de prompt injection y saneo de salida ante intento de divulgacion de prompt interno
+- pruebas de hardening de guardrails agregadas (`apps/backend/tests/test_guardrails.py`)
+- flujos streaming ajustados para paridad operativa: lo emitido por `message_delta` coincide con `message_complete` y con contenido persistido en `chat`, `analyze/stream`, `interview/brief/stream` y `prepare/stream`
+- despliegue Railway en `gleaming-achievement` ejecutado con servicios separados `backend`/`frontend` y validaciones de salud/CORS/login
+- runbook público de despliegue agregado en `.specify/memory/10_railway_deploy_public_runbook_2026-04-14.md` (sin secretos)
+- historial git reescrito para purgar `.specify/instructions` del remoto y del historial local; blindaje agregado en `.gitignore`
+- vista `Analisis` ajustada a lectura por oportunidad: cards de oportunidades en columna unica (full-width) y bloque `Resultados + Contextual Intelligence` renderizado inline debajo de la oportunidad seleccionada
+- administracion de prompts ajustada a layout de una columna por flujo (usable en edicion larga), manteniendo grilla maxima de 2 columnas en otras secciones admin
+- CORS ahora configurable por `CORS_ALLOW_ORIGINS` y se habilita `.env.local` para overrides locales; frontend usa `VITE_API_BASE_URL` desde `.env.local`
+- pruebas edge de seguridad en SSE agregadas para prompt leak/prompt injection en `chat`, `analyze` y `prepare` (`apps/backend/tests/test_sse_flows.py`, `apps/backend/tests/test_guardrails.py`)
+- pruebas de rate limiting de login agregadas (`apps/backend/tests/test_auth_rate_limit.py`)
+- README actualizado con seccion de placeholders validos (`{placeholder}`) y variables disponibles por flujo de prompt
+- degradacion parcial por proveedor implementada con warnings por fuente
+- deduplicacion de resultados implementada con clave principal por `source_url`
+- `Remotive API` operando en modo publico V1; `REMOTIVE_API_KEY` queda opcional
+- indexacion vectorial de CV activo implementada con `text-embedding-3-small` y upsert a Pinecone
+- estado de indexacion CV expuesto en API/UI (`vector_index_status`, `vector_chunks_indexed`)
+- chat enriquecido con retrieval semantico de Pinecone con fallback a preview de CV
+- chunking CV mejorado a estrategia token-aware con solapamiento (~700 tokens, overlap ~12%)
+- recuperacion semantica ajustada a `top_k` alto para analisis mas exhaustivo en namespace por persona
+- `analyze` ampliado con fit cultural y evidencia publica por fuente (`Tavily`)
+- respuesta de analisis expone `cultural_confidence`, `cultural_warnings` y `cultural_signals`
+- UI muestra trazabilidad de señales culturales y advertencias de evidencia debil
+- `analyze` y `prepare` reutilizan retrieval semantico CV desde Pinecone con fallback a preview
+- API/UI exponen evidencia semantica utilizada (`semantic_evidence`) para trazabilidad del resultado
+- UI permite editar y guardar notas operativas por oportunidad desde el detalle activo
+- UI permite editar y guardar estado de oportunidad con estados V1 (`detected`, `analyzed`, `prioritized`, `application_prepared`, `applied`, `discarded`)
+- UI permite editar perfil base por persona (`full_name`, `target_roles`, `location`, `years_experience`, `skills`) desde `Contexto activo`
+- UI permite crear nuevas personas consultadas con baseline V1 (`full_name`, `target_roles`, `location`, `years_experience`, `skills`) consumiendo `POST /api/persons`
+- perfil de persona permite configurar preferencias culturales/condiciones de trabajo por campo (`enabled`, `selected_values`, `criticality`) y notas abiertas
+- el analisis cultural trata falta de evidencia en campos criticos como `indeterminado` con red flag (no exclusion automatica)
+- `PdfParseValidator` integrado a la ingesta de CV: persiste `parse_quality`, `parse_issues` y `parse_recommended_mode`, y fuerza indexacion conservadora cuando el parse no es confiable
+- `CvCanonicalizer` integrado: el CV activo ahora persiste `canonical_cv` como estructura intermedia para chunking semantico
+- `CvSemanticChunkerV2` integrado sobre bloques canonicos (`profile_summary`, `experience_item`, `education_item`, `skills_block`, `language_item`, `certification_item`) con metadata por bloque en Pinecone
+- `JobCriteriaMapper` integrado: `vacancy_profile` se transforma en criterios evaluables persistidos como `mapped_criteria`
+- `CandidateProfileNormalizer` integrado: el perfil se estabiliza en estructura comparativa persistida como `normalized_candidate_profile`
+- `CriterionEvidenceRetriever` integrado: el retrieval pasa a ser por criterio y su persistencia tecnica se gobierna por `retrieval_evidence_persistence_mode` (`minimal`/`full`)
+- `CriterionEvaluator` integrado: `analyze_profile_match` ya persiste `criteria_evaluation` deterministica por criterio
+- `CriterionAmbiguityResolver` integrado: criterios ambiguos (`unknown`/`partial` segun reglas) se envian a una resolucion selectiva con LLM antes de consolidar, marcando `resolution_source` por criterio
+- latencia de arranque SSE en `perfil-vacante` optimizada: la resolucion de ambiguedad ahora prioriza un subconjunto acotado de criterios, reduce evidencia enviada y recorta texto libre de vacante para evitar bloqueos largos antes del primer stream
+- runtime IA separa `top_k` por contexto: ahora existe `top_k_semantic_per_criterion` (independiente de `top_k_semantic_analysis`) y `perfil-vacante` lo usa de forma directa para retrieval por criterio
+- administracion UI/API de runtime IA actualizada para editar `top_k_semantic_per_criterion` desde la pantalla de administracion
+- paso 1 de saneamiento iniciado: extractor de vacante migra a contrato estructurado con `role_properties` (`organizational_level`, `company_type`, `sector`) y `criteria[]` (`criterion_id`, `label`, `vacancy_dimension`, `category`, `raw_text`, `normalized_value`, `metadata`)
+- `JobCriteriaMapper` actualizado para consumir `criteria[]` del nuevo esquema (manteniendo fallback legacy), con mapeo de `vacancy_dimension` hacia origen de evaluacion
+- prompt recomendado de `task_vacancy_profile_extract` actualizado (backend + frontend) al nuevo contrato de extraccion
+- frontend de `Vacantes` ajustado para parsear nuevo esquema y mostrar `company_type`, `sector` y conteo de criterios estructurados
+- `AssessmentConsolidator` integrado: `analyze_profile_match` ya persiste `consolidated_assessment` con `objective_fit`, `preference_fit`, `blocking_issues`, `relevant_alerts`, `strengths`, `gaps`, `unknowns` y recomendacion final deterministica
+- `AssessmentRendererAdapter` integrado: cada corrida de `analyze_profile_match` ya persiste `rendered_output` (`markdown` + `sections`) como capa desacoplada para UI/fallback
+- `result_payload` de `analyze_profile_match` se acerca al contrato V1.1: ahora persiste `input_snapshot`, `parse_validation`, `mapped_criteria`, `criterion_evidence`, `criteria_evaluation` y `consolidated_assessment`
+- `result_payload` de `analyze_profile_match` ya incluye tambien `rendered_output`
+- fallback de `analyze_profile_match` endurecido: si falla el LLM, la respuesta visible se construye desde la consolidacion deterministica en lugar de un texto generico
+- frontend `Analysis` mantiene `rendered_output` y `consolidated_assessment` para soporte tecnico, pero la presentacion central de `perfil-vacante` vuelve a priorizar `analysis_text` y la narrativa del prompt
+- `Contextual Intelligence` ahora muestra para `perfil-vacante` la capa estructurada: decision consolidada, fit objetivo/preferencial, evaluacion por criterio, `resolution_source`, snapshot tecnico y salida renderizable por secciones
+- bloque central de `perfil-vacante` en `Analysis` se simplifica de nuevo a lectura narrativa/Markdown; la capa estructurada queda concentrada en el rail derecho para no competir con la salida del prompt
+- oportunidad de mejora pendiente antes de cierre V1.1: aprovechar mejor `vacancy_profile` en la pantalla `Vacantes` para exponer la estructura de la vacante y alimentar con mayor claridad el analisis posterior
+- backend incorpora logs basicos de fallos por proveedor y fallback semantico (`search`, `cv_vector`, `opportunity_ai`)
+- pruebas de integracion API+store para aislamiento por `person_id` en oportunidades y `analyze` agregadas en `apps/backend/tests/test_person_isolation.py`
+- pruebas unitarias de transiciones de estado (`is_valid_transition`, `update_opportunity`) agregadas en `apps/backend/tests/test_opportunity_transitions.py`
+- pruebas unitarias de saneamiento/normalizacion de `cultural_fit_preferences` agregadas en `apps/backend/tests/test_cultural_fit_validation.py`
+- frontend envia chat por `/chat/stream` con render incremental de deltas SSE y fallback automatico a `/chat` si streaming no disponible
+- criterio de arquitectura confirmado: el streaming SSE debe cubrir todas las salidas IA relevantes (`chat`, `analyze`, `prepare`), no solo conversacion
+- backend expone `POST /api/persons/{person_id}/opportunities/{opportunity_id}/analyze/stream` con eventos SSE y payload final estructurado
+- backend expone `POST /api/persons/{person_id}/opportunities/{opportunity_id}/prepare/stream` con eventos SSE por canal (`guidance_text`, `cover_letter`, `experience_summary`)
+- frontend consume SSE de `analyze/prepare` con render incremental y fallback automatico a endpoints no-stream
+- frontend usa `analyze/stream` y `prepare/stream` como camino primario desde acciones de UI (`Analyze`/`Prepare`) con fallback no-stream si falla el canal SSE
+- `prepare/stream` alineado a control de consumo de V1: recibe `targets` y `force_recompute`, sirve cache por accion cuando aplica y solo genera/streaming de materiales seleccionados
+- backend expone SSE separado por accion para analyze: `.../analyze/profile-match/stream` y `.../analyze/cultural-fit/stream`
+- frontend usa endpoints SSE separados por accion en botones `Analyze perfil` y `Analyze cultura` (fallback a no-stream por accion)
+- suite backend verificada localmente: `8 tests` en `OK`
+- build frontend verificado localmente: `npm run build` en `OK`
+- pruebas de integracion de `prepare` y persistencia/reemplazo de artefactos agregadas en `apps/backend/tests/test_prepare_artifacts.py`
+- pruebas de flujo SSE para `chat`, `analyze` y `prepare` agregadas en `apps/backend/tests/test_sse_flows.py`
+- suite backend actualizada y verificada localmente: `12 tests` en `OK`
+- pruebas de contratos API para errores (`422` status invalido, `409` transicion invalida) y aislamiento por `person_id` en `artifacts`/`analyze_stream`/`prepare_stream` agregadas en `apps/backend/tests/test_api_error_and_fallbacks.py`
+- pruebas de fallback para proveedores de busqueda y fallback LLM (`analyze`/`prepare`) agregadas en `apps/backend/tests/test_api_error_and_fallbacks.py`
+- cobertura de contratos API reforzada para degradacion parcial y fallback controlado en `search`, incluyendo warnings esperados, dedupe y limite de resultados en `apps/backend/tests/test_api_error_and_fallbacks.py`
+- cobertura de contratos API reforzada para fallback controlado en endpoints `analyze_profile_match` y `prepare` cuando LLM cae en fallback en `apps/backend/tests/test_api_error_and_fallbacks.py`
+- prueba SSE adicional de evento `error` en `prepare/stream` agregada en `apps/backend/tests/test_sse_flows.py`
+- suite backend actualizada y verificada localmente: `19 tests` en `OK`
+- prueba de paridad minima `memory` vs `firestore` mocked para stores de oportunidades/artefactos agregada en `apps/backend/tests/test_firestore_mock_parity.py`
+- prueba HTTP de aislamiento por `person_id` en endpoint de artifacts agregada en `apps/backend/tests/test_http_artifacts_isolation.py` (marcada `skip` por bloqueo del harness ASGI en entorno local)
+- suite backend actualizada y verificada localmente: `21 tests` en `OK` (`skipped=1`)
+- pruebas adicionales de contratos de error para oportunidad inexistente en `analyze`/`prepare` y sus endpoints SSE agregadas en `apps/backend/tests/test_api_error_and_fallbacks.py`
+- suite backend actualizada y verificada localmente: `23 tests` en `OK` (`skipped=1`)
+- pruebas de contratos de validacion para payloads incompletos/invalidos en modelos API agregadas en `apps/backend/tests/test_request_validation_contracts.py`
+- suite backend actualizada y verificada localmente: `28 tests` en `OK` (`skipped=1`)
+- hardening de degradacion parcial en busqueda agregado en `apps/backend/tests/test_api_error_and_fallbacks.py` (fallo de un proveedor con resultados parciales de otros y warnings por proveedores no configurados)
+- contrato API agregado para `search` con `person_id` inexistente (`404`) en `apps/backend/tests/test_api_error_and_fallbacks.py`
+- contrato API agregado para validar que `search` no persiste oportunidades y solo `from-search` las crea en `apps/backend/tests/test_api_error_and_fallbacks.py`
+- suite backend actualizada y verificada localmente: `31 tests` en `OK` (`skipped=1`)
+- verificacion incremental backend ejecutada localmente: `tests/test_api_error_and_fallbacks.py` en `OK` (`12 tests`)
+- build frontend verificado localmente tras ajuste UI: `npm run build` en `OK`
+- decision operativa registrada en memoria: mantener `skip` temporal del test HTTP ASGI y criterio de salida definido para reactivarlo
+- diagnostico tecnico registrado: bloqueo reproducido en inicializacion de portal AnyIO de `TestClient` (antes del procesamiento de request)
+- bloqueo ASGI validado tambien en app FastAPI minima (`/ping`), confirmando limitacion del harness local y no regresion del codigo de negocio
+- intento de mitigacion local ejecutado: downgrade de `anyio` de `4.13.0` a `4.4.0` en `.venv`; el bloqueo de `TestClient` persiste
+- suite backend revalidada tras hardening SSE: `51 tests` en `OK` (`skipped=1`)
+- suite backend revalidada tras refuerzo de contratos HTTP fallback/degradacion: `55 tests` en `OK` (`skipped=1`)
+- suite backend actualizada con contratos de enlace `run_id` en request traces: `63 tests` en `OK` (`skipped=1`)
+- suite backend revalidada con hardening de trazas y versionado/rollback de prompts: `67 tests` en `OK` (`skipped=1`)
+- suite backend revalidada con admin de proveedores y guard de longitud Tavily: `72 tests` en `OK` (`skipped=1`)
+- contratos focalizados revalidados: `test_search_provider_admin` + `test_api_error_and_fallbacks` en `OK` (`28 tests`)
+- suite backend revalidada tras admin de runtime IA y top_k configurable: `80 tests` en `OK` (`skipped=1`)
+- suite backend revalidada tras activar `interview_brief` (cache + SSE + trazabilidad): `83 tests` en `OK` (`skipped=1`)
+- hardening anti-duplicado en `interview_brief`: backend evita append repetido si el ultimo mensaje del chat ya coincide con la misma respuesta de asistente
+- pruebas backend ampliadas para deduplicacion de entrevista (`tests/test_interview_brief.py`)
+- suite backend revalidada tras hardening de deduplicacion en entrevista: `84 tests` en `OK` (`skipped=1`)
+- fix UX/SSE en entrevista (frontend): durante `isInterviewing` se bloquea hidratacion desde `ai_runs` para no pisar deltas en vivo; fallback decide recálculo/cache segun llegada de deltas
+- correccion de ordenamiento de historico IA (`ai_runs`) en backend y frontend: prioridad explicita a `is_current` antes de `updated_at` para evitar que un run previo opaque el ultimo recalculo
+- refresh de `interview_brief` endurecido en UI: tras recalculo se posiciona el cursor del bloque en el run mas reciente (`interview_brief: 0`)
+- hardening de plantillas de prompt: `build_prompt_text` ahora degrada a `fallback` si una plantilla tiene formato invalido (llaves no escapadas), evitando que el flujo de entrevista se caiga
+- template default `task_interview_research_plan` corregido con llaves JSON escapadas para evitar errores de `Invalid format specifier`
+- ajuste UX de recálculo en `interview_brief`: reintento corto de refresco de `ai_runs` tras SSE para absorber latencia eventual de Firestore y actualizar paginador automaticamente
+- cards de `Analisis` ahora exponen `Fuentes referenciadas` con enlaces clicables en nueva pestaña para `fit cultural` y `brief de entrevista`
+- `Oportunidades guardadas` en `Busqueda` usa el mismo icono `ExpandCollapseIcon` de `Analisis` para expandir/contraer descripcion, eliminando flechas textuales `▴/▾`
+- botones de `Recalcular` en `Analisis/Postulacion` ahora muestran `...` durante ejecucion (`isAnalyzingProfile`, `isAnalyzingCultural`, `isInterviewing`, `isPreparing`) para feedback inmediato de orden recibida
+- botones de `Recalcular/Generar` en `Analisis/Postulacion` ahora usan spinner SVG pequeño durante ejecucion para consistencia visual
+- perfil ahora incluye expectativa salarial (min/max + moneda + periodo) en backend, API y UI
+- administracion global agrega toggle para truncar o guardar completas las trazas de request/response
+- administracion global agrega `cv_chunking_strategy` (`semantic_sections` / `token_window`) para controlar chunking en nuevas indexaciones de CV
+- indexacion vectorial del CV ahora persiste metadata de estrategia aplicada (`vector_chunking_strategy`, `vector_chunking_version`, `vector_source_format`) y la expone en API/UI
+- pipeline de CV incorpora construccion heuristica de Markdown estructurado para soportar chunking semantico por secciones con fallback automatico a `token_window`
+- pagina `Analisis` remaquetada para legibilidad: `Oportunidades guardadas` pasa a bloque superior con preview corta de descripcion de cargo por card
+- en `Analisis`, columnas de resultados y `Contextual Intelligence` ahora se renderizan en bloque inferior para lectura mas amplia del contenido principal
+- salida de `Alineacion perfil-vacante` ahora interpreta Markdown (titulos, listas, tablas, links y code inline) en lugar de render plano
+- V1.1 formalizado en documentos normativos como refactor del flujo `perfil-vacante` centrado en: `PdfParseValidator`, `CvCanonicalizer`, `CvSemanticChunkerV2`, `JobCriteriaMapper`, `CandidateProfileNormalizer`, `CriterionEvidenceRetriever`, `CriterionEvaluator`, `AssessmentConsolidator` y `AssessmentRendererAdapter`
+- V1.1 deja cerradas estas decisiones de diseno: `vacante estructurada` como fuente rectora, texto libre de vacante solo auxiliar, sin uso de historial/artefactos previos, evaluacion por criterio persistida en `result_payload`, consolidacion deterministica, fallback LLM solo en ambiguedad y recomendaciones finales normalizadas (`Avanzar`, `Avanzar con reservas`, `Avanzar si se valida X`, `No priorizar`, `Descartar`)
+- arquitectura actualizada para soportar persistencia configurable de evidencia de retrieval (`minimal`/`full`) y pipeline de analisis `deterministic_first -> llm_on_ambiguity -> deterministic_consolidation -> llm_render_final`
+- Fase 1 V1.1 iniciada en implementacion: `PdfParseValidator` agregado al pipeline de carga de CV con salida persistida (`parse_quality`, `parse_issues`, `parse_recommended_mode`) y gate conservador para forzar `token_window/plain_text` cuando el parse PDF no recomienda `structured_markdown`
+- API de CV ampliada para exponer el resultado del validator en `GET /cv/active` y `GET /cv/active/text`
+- compilacion verificada tras Fase 1 inicial: `python3 -m compileall apps/backend/app` y `npm run build` en `OK`
+- pendiente antes de cerrar V1.1: exponer en UI del CV activo la validacion de parseo (`parse_quality`, `parse_issues`, `parse_recommended_mode`) para que el usuario pueda ver si la indexacion uso ruta estructurada o ruta conservadora
+- Fase 2 V1.1 iniciada en implementacion: `CvCanonicalizer` agregado al pipeline de CV para derivar y persistir una representacion intermedia (`profile_summary`, `experience_blocks`, `education_blocks`, `skills_block`, `language_blocks`, `certification_blocks`, `unknown_blocks`) a partir de `structured_markdown` y `extracted_text`
+- API de CV ampliada para exponer `canonical_cv` en `GET /cv/active/text`, dejando lista la entrada para `CvSemanticChunkerV2`
+- Fase 3 V1.1 iniciada en implementacion: `CvSemanticChunkerV2` integrado dentro del camino `semantic_sections` para priorizar bloques canonicamente tipados (`profile_summary`, `experience_item`, `education_item`, `skills_block`, `language_item`, `certification_item`, `unknown_block`) antes de caer al split por headings
+- indexacion vectorial del CV ahora versiona chunking en `v2` y persiste metadata adicional por bloque (`block_type`, `block_title`, `block_index`, `subchunk_index`), ademas de `vector_source_format=canonical_structured` cuando la indexacion usa estructura canonica
+- Fase 4 V1.1 iniciada en implementacion: `JobCriteriaMapper` agregado como capa derivada sobre `vacancy_profile`, generando criterios evaluables con `category`, `origin`, `source_field` y `criterion_payload` sin redisenar el extractor de vacantes
+- flujo `analyze_profile_match` ahora inyecta `criterios evaluables derivados` dentro de `opportunity_context` y persiste `mapped_criteria` en `result_payload` tanto en ejecucion normal como SSE
+- Fase 5 V1.1 iniciada en implementacion: `CandidateProfileNormalizer` agregado para estabilizar el lado candidato (`identity`, `target_profile`, `salary_expectation`, `cultural_preferences`, `legacy_preferences`, `culture_notes`) antes del retrieval y de la evaluacion por criterio
+- flujo `analyze_profile_match` ahora persiste `normalized_candidate_profile` en `result_payload` y usa su contexto estructurado como parte de la evidencia enviada al prompt del analisis
+- Fase 6 V1.1 iniciada en implementacion: `CriterionEvidenceRetriever` agregado para recuperar evidencia por criterio combinando metadata de bloques en Pinecone y evidencia estructurada del perfil del candidato
+- consulta semantica de CV ampliada con `query_cv_matches` para preservar `score`, `section`, `block_type`, `block_title`, `block_index` y `subchunk_index` en el retrieval
+- `analyze_profile_match` ahora persiste `criterion_evidence` en `result_payload` y soporta politica backend de persistencia `retrieval_evidence_persistence_mode` (`minimal`/`full`) desde `ai_runtime_configs`
+- Fase 7 V1.1 iniciada en implementacion: `CriterionEvaluator` agregado con reglas deterministicas iniciales para seniority, modalidad, salario, ubicacion y matching generico basado en evidencia CV/perfil
+- `analyze_profile_match` ahora persiste `criteria_evaluation` en `result_payload` y alimenta el prompt con una capa previa de `evaluacion deterministica preliminar por criterio`
+- build frontend revalidado tras integracion de controles `top_k` en administracion: `npm run build` en `OK`
+- fix UX en `Analisis`: `Contextual Intelligence` (Historial IA + Trazas tecnicas) vuelve visible por defecto al versionar la clave de colapso en `localStorage`
+- fix UX en `Analisis`: al colapsar `Contextual Intelligence`, el boton `Mostrar contexto` se muestra en el header central de resultados para recuperacion inmediata de la columna
+- UX de oportunidades guardadas mejorada (`Busqueda` y `Analisis`): preview de descripcion saneado para ignorar lineas en blanco iniciales y colapsar saltos vacios repetidos en modo compacto
+- UX de URL en oportunidades guardadas mejorada (`Busqueda` y `Analisis`): se reemplaza URL larga por CTA `Ir a la vacante` + boton de copia de URL
+- refinamiento visual de CTA de URL en oportunidades guardadas (`Busqueda` y `Analisis`): `Ver vacante` estilo boton secundario con icono externo, manteniendo boton de copia de URL
+- ajustes de micro-layout en oportunidades guardadas (`Busqueda` y `Analisis`): iconos de `expandir` y `copiar URL` unificados en una sola fila horizontal de acciones
+- ajuste de legibilidad en card seleccionada de `Analisis`: `Ver vacante` vuelve a variante secundaria no magenta y el titulo reduce intensidad de magenta para mejorar lectura
+- UX de navegacion en `Analisis`: al cambiar de vacante seleccionada, la vista hace auto-scroll al inicio del bloque de resultados para evitar quedar en la parte inferior
+- refinamiento de seleccion en `Analisis`: color de seleccion ajustado a magenta mas sobrio (`#C2185B`) con menor glow y menor intensidad en titulo
+- ajuste de enfoque visual en `Analisis`: seleccion de oportunidad migrada a acento de tema (cian) y agrupacion clara de card+resultados mediante contenedor `analysisOpportunityRowSelected`
+- refinamiento de scroll en `Analisis`: compensacion de header fijo con `scroll-margin-top` para que el titulo de vacante no quede tapado tras cambiar seleccion
+- refinamiento de legibilidad en `Analisis`: incremento de contraste del titulo activo dentro de la oportunidad seleccionada
+- ajuste de jerarquia de acciones en oportunidades guardadas (`Busqueda` y `Analisis`): `Ver mas` (expandir) a la izquierda, y `Ver vacante` + `Copiar URL` agrupados a la derecha
+- correccion de trazabilidad CV->MD: API de CV ahora expone `structured_markdown_preview` y `structured_markdown`; UI de perfil prioriza y renderiza ese contenido en vista previa/expandido
+- runtime IA ahora soporta `cv_markdown_extraction_mode` (`heuristic`/`pymupdf4llm`) configurable desde admin
+- carga de CV aplica extraccion Markdown avanzada opcional para PDF y cae a heuristica cuando la dependencia no esta disponible
+- hardening de autenticacion para Safari movil: backend acepta sesion por header `X-Session-Id` como fallback cuando no llega cookie cross-site; frontend persiste token de sesion en `sessionStorage` y lo envia automaticamente
+- vista `Vacantes` ajustada para priorizar `Carga manual` como tab principal y modo por defecto, dejando `Búsqueda` como funcionalidad secundaria en la interfaz
+- alta de perfil en `Perfiles consultados` permanece oculta por defecto y solo se despliega por accion explicita del usuario
+- interfaz general rebajada a tono neutro tipo `Administracion`; el color queda priorizado en elementos funcionales y no por pagina
+- diferenciacion visual por funcion aplicada sobre tema neutro: formularios, tarjetas de seleccion, resultados IA, riel contextual y chat usan superficies y densidades distintas sin volver a colorear por pagina
+- documento raiz `caso_de_uso.md` generado y refinado como sintesis formal del caso de uso, con enfasis en entrevista, parametrizacion operativa y Tavily como proveedor activo actual
+- caso de uso refinado con limitacion operativa de captura automatica de vacantes en portales cerrados y recomendacion vigente de carga manual como via mas confiable
+- matriz de cumplimiento del ejercicio separada a `cumplimiento_ejercicio.md` para mantener `caso_de_uso.md` centrado en el caso de uso
+- guia operativa paso a paso agregada en `guia_uso.md` y enlazada desde el escenario principal de `caso_de_uso.md`
+- documento `pantallas_funcionales.md` agregado en raiz con descripcion detallada de `Perfil`, `Vacantes` y `Analisis`, su composicion y forma de uso
+- `pantallas_funcionales.md` ampliado con `Candidatos` y con la logica del header global, explicando por que el candidato activo se mantiene como contexto transversal
+- ajuste de marca en header: `CareerIQ` ahora separa `IQ` con acento magenta sobrio para mayor diferenciacion visual
+- carga manual de vacantes ahora genera `resumen estructurado` (LLM con fallback heuristico), visible y editable en `Vacantes`, con flujo de `borrador/aprobado`
+- `resumen estructurado` en `Vacantes` ahora soporta doble modo de edicion: `Guiado` (campos) y `JSON avanzado` (objeto completo con validacion antes de guardar)
+- `Vacantes` incorpora accion `Recalcular extraccion` por oportunidad guardada, conectada a endpoint dedicado para regenerar estructura desde la descripcion actual de la vacante
+- `Vacantes` muestra toast explicito `Extracción recalculada` al finalizar recálculo de estructura por oportunidad
+- extractor de vacantes migra a esquema funcional nuevo (sin compatibilidad legacy): `resumen`, `funciones_responsabilidades`, `requisitos_obligatorios`, `requisitos_deseables`, `condiciones_trabajo` (incluye salario estructurado) y `beneficios`
+- vacantes incorpora accion `Borrar extracto` con confirmacion: limpia solo `vacancy_profile`, fuerza `vacancy_profile_status=none` y conserva vacante original (`snapshot_raw_text`, URL, estado, notas) con trazabilidad por `vacancy_profile_updated_at`
+- formulario guiado de estructura en `Vacantes` alineado al nuevo esquema y elimina campos antiguos (`bloqueadores`, `preguntas abiertas`)
+- `task_vacancy_profile_extract` queda gestionado solo por `prompt_configs` (Firestore/Admin) sin auto-migracion en codigo
+- `Administracion de prompts` agrega accion `Restaurar recomendado` para `task_vacancy_profile_extract` (precarga plantilla sugerida en el editor)
+- UX de `Vacantes` ajustada: botones rapidos de estructura (`Recalcular extraccion`, `Completar/Editar estructura`) retornan al estilo estandar de la interfaz
+- UX de `Vacantes` refinada: botones `Recalcular extraccion`, `Completar/Editar estructura` y `Aprobar` en la card de estructura usan tamano reducido para menor peso visual
+- `Análisis` ahora incorpora el `resumen estructurado de vacante` como contexto preferente para reducir ambiguedad en `Perfil-vacante`
+
+## Mejoras Identificadas (Diferidas)
+- vector `profile_summary` por persona (`type=profile_summary`) para match ejecutivo de alto nivel
+- indicador radial de match porcentual en cards de oportunidad, condicionado a implementacion de scoring numerico formal
+- `Profile diff` por vacante para evidenciar brechas del perfil del candidato frente a requisitos de la oportunidad
+- datos de contacto en panel de perfil (diferido fuera de alcance V1)
+- `ARTEFACT_EDITOR_PANEL` avanzado (toolbar de formato, exportacion PDF y vista split con insights) diferido para versiones posteriores
+- rango salarial esperado en perfil (inicio/fin) con control de rango en UI, para iteracion corta de V1
+
+## Bloqueadores
+- no hay bloqueadores funcionales de alcance V1
+- limitacion tecnica local: clientes ASGI de prueba (`TestClient`/`ASGITransport`) se bloquean en requests; se mantiene cobertura equivalente por handler/store y un test HTTP en `skip` hasta resolver harness
+- riesgo operativo local: entorno de desarrollo modificado para diagnostico (`anyio` downgraded en `.venv`) sin solucion aun para el bloqueo ASGI
+
+## Siguiente Actividad
+- definir estrategia de rollout controlado (flag/config) para no romper indexacion actual en CV ya cargados
+
+## Ajustes Post-UI Confirmados
+- `semantic_evidence` colapsable por defecto en la vista de `analysis` (implementado)
+- `top_k` de evidencia semantica configurable desde administracion con persistencia global (implementado)
+
+## Plan De Saneamiento Extraccion Vacante (Seguimiento)
+Objetivo: priorizar extraccion de contenido relevante de vacante y usar estructura solo como soporte (no como fin).
+
+### Fase 1. Contrato de extraccion y alineacion de prompt
+- estado: `en progreso`
+- alcance:
+- adoptar contrato objetivo en extractor:
+  - `summary`
+  - `role_properties.organizational_level`
+  - `role_properties.company_type`
+  - `role_properties.sector`
+  - `criteria[]` con:
+    - `criterion_id`
+    - `label`
+    - `vacancy_dimension`
+    - `category`
+    - `raw_text`
+    - `normalized_value`
+    - `metadata`
+- alinear prompt recomendado `task_vacancy_profile_extract` a ese contrato
+- criterio de aceptacion:
+- la salida no depende de llaves legacy para persistir informacion relevante
+- `company_type` y `sector` quedan en `role_properties`
+- `seniority` se modela como criterio (`category=seniority`)
+- avances recientes:
+- extractor endurecido con filtro de baja señal: descarta criterios con `label/raw_text` excesivamente genericos cuando no hay evidencia concreta
+- prompt de extraccion reforzado para exigir criterios accionables y `raw_text` con evidencia textual especifica
+- guardado manual/JSON en `Vacantes` normalizado para persistir solo el contrato nuevo (`summary`, `role_properties`, `criteria`, `confidence`, `extraction_source`)
+- `JSON avanzado` ahora se precarga con contrato nuevo normalizado, evitando reintroducir llaves legacy por defecto
+- extractor simplificado a modo `LLM-first + normalizacion minima`: se elimina la inferencia heuristica de criterios desde texto libre en fallback y se evita clasificar contenido de vacante por reglas locales cuando falla el LLM
+
+### Fase 2. Calidad de extraccion (contenido antes que taxonomia)
+- estado: `pendiente`
+- alcance:
+- reforzar prompt para extraer criterios concretos y completos (no placeholders)
+- introducir validaciones de calidad post-extraccion:
+  - rechazo/saneo de labels vacios o genericos (`"Educacion"`, `"Experiencia minima"`, etc. sin detalle)
+  - rechazo de duplicados semanticos obvios
+  - enforcement de `raw_text` con evidencia textual util
+- criterio de aceptacion:
+- para una vacante tipo directiva (ejemplo TIC), la salida contiene criterios especificos accionables y no solo encabezados genericos
+
+### Fase 3. Persistencia/UI sin mezcla de esquemas
+- estado: `pendiente`
+- alcance:
+- eliminar mezcla de esquema nuevo + llaves legacy en modo `JSON avanzado`/`manual_edit`
+- ocultar llaves vacias o no relevantes en vista compacta
+- mostrar criterio de forma legible por `vacancy_dimension` y `category`
+- criterio de aceptacion:
+- una vacante nueva guardada no reintroduce automaticamente `seniority`, `requisitos_*`, `condiciones_trabajo` legacy fuera del contrato nuevo
+
+### Fase 4. Mapper (compuerta de decision)
+- estado: `pendiente`
+- alcance:
+- evaluar si `JobCriteriaMapper` sigue aportando valor o puede reducirse/eliminarse
+- si se conserva, debe ser transformacion minima (sin clasificacion heuristica fuerte)
+- criterio de aceptacion:
+- decision documentada: `mantener_minimo` o `retirar_mapper`
+
+### Fase 5. Evaluacion criterio a criterio (semantica)
+- estado: `pendiente`
+- alcance:
+- evaluacion recursiva por criterio priorizando evidencia semantica
+- reducir dependencia de matching literal fragil
+- criterio de aceptacion:
+- menor tasa de `unknown` por variaciones de redaccion (ej. ubicaciones, seniority expresado distinto)
+
+### Fase 6. Ambiguedad y control operativo
+- estado: `pendiente`
+- alcance:
+- externalizar prompt de ambiguedad a administracion
+- parametrizar:
+  - `ambiguity_resolution_max_criteria`
+  - `ambiguity_resolution_top_k`
+  - `ambiguity_resolution_min_score`
+- evaluar retrieval semantico adicional para criterios ambiguos
+- criterio de aceptacion:
+- ambiguedad resoluble con trazabilidad configurable y sin hardcode oculto
+
+### Riesgo principal registrado
+- la salida actual puede priorizar forma/llaves sobre contenido util, degradando valor analitico aun con estructura valida
