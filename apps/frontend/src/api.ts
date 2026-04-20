@@ -880,6 +880,82 @@ export async function recomputeOpportunityVacancyProfile(
   return parseResponse<Opportunity>(response);
 }
 
+export async function recomputeOpportunityVacancyProfileStream(
+  personId: string,
+  opportunityId: string,
+  onStatus: (stage: string) => void
+): Promise<Opportunity> {
+  const response = await safeFetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/vacancy-profile/recompute/stream`,
+    {
+      method: "POST",
+      credentials: "include"
+    }
+  );
+  if (!response.ok) {
+    let messageText = `Request failed: ${response.status}`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) {
+        messageText = payload.detail;
+      }
+    } catch {
+      // Ignore parsing errors for stream setup failures.
+    }
+    throw new Error(messageText);
+  }
+  if (!response.body) {
+    throw new Error("Streaming response body is empty");
+  }
+
+  const decoder = new TextDecoder();
+  const reader = response.body.getReader();
+  let pending = "";
+  let completedOpportunity: Opportunity | null = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+    pending += decoder.decode(value, { stream: true });
+    const consumed = consumeSseBuffer(pending, (eventName, payload) => {
+      if (eventName === "tool_status") {
+        const stage = payload.stage;
+        if (typeof stage === "string" && stage.trim()) {
+          onStatus(stage.trim());
+        }
+      } else if (eventName === "message_complete") {
+        const opportunity = payload.opportunity;
+        if (opportunity && typeof opportunity === "object") {
+          completedOpportunity = opportunity as unknown as Opportunity;
+        }
+      }
+    });
+    pending = consumed.remainder;
+  }
+  if (pending.trim()) {
+    consumeSseBuffer(`${pending}\n\n`, (eventName, payload) => {
+      if (eventName === "tool_status") {
+        const stage = payload.stage;
+        if (typeof stage === "string" && stage.trim()) {
+          onStatus(stage.trim());
+        }
+      } else if (eventName === "message_complete") {
+        const opportunity = payload.opportunity;
+        if (opportunity && typeof opportunity === "object") {
+          completedOpportunity = opportunity as unknown as Opportunity;
+        }
+      }
+    });
+  }
+
+  if (!completedOpportunity) {
+    throw new Error("Vacancy profile stream ended without completion payload");
+  }
+  return completedOpportunity;
+}
+
 export async function analyzeOpportunity(
   personId: string,
   opportunityId: string

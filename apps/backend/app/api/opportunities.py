@@ -524,6 +524,85 @@ def recompute_vacancy_profile(
     return _to_response(updated)
 
 
+@router.post("/{opportunity_id}/vacancy-profile/recompute/stream")
+async def recompute_vacancy_profile_stream(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+    settings: Settings = Depends(get_settings),
+) -> StreamingResponse:
+    _require_person(person_id)
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    async def event_generator():
+        try:
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "vacancy_profile_recompute_started",
+                },
+            )
+            await asyncio.sleep(0)
+
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "vacancy_profile_extracting",
+                },
+            )
+            await asyncio.sleep(0)
+
+            structured = extract_structured_opportunity_profile(opportunity, settings)
+
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "vacancy_profile_saving",
+                },
+            )
+            await asyncio.sleep(0)
+
+            updated = update_saved_opportunity(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                status=None,
+                notes=None,
+                vacancy_profile=structured,
+                vacancy_profile_status="draft",
+            )
+            if not updated:
+                raise RuntimeError("Could not recompute vacancy profile")
+
+            yield _serialize_sse(
+                "message_complete",
+                {
+                    "opportunity": updated,
+                },
+            )
+        except Exception as exc:  # pragma: no cover - stream runtime path
+            yield _serialize_sse(
+                "error",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "detail": str(exc),
+                },
+            )
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
 @router.get("/{opportunity_id}")
 def get_opportunity(
     person_id: str,
