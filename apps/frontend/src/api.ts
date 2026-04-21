@@ -85,6 +85,12 @@ export type Opportunity = {
   vacancy_profile: Record<string, unknown>;
   vacancy_profile_status: "none" | "draft" | "approved";
   vacancy_profile_updated_at: string;
+  vacancy_blocks_artifact: Record<string, unknown>;
+  vacancy_blocks_status: "none" | "draft" | "approved" | "error";
+  vacancy_blocks_generated_at: string;
+  vacancy_dimensions_artifact: Record<string, unknown>;
+  vacancy_dimensions_status: "none" | "draft" | "approved" | "error";
+  vacancy_dimensions_generated_at: string;
   created_at: string;
   updated_at: string;
 };
@@ -852,6 +858,10 @@ export async function updateOpportunity(
     notes?: string;
     vacancy_profile?: Record<string, unknown>;
     vacancy_profile_status?: "none" | "draft" | "approved";
+    vacancy_blocks_artifact?: Record<string, unknown>;
+    vacancy_blocks_status?: "none" | "draft" | "approved" | "error";
+    vacancy_dimensions_artifact?: Record<string, unknown>;
+    vacancy_dimensions_status?: "none" | "draft" | "approved" | "error";
   }
 ): Promise<Opportunity> {
   const response = await safeFetch(

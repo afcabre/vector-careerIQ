@@ -43,6 +43,7 @@ from app.services.opportunity_ai_service import (
 from app.services.opportunity_store import (
     OPPORTUNITY_STATUSES,
     VACANCY_PROFILE_STATUSES,
+    VACANCY_V2_ARTIFACT_STATUSES,
     create_opportunity,
     find_opportunity,
     import_text_opportunity,
@@ -74,6 +75,12 @@ class OpportunityResponse(BaseModel):
     vacancy_profile: dict[str, Any]
     vacancy_profile_status: str
     vacancy_profile_updated_at: str
+    vacancy_blocks_artifact: dict[str, Any]
+    vacancy_blocks_status: str
+    vacancy_blocks_generated_at: str
+    vacancy_dimensions_artifact: dict[str, Any]
+    vacancy_dimensions_status: str
+    vacancy_dimensions_generated_at: str
     created_at: str
     updated_at: str
 
@@ -129,6 +136,10 @@ class UpdateOpportunityRequest(BaseModel):
     notes: str | None = Field(default=None)
     vacancy_profile: dict[str, Any] | None = Field(default=None)
     vacancy_profile_status: str | None = Field(default=None)
+    vacancy_blocks_artifact: dict[str, Any] | None = Field(default=None)
+    vacancy_blocks_status: str | None = Field(default=None)
+    vacancy_dimensions_artifact: dict[str, Any] | None = Field(default=None)
+    vacancy_dimensions_status: str | None = Field(default=None)
 
 
 class ActionRequest(BaseModel):
@@ -470,6 +481,22 @@ def update_opportunity(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Invalid vacancy_profile_status",
         )
+    if (
+        payload.vacancy_blocks_status is not None
+        and payload.vacancy_blocks_status not in VACANCY_V2_ARTIFACT_STATUSES
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid vacancy_blocks_status",
+        )
+    if (
+        payload.vacancy_dimensions_status is not None
+        and payload.vacancy_dimensions_status not in VACANCY_V2_ARTIFACT_STATUSES
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid vacancy_dimensions_status",
+        )
 
     item = update_saved_opportunity(
         person_id=person_id,
@@ -478,6 +505,10 @@ def update_opportunity(
         notes=payload.notes,
         vacancy_profile=payload.vacancy_profile,
         vacancy_profile_status=payload.vacancy_profile_status,
+        vacancy_blocks_artifact=payload.vacancy_blocks_artifact,
+        vacancy_blocks_status=payload.vacancy_blocks_status,
+        vacancy_dimensions_artifact=payload.vacancy_dimensions_artifact,
+        vacancy_dimensions_status=payload.vacancy_dimensions_status,
     )
     if not item:
         existing = find_opportunity(person_id, opportunity_id)

@@ -22,6 +22,13 @@ VACANCY_PROFILE_STATUSES = [
     "approved",
 ]
 
+VACANCY_V2_ARTIFACT_STATUSES = [
+    "none",
+    "draft",
+    "approved",
+    "error",
+]
+
 
 class OpportunityRecord(TypedDict):
     opportunity_id: str
@@ -39,6 +46,12 @@ class OpportunityRecord(TypedDict):
     vacancy_profile: dict[str, Any]
     vacancy_profile_status: str
     vacancy_profile_updated_at: str
+    vacancy_blocks_artifact: dict[str, Any]
+    vacancy_blocks_status: str
+    vacancy_blocks_generated_at: str
+    vacancy_dimensions_artifact: dict[str, Any]
+    vacancy_dimensions_status: str
+    vacancy_dimensions_generated_at: str
     created_at: str
     updated_at: str
 
@@ -78,6 +91,12 @@ def _normalize(payload: dict | None) -> OpportunityRecord:
         "vacancy_profile": dict(source.get("vacancy_profile", {})),
         "vacancy_profile_status": str(source.get("vacancy_profile_status", "none")),
         "vacancy_profile_updated_at": str(source.get("vacancy_profile_updated_at", "")),
+        "vacancy_blocks_artifact": dict(source.get("vacancy_blocks_artifact", {})),
+        "vacancy_blocks_status": str(source.get("vacancy_blocks_status", "none")),
+        "vacancy_blocks_generated_at": str(source.get("vacancy_blocks_generated_at", "")),
+        "vacancy_dimensions_artifact": dict(source.get("vacancy_dimensions_artifact", {})),
+        "vacancy_dimensions_status": str(source.get("vacancy_dimensions_status", "none")),
+        "vacancy_dimensions_generated_at": str(source.get("vacancy_dimensions_generated_at", "")),
         "created_at": str(source.get("created_at", "")),
         "updated_at": str(source.get("updated_at", "")),
     }
@@ -170,6 +189,12 @@ def create_opportunity(
         "vacancy_profile": {},
         "vacancy_profile_status": "none",
         "vacancy_profile_updated_at": "",
+        "vacancy_blocks_artifact": {},
+        "vacancy_blocks_status": "none",
+        "vacancy_blocks_generated_at": "",
+        "vacancy_dimensions_artifact": {},
+        "vacancy_dimensions_status": "none",
+        "vacancy_dimensions_generated_at": "",
         "created_at": now,
         "updated_at": now,
     }
@@ -261,6 +286,10 @@ def update_opportunity(
     notes: str | None,
     vacancy_profile: dict[str, Any] | None = None,
     vacancy_profile_status: str | None = None,
+    vacancy_blocks_artifact: dict[str, Any] | None = None,
+    vacancy_blocks_status: str | None = None,
+    vacancy_dimensions_artifact: dict[str, Any] | None = None,
+    vacancy_dimensions_status: str | None = None,
 ) -> OpportunityRecord | None:
     existing = find_opportunity(person_id, opportunity_id)
     if not existing:
@@ -284,6 +313,28 @@ def update_opportunity(
         existing["vacancy_profile_status"] = vacancy_profile_status
         if vacancy_profile is None:
             existing["vacancy_profile_updated_at"] = _now_iso()
+
+    if vacancy_blocks_artifact is not None:
+        existing["vacancy_blocks_artifact"] = dict(vacancy_blocks_artifact)
+        existing["vacancy_blocks_generated_at"] = _now_iso()
+
+    if vacancy_blocks_status is not None:
+        if vacancy_blocks_status not in VACANCY_V2_ARTIFACT_STATUSES:
+            return None
+        existing["vacancy_blocks_status"] = vacancy_blocks_status
+        if vacancy_blocks_artifact is None:
+            existing["vacancy_blocks_generated_at"] = _now_iso()
+
+    if vacancy_dimensions_artifact is not None:
+        existing["vacancy_dimensions_artifact"] = dict(vacancy_dimensions_artifact)
+        existing["vacancy_dimensions_generated_at"] = _now_iso()
+
+    if vacancy_dimensions_status is not None:
+        if vacancy_dimensions_status not in VACANCY_V2_ARTIFACT_STATUSES:
+            return None
+        existing["vacancy_dimensions_status"] = vacancy_dimensions_status
+        if vacancy_dimensions_artifact is None:
+            existing["vacancy_dimensions_generated_at"] = _now_iso()
 
     existing["updated_at"] = _now_iso()
     return _save(existing)
