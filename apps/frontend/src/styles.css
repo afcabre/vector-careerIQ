@@ -2417,6 +2417,95 @@ button:disabled {
   line-height: 1.15;
 }
 
+.vacancyV2Card {
+  border: 1px dashed color-mix(in srgb, var(--accent) 54%, var(--border-subtle));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-deep) 80%, var(--surface-card));
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.vacancyV2Header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vacancyV2Title {
+  margin: 0;
+}
+
+.vacancyV2Tag {
+  font-size: 0.74rem;
+}
+
+.vacancyV2Section {
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 85%, var(--accent));
+  border-radius: 10px;
+  padding: 8px;
+  display: grid;
+  gap: 8px;
+  background: color-mix(in srgb, var(--surface-card) 92%, #0f172a);
+}
+
+.vacancyV2SectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.vacancyV2SectionTitle {
+  margin: 0 0 2px;
+  font-weight: 700;
+}
+
+.vacancyV2HeaderChips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.vacancyV2StatusChip {
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.vacancyV2StatusChipApproved {
+  border-color: color-mix(in srgb, var(--success) 72%, var(--border-subtle));
+  color: color-mix(in srgb, var(--success) 80%, #dcfce7);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+
+.vacancyV2StatusChipDraft {
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--border-subtle));
+  color: color-mix(in srgb, var(--accent) 85%, #cffafe);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.vacancyV2StatusChipError {
+  border-color: color-mix(in srgb, var(--danger) 72%, var(--border-subtle));
+  color: color-mix(in srgb, var(--danger) 82%, #ffe4e6);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.vacancyV2StatusChipNone {
+  border-color: color-mix(in srgb, var(--border-subtle) 84%, var(--text-muted));
+  color: color-mix(in srgb, var(--text-muted) 88%, #cbd5e1);
+  background: color-mix(in srgb, var(--surface-card) 85%, transparent);
+}
+
+.vacancyV2JsonTextarea {
+  min-height: 180px;
+  font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+  font-size: 0.81rem;
+  line-height: 1.4;
+  opacity: 0.95;
+}
+
 
 .savedOpportunityExpandRow {
   display: flex;

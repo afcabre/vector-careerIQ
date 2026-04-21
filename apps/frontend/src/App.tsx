@@ -47,6 +47,8 @@ import {
   logout,
   prepareOpportunityStream,
   prepareOpportunity,
+  recomputeOpportunityVacancyBlocks,
+  recomputeOpportunityVacancyDimensions,
   recomputeOpportunityVacancyProfile,
   saveOpportunityFromSearch,
   searchOpportunities,
@@ -748,6 +750,32 @@ function getVacancyProfileStatusLabel(status: string): string {
     return "Borrador";
   }
   return "Sin estructurar";
+}
+
+function getVacancyV2StatusLabel(status: string): string {
+  if (status === "approved") {
+    return "Aprobado";
+  }
+  if (status === "draft") {
+    return "Borrador";
+  }
+  if (status === "error") {
+    return "Error";
+  }
+  return "Sin generar";
+}
+
+function getVacancyV2StatusClassName(status: string): string {
+  if (status === "approved") {
+    return "vacancyV2StatusChip vacancyV2StatusChipApproved";
+  }
+  if (status === "draft") {
+    return "vacancyV2StatusChip vacancyV2StatusChipDraft";
+  }
+  if (status === "error") {
+    return "vacancyV2StatusChip vacancyV2StatusChipError";
+  }
+  return "vacancyV2StatusChip vacancyV2StatusChipNone";
 }
 
 function getVacancyProfileSourceBadge(source: string): { label: string; className: string } {
@@ -1505,6 +1533,9 @@ export default function App() {
   const [savingOpportunityProfileId, setSavingOpportunityProfileId] = useState<string | null>(null);
   const [recomputingOpportunityProfileId, setRecomputingOpportunityProfileId] = useState<string | null>(null);
   const [clearingOpportunityProfileId, setClearingOpportunityProfileId] = useState<string | null>(null);
+  const [recomputingVacancyBlocksId, setRecomputingVacancyBlocksId] = useState<string | null>(null);
+  const [recomputingVacancyDimensionsId, setRecomputingVacancyDimensionsId] = useState<string | null>(null);
+  const [updatingVacancyV2StatusKey, setUpdatingVacancyV2StatusKey] = useState<string | null>(null);
   const [opportunityProfileDrafts, setOpportunityProfileDrafts] = useState<
     Record<string, VacancyStructuredProfileDraft>
   >({});
@@ -3097,6 +3128,100 @@ export default function App() {
       setErrorMessage(message);
     } finally {
       setClearingOpportunityProfileId(null);
+    }
+  }
+
+  async function handleRecomputeVacancyBlocks(item: Opportunity) {
+    if (!selectedPersonId || recomputingVacancyBlocksId) {
+      return;
+    }
+    setRecomputingVacancyBlocksId(item.opportunity_id);
+    setErrorMessage(null);
+    try {
+      await recomputeOpportunityVacancyBlocks(selectedPersonId, item.opportunity_id);
+      const items = await listOpportunities(selectedPersonId);
+      setSavedOpportunities(items);
+      if (selectedOpportunityId === item.opportunity_id) {
+        const refreshed = items.find((entry) => entry.opportunity_id === item.opportunity_id);
+        if (refreshed) {
+          setOpportunityStatus(refreshed.status);
+          setOpportunityNotes(refreshed.notes);
+        }
+      }
+      setToastMessage("Vacancy Blocks recalculado");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo recalcular Vacancy Blocks";
+      setErrorMessage(message);
+    } finally {
+      setRecomputingVacancyBlocksId(null);
+    }
+  }
+
+  async function handleRecomputeVacancyDimensions(item: Opportunity) {
+    if (!selectedPersonId || recomputingVacancyDimensionsId) {
+      return;
+    }
+    setRecomputingVacancyDimensionsId(item.opportunity_id);
+    setErrorMessage(null);
+    try {
+      await recomputeOpportunityVacancyDimensions(selectedPersonId, item.opportunity_id);
+      const items = await listOpportunities(selectedPersonId);
+      setSavedOpportunities(items);
+      if (selectedOpportunityId === item.opportunity_id) {
+        const refreshed = items.find((entry) => entry.opportunity_id === item.opportunity_id);
+        if (refreshed) {
+          setOpportunityStatus(refreshed.status);
+          setOpportunityNotes(refreshed.notes);
+        }
+      }
+      setToastMessage("Vacancy Dimensions recalculado");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo recalcular Vacancy Dimensions";
+      setErrorMessage(message);
+    } finally {
+      setRecomputingVacancyDimensionsId(null);
+    }
+  }
+
+  async function handleSetVacancyV2Status(
+    item: Opportunity,
+    artifact: "vacancy_blocks" | "vacancy_dimensions",
+    status: "none" | "draft" | "approved" | "error"
+  ) {
+    if (!selectedPersonId || updatingVacancyV2StatusKey) {
+      return;
+    }
+    const actionKey = `${artifact}:${item.opportunity_id}`;
+    setUpdatingVacancyV2StatusKey(actionKey);
+    setErrorMessage(null);
+    try {
+      if (artifact === "vacancy_blocks") {
+        await updateOpportunity(selectedPersonId, item.opportunity_id, {
+          vacancy_blocks_status: status,
+        });
+      } else {
+        await updateOpportunity(selectedPersonId, item.opportunity_id, {
+          vacancy_dimensions_status: status,
+        });
+      }
+      const items = await listOpportunities(selectedPersonId);
+      setSavedOpportunities(items);
+      if (selectedOpportunityId === item.opportunity_id) {
+        const refreshed = items.find((entry) => entry.opportunity_id === item.opportunity_id);
+        if (refreshed) {
+          setOpportunityStatus(refreshed.status);
+          setOpportunityNotes(refreshed.notes);
+        }
+      }
+      setToastMessage("Estado Vacancy V2 actualizado");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo actualizar estado de Vacancy V2";
+      setErrorMessage(message);
+    } finally {
+      setUpdatingVacancyV2StatusKey(null);
     }
   }
 
@@ -5575,6 +5700,23 @@ export default function App() {
               );
               const canClearProfile =
                 item.vacancy_profile_status !== "none" || hasStructuredContent;
+              const hasVacancyBlocksArtifact = Object.keys(item.vacancy_blocks_artifact ?? {}).length > 0;
+              const hasVacancyDimensionsArtifact =
+                Object.keys(item.vacancy_dimensions_artifact ?? {}).length > 0;
+              const vacancyBlocksStatusLabel = getVacancyV2StatusLabel(item.vacancy_blocks_status);
+              const vacancyDimensionsStatusLabel = getVacancyV2StatusLabel(
+                item.vacancy_dimensions_status
+              );
+              const vacancyBlocksGeneratedAt = item.vacancy_blocks_generated_at
+                ? formatAiRunTimestamp(item.vacancy_blocks_generated_at)
+                : "Sin generar";
+              const vacancyDimensionsGeneratedAt = item.vacancy_dimensions_generated_at
+                ? formatAiRunTimestamp(item.vacancy_dimensions_generated_at)
+                : "Sin generar";
+              const isUpdatingVacancyBlocksStatus =
+                updatingVacancyV2StatusKey === `vacancy_blocks:${item.opportunity_id}`;
+              const isUpdatingVacancyDimensionsStatus =
+                updatingVacancyV2StatusKey === `vacancy_dimensions:${item.opportunity_id}`;
               return (
                 <article
                   className="chatBubble chatBubbleUser savedOpportunityCard"
@@ -5983,6 +6125,134 @@ export default function App() {
                         </div>
                       </>
                     )}
+                  </article>
+                  <article className="vacancyV2Card">
+                    <div className="vacancyV2Header">
+                      <p className="chatRole vacancyV2Title">Vacancy V2 (experimental)</p>
+                      <span className="metaChip vacancyV2Tag">No afecta el flujo legacy</span>
+                    </div>
+
+                    <section className="vacancyV2Section">
+                      <div className="vacancyV2SectionHeader">
+                        <div>
+                          <p className="metaText vacancyV2SectionTitle">Step 2 · Vacancy Blocks</p>
+                          <p className="metaText">Generado: {vacancyBlocksGeneratedAt}</p>
+                        </div>
+                        <div className="metaChips vacancyV2HeaderChips">
+                          <span
+                            className={`metaChip ${getVacancyV2StatusClassName(item.vacancy_blocks_status)}`}
+                          >
+                            {vacancyBlocksStatusLabel}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="cardActions">
+                        <button
+                          className="vacancyProfileQuickActionButton"
+                          disabled={recomputingVacancyBlocksId === item.opportunity_id}
+                          onClick={() => void handleRecomputeVacancyBlocks(item)}
+                          type="button"
+                        >
+                          {recomputingVacancyBlocksId === item.opportunity_id
+                            ? "Recalculando..."
+                            : "Recalcular Step 2"}
+                        </button>
+                        {hasVacancyBlocksArtifact ? (
+                          <button
+                            className="vacancyProfileQuickActionButton"
+                            disabled={isUpdatingVacancyBlocksStatus}
+                            onClick={() =>
+                              void handleSetVacancyV2Status(
+                                item,
+                                "vacancy_blocks",
+                                item.vacancy_blocks_status === "approved" ? "draft" : "approved"
+                              )}
+                            type="button"
+                          >
+                            {isUpdatingVacancyBlocksStatus
+                              ? "Actualizando..."
+                              : item.vacancy_blocks_status === "approved"
+                                ? "Marcar borrador"
+                                : "Aprobar Step 2"}
+                          </button>
+                        ) : null}
+                      </div>
+                      {hasVacancyBlocksArtifact ? (
+                        <label className="field">
+                          JSON Step 2
+                          <textarea
+                            className="vacancyV2JsonTextarea"
+                            readOnly
+                            rows={10}
+                            value={safePrettyJson(item.vacancy_blocks_artifact)}
+                          />
+                        </label>
+                      ) : (
+                        <p className="metaText">Sin artefacto Step 2.</p>
+                      )}
+                    </section>
+
+                    <section className="vacancyV2Section">
+                      <div className="vacancyV2SectionHeader">
+                        <div>
+                          <p className="metaText vacancyV2SectionTitle">Step 3 · Vacancy Dimensions</p>
+                          <p className="metaText">Generado: {vacancyDimensionsGeneratedAt}</p>
+                        </div>
+                        <div className="metaChips vacancyV2HeaderChips">
+                          <span
+                            className={`metaChip ${getVacancyV2StatusClassName(item.vacancy_dimensions_status)}`}
+                          >
+                            {vacancyDimensionsStatusLabel}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="cardActions">
+                        <button
+                          className="vacancyProfileQuickActionButton"
+                          disabled={recomputingVacancyDimensionsId === item.opportunity_id}
+                          onClick={() => void handleRecomputeVacancyDimensions(item)}
+                          type="button"
+                        >
+                          {recomputingVacancyDimensionsId === item.opportunity_id
+                            ? "Recalculando..."
+                            : "Recalcular Step 3"}
+                        </button>
+                        {hasVacancyDimensionsArtifact ? (
+                          <button
+                            className="vacancyProfileQuickActionButton"
+                            disabled={isUpdatingVacancyDimensionsStatus}
+                            onClick={() =>
+                              void handleSetVacancyV2Status(
+                                item,
+                                "vacancy_dimensions",
+                                item.vacancy_dimensions_status === "approved" ? "draft" : "approved"
+                              )}
+                            type="button"
+                          >
+                            {isUpdatingVacancyDimensionsStatus
+                              ? "Actualizando..."
+                              : item.vacancy_dimensions_status === "approved"
+                                ? "Marcar borrador"
+                                : "Aprobar Step 3"}
+                          </button>
+                        ) : null}
+                      </div>
+                      {hasVacancyDimensionsArtifact ? (
+                        <label className="field">
+                          JSON Step 3
+                          <textarea
+                            className="vacancyV2JsonTextarea"
+                            readOnly
+                            rows={12}
+                            value={safePrettyJson(item.vacancy_dimensions_artifact)}
+                          />
+                        </label>
+                      ) : (
+                        <p className="metaText">
+                          Sin artefacto Step 3. Requiere Step 2 valido para generar contenido.
+                        </p>
+                      )}
+                    </section>
                   </article>
                   <div className="savedOpportunityLinkRow">
                     <div className="savedOpportunityLinkExpandSlot">

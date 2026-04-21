@@ -166,6 +166,10 @@ class VacancyDimensionsServiceTests(unittest.TestCase):
             complete_prompt_mock.call_args.kwargs["flow_key"],
             FLOW_TASK_VACANCY_BLOCKS_EXTRACT,
         )
+        fallback_prompt = str(prompt_builder_mock.call_args.kwargs.get("fallback", ""))
+        self.assertIn("salary/compensation", fallback_prompt)
+        self.assertIn("work_conditions.salary", fallback_prompt)
+        self.assertIn("benefits", fallback_prompt)
 
     def test_extract_invalid_json_raises_controlled_error(self) -> None:
         with patch(

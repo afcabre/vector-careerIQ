@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `micro-slice runtime config completado: schema interno y defaults de vacancy_v2 conectados a Step 2/3 sin exposicion en admin`
+- checkpoint_actual: `slice 6 frontend + micro-ajuste prompts salary mapping completados y listos como baseline del experimento v2`
 - repo_status: `flujo V1 operativo con analisis, postulacion, chat, CV semantico, admin de prompts y extraccion estructurada de vacantes en forma legacy estable; propuesta v2 desacoplada en branch experimental`
 - ultima_actualizacion: `2026-04-21`
 
@@ -42,6 +42,11 @@
 - Slice runtime config interno implementado: nuevo modulo `vacancy_v2_runtime_config` con schema y defaults para Step 2/3, override opcional por `vacancy_v2_runtime_config_json` y validacion de rango para `llm_temperature`
 - Step 2 y Step 3 ahora leen `llm_temperature` desde el schema interno de `vacancy_v2` (sin cambios en admin runtime)
 - Slice runtime config validado tecnicamente en `apps/backend/.venv`: `python -m unittest tests.test_vacancy_v2_runtime_config tests.test_vacancy_blocks_service tests.test_vacancy_dimensions_service` en verde (`16 tests`)
+- Slice 6 frontend implementado en modo experimental: panel `Vacancy V2` por oportunidad con recomputo independiente de Step 2/Step 3, visualizacion de `status`/`generated_at`, inspeccion JSON read-only y cambio manual de estado `draft/approved`
+- Slice 6 validado tecnicamente en frontend: `npm run build` en verde
+- micro-ajuste de calidad aplicado en Step 2/Step 3: toda señal de salario/compensacion se fuerza por prompt a `work_conditions` (no `benefits`)
+- ajuste aplicado en tres capas: `system_prompt` de servicios, fallback prompts de servicios y templates default en `prompt_config_store`
+- validacion tecnica del ajuste salary mapping: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_blocks_service tests.test_vacancy_dimensions_service` en verde (`12 tests`)
 - decision de rediseño registrada: `v2` arranca sin `JobCriteriaMapper`
 - decision de rediseño registrada: Paso 2 persiste como `vacancy_blocks` con claves fijas, `warnings`, `coverage_notes` y texto limpio por bloque
 - decision de rediseño registrada: Paso 2 incluye `contract_version` explicito en la raiz del artefacto
@@ -84,10 +89,11 @@
 - `apps/backend/tests/test_vacancy_structure_contract_v2.py`: cobertura unitaria del contrato v2
 
 ## Bloqueadores
-- falta consolidar commit limpio del baseline restaurado
+- falta ejecutar consistency gate de calidad sobre vacantes reales para cerrar desviaciones de Step 2/Step 3
 - falta cerrar si `benefits` requerira luego una normalizacion mas fuerte
 - el experimento de nueva estructura de vacante no debe reintroducirse sobre este baseline ni conectarse al extractor estable antes de acuerdo
 
 ## Siguiente Actividad
-- abrir Slice 6 con panel experimental frontend para inspeccion y aprobacion de `vacancy_blocks`/`vacancy_dimensions`
+- ejecutar consistency gate de vacantes v2 (10-20 casos reales) y medir traspaso salary Step 2 -> Step 3
+- abrir micro-slice de hardening adicional solo si consistency gate falla umbral esperado
 - mantener analisis legacy sin integracion v2 hasta validar calidad con datos reales

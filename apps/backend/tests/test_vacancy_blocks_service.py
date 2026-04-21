@@ -138,6 +138,10 @@ class VacancyBlocksServiceTests(unittest.TestCase):
             complete_prompt_mock.call_args.kwargs["flow_key"],
             FLOW_TASK_VACANCY_PROFILE_EXTRACT,
         )
+        fallback_prompt = str(prompt_builder_mock.call_args.kwargs.get("fallback", ""))
+        self.assertIn("Salary/compensation", fallback_prompt)
+        self.assertIn("work_conditions", fallback_prompt)
+        self.assertIn("never in benefits", fallback_prompt)
 
     def test_extract_invalid_json_raises_controlled_error(self) -> None:
         opportunity = _opportunity(raw_text="Texto de vacante")

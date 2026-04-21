@@ -92,13 +92,16 @@ def extract_vacancy_blocks(
 
     system_prompt = (
         "You are a vacancy Step 2 classifier. "
-        "Return valid JSON only, preserving the raw meaning of fragments."
+        "Return valid JSON only, preserving the raw meaning of fragments. "
+        "Compensation signals (salary, pay, remuneration, compensation range) "
+        "must be classified in work_conditions and never in benefits."
     )
     fallback_user_prompt = (
         "Classify this vacancy into vacancy_blocks.v1 and respond with valid JSON only. "
         "Root keys allowed: vacancy_blocks, warnings, coverage_notes. "
         "vacancy_blocks keys allowed: work_conditions, responsibilities, "
         "required_requirements, desirable_requirements, benefits, unclassified. "
+        "Salary/compensation must always be in work_conditions and never in benefits. "
         "Rules: classify and clean text; do not summarize; do not atomize; do not invent keys. "
         f"Vacancy title: {opportunity.get('title', '')}. "
         f"Company: {opportunity.get('company', '')}. "

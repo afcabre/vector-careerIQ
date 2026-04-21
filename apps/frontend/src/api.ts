@@ -890,6 +890,34 @@ export async function recomputeOpportunityVacancyProfile(
   return parseResponse<Opportunity>(response);
 }
 
+export async function recomputeOpportunityVacancyBlocks(
+  personId: string,
+  opportunityId: string
+): Promise<Opportunity> {
+  const response = await safeFetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/vacancy-blocks/recompute`,
+    {
+      method: "POST",
+      credentials: "include"
+    }
+  );
+  return parseResponse<Opportunity>(response);
+}
+
+export async function recomputeOpportunityVacancyDimensions(
+  personId: string,
+  opportunityId: string
+): Promise<Opportunity> {
+  const response = await safeFetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/vacancy-dimensions/recompute`,
+    {
+      method: "POST",
+      credentials: "include"
+    }
+  );
+  return parseResponse<Opportunity>(response);
+}
+
 export async function recomputeOpportunityVacancyProfileStream(
   personId: string,
   opportunityId: string,
