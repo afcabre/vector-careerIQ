@@ -19,6 +19,7 @@ FLOW_TASK_ANALYZE_CULTURAL_FIT = "task_analyze_cultural_fit"
 FLOW_TASK_INTERVIEW_RESEARCH_PLAN = "task_interview_research_plan"
 FLOW_TASK_INTERVIEW_BRIEF = "task_interview_brief"
 FLOW_TASK_VACANCY_PROFILE_EXTRACT = "task_vacancy_profile_extract"
+FLOW_TASK_VACANCY_BLOCKS_EXTRACT = "task_vacancy_blocks_extract"
 FLOW_TASK_PREPARE_GUIDANCE = "task_prepare_guidance"
 FLOW_TASK_PREPARE_COVER_LETTER = "task_prepare_cover_letter"
 FLOW_TASK_PREPARE_EXPERIENCE_SUMMARY = "task_prepare_experience_summary"
@@ -110,6 +111,8 @@ def _required_placeholders(flow_key: str) -> set[str]:
         return {"person_context", "opportunity_context"}
     if flow_key == FLOW_TASK_VACANCY_PROFILE_EXTRACT:
         return {"opportunity_title", "opportunity_raw_text"}
+    if flow_key == FLOW_TASK_VACANCY_BLOCKS_EXTRACT:
+        return {"opportunity_raw_text"}
     if flow_key == FLOW_TASK_PREPARE_GUIDANCE:
         return {"person_context", "opportunity_context"}
     if flow_key == FLOW_TASK_PREPARE_COVER_LETTER:
@@ -356,6 +359,31 @@ def _default_configs() -> dict[str, PromptConfigRecord]:
                 "confidence, extraction_source. "
                 "Reglas: no inventes datos ausentes; si no hay evidencia deja listas vacias; "
                 "en condiciones_trabajo usa no_especificado si aplica. "
+                "Vacante titulo: {opportunity_title}. "
+                "Empresa: {opportunity_company}. "
+                "Ubicacion: {opportunity_location}. "
+                "URL: {opportunity_url}. "
+                "Descripcion: {opportunity_raw_text}"
+            ),
+            "target_sources": [],
+            "is_active": True,
+            "updated_by": "system",
+            "created_at": now,
+            "updated_at": now,
+        },
+        {
+            "config_id": f"pc-{FLOW_TASK_VACANCY_BLOCKS_EXTRACT}",
+            "scope": "global",
+            "flow_key": FLOW_TASK_VACANCY_BLOCKS_EXTRACT,
+            "template_text": (
+                "Clasifica la vacante en el contrato vacancy_blocks.v1 y responde SOLO JSON valido. "
+                "No resumes. No atomices. No inventes claves nuevas. "
+                "Usa solo estas claves raiz: vacancy_blocks, warnings, coverage_notes. "
+                "Dentro de vacancy_blocks usa exactamente: work_conditions, responsibilities, "
+                "required_requirements, desirable_requirements, benefits, unclassified. "
+                "Cada clave debe ser lista de strings limpios sin duplicados. "
+                "Si un fragmento es ambiguo o inseparable, asigna una categoria principal y explica en warnings. "
+                "Si falta cobertura relevante, reporta en coverage_notes. "
                 "Vacante titulo: {opportunity_title}. "
                 "Empresa: {opportunity_company}. "
                 "Ubicacion: {opportunity_location}. "
