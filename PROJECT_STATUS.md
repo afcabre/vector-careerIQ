@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `cobertura de endpoints/sse v2 ampliada y alineacion Notion corregida para explicitar Step 3 LLM-first sin heuristicas`
+- checkpoint_actual: `runner CLI de gate v2 agregado para relanzar validacion multi-perfil o por person_id tras nueva carga de vacantes`
 - repo_status: `flujo V1 operativo con analisis, postulacion, chat, CV semantico, admin de prompts y extraccion estructurada de vacantes en forma legacy estable; propuesta v2 desacoplada en branch experimental`
 - ultima_actualizacion: `2026-04-21`
 
@@ -69,7 +69,13 @@
 - panel frontend del gate extendido con accion `Ir a vacante` por cada `issue_sample`, con foco y scroll a la oportunidad en la lista para acelerar depuracion
 - validacion tecnica frontend de navegacion desde `issue_samples` en verde: `npm run build` en `apps/frontend`
 - alineacion de seguimiento en Notion aplicada: task de Step 3 renombrado a `Implement vacancy_dimensions Step 3 extraction service (LLM-first)` y marcado `Done` para evitar lectura de heuristica
-- gate marcado en Notion como `To do` (pausado por decision de producto) y task de cobertura marcado `Doing`
+- task de cobertura marcado `Done` en Notion con evidencia de pruebas (`29 tests` en verde)
+- gate reactivado en Notion (`Doing`) y corrida real ejecutada en Firestore para `person_id=p-3fa73182`
+- resultado real del gate con umbrales por defecto operativos: `total_opportunities=18`, `opportunities_with_step2=5`, `opportunities_with_step3=4`, `salary_transfer_eligible=3`, `salary_transfer_ok=1`, `salary_transfer_missing=2`, `salary_transfer_rate=0.3333`, `salary_signal_in_step2_benefits_rate=0.0`, `gate_passed=false`
+- `failed_checks` actual: `salary_transfer_rate_below_threshold`
+- `issue_samples` actuales de salario faltante en Step 3: `o-bd4de0f24c`, `o-e2b0ad6661`
+- herramienta operativa agregada: script `apps/backend/scripts/vacancy_v2_gate_report.py` para ejecutar gate por `person_id` o en todos los perfiles desde CLI
+- documentacion del runner CLI agregada en `README.md` y `guia_uso.md`
 - decision de rediseño registrada: `v2` arranca sin `JobCriteriaMapper`
 - decision de rediseño registrada: Paso 2 persiste como `vacancy_blocks` con claves fijas, `warnings`, `coverage_notes` y texto limpio por bloque
 - decision de rediseño registrada: Paso 2 incluye `contract_version` explicito en la raiz del artefacto
@@ -112,11 +118,12 @@
 - `apps/backend/tests/test_vacancy_structure_contract_v2.py`: cobertura unitaria del contrato v2
 
 ## Bloqueadores
-- integracion de Step 3 en analisis permanece bloqueada por criterio de calidad hasta retomar corrida de gate en muestras reales
+- integracion de Step 3 en analisis permanece bloqueada por criterio de calidad: gate real activo en `FAIL` por `salary_transfer_rate` bajo umbral (`0.3333 < 0.8`)
+- muestra salarial actual considerada insuficiente para cerrar hardening; se requiere cargar mas vacantes con salario para nueva validacion
 - falta cerrar si `benefits` requerira luego una normalizacion mas fuerte
 - el experimento de nueva estructura de vacante no debe reintroducirse sobre este baseline ni conectarse al extractor estable antes de acuerdo
 
 ## Siguiente Actividad
-- cerrar task `Add contract, endpoint, SSE, and regression coverage` con pruebas adicionales de regresion legacy y persistencia paralela
-- mantener `gate` en pausa hasta instruccion explicita del usuario
+- esperar carga adicional de vacantes con salario en otro perfil para ampliar muestra real
+- relanzar gate real con `scripts/vacancy_v2_gate_report.py` y, solo si persiste falla estructural, retomar micro-slice de hardening salary Step 2 -> Step 3
 - mantener analisis legacy sin integracion v2 hasta habilitar nuevamente validacion de calidad de Step 2/Step 3

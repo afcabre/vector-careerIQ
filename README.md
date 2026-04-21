@@ -248,6 +248,22 @@ curl -s "$API/persons/$PERSON_ID/opportunities/vacancy-v2/consistency?sample_lim
 Ejemplo de alerta:
 - si `salary_transfer_rate = 0.0` con `salary_transfer_missing > 0`, hay brecha real de mapeo Step 2 -> Step 3 y corresponde abrir micro-slice de hardening antes de integrar Step 3 al analisis.
 
+### 5) Runner CLI (multi-perfil)
+Desde `apps/backend` puedes correr un reporte consolidado sin invocar la API endpoint por endpoint:
+```bash
+PERSISTENCE_BACKEND=firestore .venv/bin/python scripts/vacancy_v2_gate_report.py --all-persons --sample-limit 20
+```
+
+Para un perfil puntual:
+```bash
+PERSISTENCE_BACKEND=firestore .venv/bin/python scripts/vacancy_v2_gate_report.py --person-id p-3fa73182 --sample-limit 20
+```
+
+Si quieres usarlo como chequeo de salida no-cero cuando falle el gate:
+```bash
+PERSISTENCE_BACKEND=firestore .venv/bin/python scripts/vacancy_v2_gate_report.py --all-persons --fail-on-gate
+```
+
 Reglas de contexto OpenAI (resumen V1):
 - `chat/chat-stream`: `1 system + hasta 12` mensajes de historial reciente (max `13`); incluye contexto CV semantico (`top_k=24`) y limites de texto para contexto (`7000` chars) con fallback preview (`1600` chars).
 - `analyze` (profile/cultural y streams): `2` mensajes fijos (`system + user`) por accion; no usa historial de chat.

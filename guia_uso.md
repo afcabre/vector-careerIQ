@@ -153,3 +153,14 @@ curl -s "$API/persons/$PERSON_ID/opportunities/vacancy-v2/consistency?sample_lim
 - `issue_samples`
 
 Si `salary_transfer_rate` cae a `0.0` y `salary_transfer_missing` es mayor a `0`, considera el gate en falla para salario y abre hardening antes de cerrar integracion de `v2`.
+
+Opcional (runner CLI en backend):
+```bash
+cd apps/backend
+PERSISTENCE_BACKEND=firestore .venv/bin/python scripts/vacancy_v2_gate_report.py --all-persons --sample-limit 20
+```
+
+Para un perfil puntual:
+```bash
+PERSISTENCE_BACKEND=firestore .venv/bin/python scripts/vacancy_v2_gate_report.py --person-id p-3fa73182 --sample-limit 20
+```
