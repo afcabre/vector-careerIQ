@@ -175,6 +175,31 @@ class VacancyDimensionsServiceTests(unittest.TestCase):
             with self.assertRaises(VacancyDimensionsExtractionError):
                 extract_vacancy_dimensions(_opportunity(), _vacancy_blocks(), settings=object())
 
+    def test_extract_uses_runtime_temperature_from_internal_vacancy_v2_schema(self) -> None:
+        llm_response = (
+            "{"
+            "\"vacancy_dimensions\":{"
+            "\"work_conditions\":{},"
+            "\"responsibilities\":[{\"task\":\"Liderar roadmap\",\"category\":\"\",\"semantic_queries\":[],\"raw_text\":\"Liderar roadmap\"}],"
+            "\"required_competencies\":[],"
+            "\"desirable_competencies\":[],"
+            "\"benefits\":[]"
+            "}"
+            "}"
+        )
+
+        with patch(
+            "app.services.vacancy_dimensions_service.get_vacancy_v2_runtime_config",
+            return_value={"step2": {"llm_temperature": 0.1}, "step3": {"llm_temperature": 0.44}},
+        ):
+            with patch(
+                "app.services.vacancy_dimensions_service.complete_prompt",
+                return_value=llm_response,
+            ) as complete_prompt_mock:
+                extract_vacancy_dimensions(_opportunity(), _vacancy_blocks(), settings=object())
+
+        self.assertEqual(complete_prompt_mock.call_args.kwargs["temperature"], 0.44)
+
 
 if __name__ == "__main__":
     unittest.main()

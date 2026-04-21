@@ -17,6 +17,7 @@ from app.services.vacancy_blocks_contract import (
     empty_vacancy_blocks_contract,
     normalize_vacancy_blocks_contract,
 )
+from app.services.vacancy_v2_runtime_config import get_vacancy_v2_runtime_config
 
 
 class VacancyBlocksExtractionError(RuntimeError):
@@ -117,11 +118,14 @@ def extract_vacancy_blocks(
         fallback=fallback_user_prompt,
     )
 
+    runtime_config = get_vacancy_v2_runtime_config(settings)
+    llm_temperature = float(runtime_config["step2"]["llm_temperature"])
+
     response_text = complete_prompt(
         system_prompt,
         user_prompt,
         settings,
-        temperature=0.1,
+        temperature=llm_temperature,
         person_id=str(opportunity.get("person_id", "")).strip(),
         opportunity_id=vacancy_id,
         flow_key=FLOW_TASK_VACANCY_BLOCKS_EXTRACT,

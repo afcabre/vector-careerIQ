@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     adzuna_app_id: str = ""
     adzuna_app_key: str = ""
     remotive_api_key: str = ""
+    vacancy_v2_runtime_config_json: str = ""
 
     model_config = SettingsConfigDict(env_file=(".env", ".env.local"), env_file_encoding="utf-8")
 

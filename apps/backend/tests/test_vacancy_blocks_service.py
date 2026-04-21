@@ -148,6 +148,26 @@ class VacancyBlocksServiceTests(unittest.TestCase):
             with self.assertRaises(VacancyBlocksExtractionError):
                 extract_vacancy_blocks(opportunity, settings=object())  # type: ignore[arg-type]
 
+    def test_extract_uses_runtime_temperature_from_internal_vacancy_v2_schema(self) -> None:
+        opportunity = _opportunity(raw_text="Texto de vacante")
+        response_payload = (
+            "{\"vacancy_blocks\":{\"work_conditions\":[\"Hibrido\"],\"responsibilities\":[],"
+            "\"required_requirements\":[],\"desirable_requirements\":[],\"benefits\":[],\"unclassified\":[]},"
+            "\"warnings\":[],\"coverage_notes\":[]}"
+        )
+
+        with patch(
+            "app.services.vacancy_blocks_service.get_vacancy_v2_runtime_config",
+            return_value={"step2": {"llm_temperature": 0.33}, "step3": {"llm_temperature": 0.1}},
+        ):
+            with patch(
+                "app.services.vacancy_blocks_service.complete_prompt",
+                return_value=response_payload,
+            ) as complete_prompt_mock:
+                extract_vacancy_blocks(opportunity, settings=object())  # type: ignore[arg-type]
+
+        self.assertEqual(complete_prompt_mock.call_args.kwargs["temperature"], 0.33)
+
 
 if __name__ == "__main__":
     unittest.main()
