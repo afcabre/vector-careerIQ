@@ -20,6 +20,7 @@ FLOW_TASK_INTERVIEW_RESEARCH_PLAN = "task_interview_research_plan"
 FLOW_TASK_INTERVIEW_BRIEF = "task_interview_brief"
 FLOW_TASK_VACANCY_PROFILE_EXTRACT = "task_vacancy_profile_extract"
 FLOW_TASK_VACANCY_BLOCKS_EXTRACT = "task_vacancy_blocks_extract"
+FLOW_TASK_VACANCY_DIMENSIONS_EXTRACT = "task_vacancy_dimensions_extract"
 FLOW_TASK_PREPARE_GUIDANCE = "task_prepare_guidance"
 FLOW_TASK_PREPARE_COVER_LETTER = "task_prepare_cover_letter"
 FLOW_TASK_PREPARE_EXPERIENCE_SUMMARY = "task_prepare_experience_summary"
@@ -113,6 +114,8 @@ def _required_placeholders(flow_key: str) -> set[str]:
         return {"opportunity_title", "opportunity_raw_text"}
     if flow_key == FLOW_TASK_VACANCY_BLOCKS_EXTRACT:
         return {"opportunity_raw_text"}
+    if flow_key == FLOW_TASK_VACANCY_DIMENSIONS_EXTRACT:
+        return {"vacancy_blocks_json"}
     if flow_key == FLOW_TASK_PREPARE_GUIDANCE:
         return {"person_context", "opportunity_context"}
     if flow_key == FLOW_TASK_PREPARE_COVER_LETTER:
@@ -389,6 +392,34 @@ def _default_configs() -> dict[str, PromptConfigRecord]:
                 "Ubicacion: {opportunity_location}. "
                 "URL: {opportunity_url}. "
                 "Descripcion: {opportunity_raw_text}"
+            ),
+            "target_sources": [],
+            "is_active": True,
+            "updated_by": "system",
+            "created_at": now,
+            "updated_at": now,
+        },
+        {
+            "config_id": f"pc-{FLOW_TASK_VACANCY_DIMENSIONS_EXTRACT}",
+            "scope": "global",
+            "flow_key": FLOW_TASK_VACANCY_DIMENSIONS_EXTRACT,
+            "template_text": (
+                "Transforma vacancy_blocks.v1 en vacancy_dimensions.v1 y responde SOLO JSON valido. "
+                "No inventes claves nuevas y no mezcles contracts. "
+                "Usa estas claves raiz: vacancy_dimensions. "
+                "Dentro de vacancy_dimensions usa exactamente: work_conditions, responsibilities, "
+                "required_competencies, desirable_competencies, benefits. "
+                "work_conditions debe mantener siempre estas subclaves: salary, modality, location, "
+                "contract_type, schedule, availability, travel, legal_requirements, relocation, "
+                "mobility_requirements. "
+                "Cada item atomico debe incluir solo: id, campo principal (task/requirement/benefit), "
+                "category, semantic_queries, raw_text. "
+                "Aplica defaults del contrato cuando falte informacion. "
+                "Vacante titulo: {opportunity_title}. "
+                "Empresa: {opportunity_company}. "
+                "Ubicacion: {opportunity_location}. "
+                "URL: {opportunity_url}. "
+                "Entrada vacancy_blocks.v1: {vacancy_blocks_json}"
             ),
             "target_sources": [],
             "is_active": True,
