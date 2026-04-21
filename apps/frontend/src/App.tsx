@@ -1560,6 +1560,10 @@ export default function App() {
   const [savedOpportunities, setSavedOpportunities] = useState<Opportunity[]>([]);
   const [vacancyV2GateReport, setVacancyV2GateReport] = useState<VacancyV2ConsistencyReport | null>(null);
   const [isLoadingVacancyV2Gate, setIsLoadingVacancyV2Gate] = useState(false);
+  const [vacancyV2GateSampleLimitInput, setVacancyV2GateSampleLimitInput] = useState("20");
+  const [vacancyV2GateMinTransferRateInput, setVacancyV2GateMinTransferRateInput] = useState("0.8");
+  const [vacancyV2GateMaxBenefitsRateInput, setVacancyV2GateMaxBenefitsRateInput] = useState("0.05");
+  const [vacancyV2GateMinEligibleInput, setVacancyV2GateMinEligibleInput] = useState("1");
   const [editingOpportunityProfileId, setEditingOpportunityProfileId] = useState<string | null>(
     null
   );
@@ -3224,14 +3228,34 @@ export default function App() {
     if (!selectedPersonId || isLoadingVacancyV2Gate) {
       return;
     }
+    const sampleLimit = Number.parseInt(vacancyV2GateSampleLimitInput.trim(), 10);
+    const minTransferRate = Number.parseFloat(vacancyV2GateMinTransferRateInput.trim());
+    const maxBenefitsRate = Number.parseFloat(vacancyV2GateMaxBenefitsRateInput.trim());
+    const minEligible = Number.parseInt(vacancyV2GateMinEligibleInput.trim(), 10);
+    if (!Number.isFinite(sampleLimit) || sampleLimit < 1 || sampleLimit > 100) {
+      setErrorMessage("sample_limit debe estar entre 1 y 100.");
+      return;
+    }
+    if (!Number.isFinite(minTransferRate) || minTransferRate < 0 || minTransferRate > 1) {
+      setErrorMessage("min_salary_transfer_rate debe estar entre 0 y 1.");
+      return;
+    }
+    if (!Number.isFinite(maxBenefitsRate) || maxBenefitsRate < 0 || maxBenefitsRate > 1) {
+      setErrorMessage("max_salary_signal_in_step2_benefits_rate debe estar entre 0 y 1.");
+      return;
+    }
+    if (!Number.isFinite(minEligible) || minEligible < 1 || minEligible > 100) {
+      setErrorMessage("min_salary_transfer_eligible debe estar entre 1 y 100.");
+      return;
+    }
     setIsLoadingVacancyV2Gate(true);
     setErrorMessage(null);
     try {
       const report = await getVacancyV2ConsistencyReport(selectedPersonId, {
-        sample_limit: 20,
-        min_salary_transfer_rate: 0.8,
-        max_salary_signal_in_step2_benefits_rate: 0.05,
-        min_salary_transfer_eligible: 1,
+        sample_limit: sampleLimit,
+        min_salary_transfer_rate: minTransferRate,
+        max_salary_signal_in_step2_benefits_rate: maxBenefitsRate,
+        min_salary_transfer_eligible: minEligible,
       });
       setVacancyV2GateReport(report);
       setToastMessage("Gate Vacancy V2 actualizado");
@@ -5742,6 +5766,36 @@ export default function App() {
             </div>
           </div>
           <div className="cardActions vacancyV2GateActions">
+            <div className="vacancyV2GateInputs">
+              <label className="field vacancyV2GateInputField">
+                sample_limit
+                <input
+                  onChange={(event) => setVacancyV2GateSampleLimitInput(event.target.value)}
+                  value={vacancyV2GateSampleLimitInput}
+                />
+              </label>
+              <label className="field vacancyV2GateInputField">
+                min_transfer_rate
+                <input
+                  onChange={(event) => setVacancyV2GateMinTransferRateInput(event.target.value)}
+                  value={vacancyV2GateMinTransferRateInput}
+                />
+              </label>
+              <label className="field vacancyV2GateInputField">
+                max_benefits_rate
+                <input
+                  onChange={(event) => setVacancyV2GateMaxBenefitsRateInput(event.target.value)}
+                  value={vacancyV2GateMaxBenefitsRateInput}
+                />
+              </label>
+              <label className="field vacancyV2GateInputField">
+                min_eligible
+                <input
+                  onChange={(event) => setVacancyV2GateMinEligibleInput(event.target.value)}
+                  value={vacancyV2GateMinEligibleInput}
+                />
+              </label>
+            </div>
             <button
               className="vacancyProfileQuickActionButton"
               disabled={!selectedPersonId || isLoadingVacancyV2Gate}
@@ -5770,6 +5824,10 @@ export default function App() {
                 </span>
                 <span className="metaChip">
                   salary_in_benefits={vacancyV2GateReport.salary_signal_in_step2_benefits}
+                </span>
+                <span className="metaChip">
+                  thresholds=
+                  {`(${String(vacancyV2GateReport.thresholds.min_salary_transfer_rate)}, ${String(vacancyV2GateReport.thresholds.max_salary_signal_in_step2_benefits_rate)}, ${String(vacancyV2GateReport.thresholds.min_salary_transfer_eligible)})`}
                 </span>
               </div>
               {vacancyV2GateReport.failed_checks.length > 0 ? (

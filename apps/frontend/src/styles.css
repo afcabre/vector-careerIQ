@@ -2536,6 +2536,17 @@ button:disabled {
   align-items: center;
 }
 
+.vacancyV2GateInputs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.vacancyV2GateInputField {
+  margin: 0;
+}
+
 .vacancyV2GateRunSummary {
   margin: 0;
 }
