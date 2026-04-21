@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `frontend de oportunidades ahora integra ejecucion del gate vacancy v2 y visualiza pass/fail con metricas clave`
+- checkpoint_actual: `panel frontend del gate vacancy v2 ahora incluye issue_samples para diagnostico directo de incidencias`
 - repo_status: `flujo V1 operativo con analisis, postulacion, chat, CV semantico, admin de prompts y extraccion estructurada de vacantes en forma legacy estable; propuesta v2 desacoplada en branch experimental`
 - ultima_actualizacion: `2026-04-21`
 
@@ -59,6 +59,8 @@
 - validacion tecnica del gate extendido: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_v2_consistency_gate tests.test_vacancy_v2_endpoints tests.test_vacancy_dimensions_service` en verde (`15 tests`)
 - frontend `Vacantes` integra panel de ejecucion del gate `Vacancy V2` con boton `Ejecutar Gate V2`, badge `PASS/FAIL`, metricas (`transfer_rate`, `missing`, `salary_in_benefits`) y detalle de `failed_checks`
 - validacion tecnica frontend del panel de gate en verde: `npm run build` en `apps/frontend`
+- panel frontend del gate extendido con visualizacion de `issue_samples` (vacante + incidencias) para facilitar depuracion tras cada corrida
+- validacion tecnica frontend de `issue_samples` en verde: `npm run build` en `apps/frontend`
 - decision de rediseño registrada: `v2` arranca sin `JobCriteriaMapper`
 - decision de rediseño registrada: Paso 2 persiste como `vacancy_blocks` con claves fijas, `warnings`, `coverage_notes` y texto limpio por bloque
 - decision de rediseño registrada: Paso 2 incluye `contract_version` explicito en la raiz del artefacto

@@ -2554,6 +2554,33 @@ button:disabled {
   margin: 0;
 }
 
+.vacancyV2GateIssuesDetails {
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 86%, var(--accent));
+  border-radius: 10px;
+  padding: 7px 9px;
+  background: color-mix(in srgb, var(--surface-card) 92%, var(--bg-deep));
+}
+
+.vacancyV2GateIssuesList {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.vacancyV2GateIssueItem {
+  border-left: 2px solid color-mix(in srgb, var(--danger) 65%, var(--border-subtle));
+  padding-left: 8px;
+}
+
+.vacancyV2GateIssueTitle {
+  margin: 0;
+  font-weight: 700;
+}
+
+.vacancyV2GateIssueBody {
+  margin: 2px 0 0;
+}
+
 
 .savedOpportunityExpandRow {
   display: flex;

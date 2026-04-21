@@ -799,6 +799,16 @@ function getVacancyV2GateFailedCheckLabel(code: string): string {
   return code;
 }
 
+function getVacancyV2IssueLabel(code: string): string {
+  if (code === "salary_missing_in_step3") {
+    return "Salario faltante en Step 3";
+  }
+  if (code === "salary_signal_found_in_step2_benefits") {
+    return "Señal salarial en benefits de Step 2";
+  }
+  return code;
+}
+
 function getVacancyProfileSourceBadge(source: string): { label: string; className: string } {
   const normalized = source.trim().toLowerCase();
   if (normalized === "llm") {
@@ -5771,6 +5781,27 @@ export default function App() {
               ) : (
                 <p className="metaText vacancyV2GatePassed">Sin incumplimientos en umbrales.</p>
               )}
+              {vacancyV2GateReport.issue_samples.length > 0 ? (
+                <details className="vacancyV2GateIssuesDetails">
+                  <summary>Ver muestras con incidencia</summary>
+                  <div className="vacancyV2GateIssuesList">
+                    {vacancyV2GateReport.issue_samples.map((sample) => (
+                      <article
+                        className="vacancyV2GateIssueItem"
+                        key={`gate-issue-${sample.opportunity_id}`}
+                      >
+                        <p className="metaText vacancyV2GateIssueTitle">
+                          {sample.title || "Vacante sin titulo"} · {sample.company || "Sin empresa"} ·{" "}
+                          {sample.opportunity_id}
+                        </p>
+                        <p className="metaText vacancyV2GateIssueBody">
+                          {sample.issues.map((issue) => getVacancyV2IssueLabel(issue)).join(" | ")}
+                        </p>
+                      </article>
+                    ))}
+                  </div>
+                </details>
+              ) : null}
             </>
           ) : null}
         </article>
