@@ -54,7 +54,10 @@ from app.services.opportunity_store import (
 )
 from app.services.opportunity_profile_service import extract_structured_opportunity_profile
 from app.services.person_store import get_person
-from app.services.vacancy_v2_consistency_gate import build_vacancy_v2_consistency_report
+from app.services.vacancy_v2_consistency_gate import (
+    build_vacancy_v2_consistency_report,
+    evaluate_vacancy_v2_consistency_report,
+)
 from app.services.vacancy_blocks_service import (
     VacancyBlocksExtractionError,
     extract_vacancy_blocks,
@@ -119,6 +122,9 @@ class VacancyV2ConsistencyResponse(BaseModel):
     salary_transfer_rate: float
     salary_signal_in_step2_benefits: int
     salary_signal_in_step2_benefits_rate: float
+    gate_passed: bool
+    failed_checks: list[str]
+    thresholds: dict[str, float | int]
     issue_samples: list[VacancyV2ConsistencyIssueResponse]
 
 
@@ -958,6 +964,9 @@ async def recompute_vacancy_dimensions_stream(
 def get_vacancy_v2_consistency_report(
     person_id: str,
     sample_limit: int = Query(default=20, ge=1, le=100),
+    min_salary_transfer_rate: float = Query(default=0.8, ge=0.0, le=1.0),
+    max_salary_signal_in_step2_benefits_rate: float = Query(default=0.05, ge=0.0, le=1.0),
+    min_salary_transfer_eligible: int = Query(default=1, ge=1, le=100),
     _: SessionData = Depends(require_operator_session),
 ) -> VacancyV2ConsistencyResponse:
     _require_person(person_id)
@@ -965,6 +974,12 @@ def get_vacancy_v2_consistency_report(
     report = build_vacancy_v2_consistency_report(
         items,
         issue_sample_limit=sample_limit,
+    )
+    evaluation = evaluate_vacancy_v2_consistency_report(
+        report,
+        min_salary_transfer_rate=min_salary_transfer_rate,
+        max_salary_signal_in_step2_benefits_rate=max_salary_signal_in_step2_benefits_rate,
+        min_salary_transfer_eligible=min_salary_transfer_eligible,
     )
     return VacancyV2ConsistencyResponse(
         person_id=person_id,
@@ -977,6 +992,9 @@ def get_vacancy_v2_consistency_report(
         salary_transfer_rate=report["salary_transfer_rate"],
         salary_signal_in_step2_benefits=report["salary_signal_in_step2_benefits"],
         salary_signal_in_step2_benefits_rate=report["salary_signal_in_step2_benefits_rate"],
+        gate_passed=evaluation["gate_passed"],
+        failed_checks=evaluation["failed_checks"],
+        thresholds=evaluation["thresholds"],
         issue_samples=[
             VacancyV2ConsistencyIssueResponse(
                 opportunity_id=issue["opportunity_id"],

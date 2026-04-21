@@ -139,10 +139,17 @@ PERSON_ID="p-001"
 curl -s "$API/persons/$PERSON_ID/opportunities/vacancy-v2/consistency?sample_limit=20" \
   -H "x-session-id: $TOKEN" | jq
 ```
+Opcional: define umbrales del gate en la query:
+```bash
+curl -s "$API/persons/$PERSON_ID/opportunities/vacancy-v2/consistency?sample_limit=20&min_salary_transfer_rate=0.8&max_salary_signal_in_step2_benefits_rate=0.05&min_salary_transfer_eligible=1" \
+  -H "x-session-id: $TOKEN" | jq
+```
 4. Revisa principalmente:
 - `salary_transfer_rate`
 - `salary_transfer_missing`
 - `salary_signal_in_step2_benefits`
+- `gate_passed`
+- `failed_checks`
 - `issue_samples`
 
 Si `salary_transfer_rate` cae a `0.0` y `salary_transfer_missing` es mayor a `0`, considera el gate en falla para salario y abre hardening antes de cerrar integracion de `v2`.

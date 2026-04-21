@@ -228,12 +228,21 @@ curl -s "$API/persons/$PERSON_ID/opportunities/vacancy-v2/consistency?sample_lim
   -H "x-session-id: $TOKEN" | jq
 ```
 
+Con umbrales explicitos:
+```bash
+curl -s "$API/persons/$PERSON_ID/opportunities/vacancy-v2/consistency?sample_limit=20&min_salary_transfer_rate=0.8&max_salary_signal_in_step2_benefits_rate=0.05&min_salary_transfer_eligible=1" \
+  -H "x-session-id: $TOKEN" | jq
+```
+
 ### 4) Interpretar resultado
 - `salary_transfer_eligible`: oportunidades donde Step 2 si detecto salario/compensacion en `work_conditions`
 - `salary_transfer_ok`: casos donde Step 3 reflejo salario en `work_conditions.salary`
 - `salary_transfer_missing`: casos elegibles donde Step 3 quedo vacio para salario
 - `salary_transfer_rate`: `salary_transfer_ok / salary_transfer_eligible`
 - `salary_signal_in_step2_benefits`: casos donde salario aparecio mal en `benefits` de Step 2
+- `gate_passed`: resultado final `pass/fail` segun umbrales
+- `failed_checks`: reglas incumplidas (`salary_transfer_rate_below_threshold`, `salary_signal_in_step2_benefits_rate_above_threshold`, `insufficient_salary_transfer_eligible`)
+- `thresholds`: umbrales usados por la corrida
 - `issue_samples`: muestra de oportunidades concretas para depuracion
 
 Ejemplo de alerta:

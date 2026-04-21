@@ -16,7 +16,10 @@ from app.services import (
 from app.services.ai_run_store import reset_ai_runs
 from app.services.person_store import seed_persons
 from app.services.request_trace_store import reset_request_traces
-from app.services.vacancy_v2_consistency_gate import build_vacancy_v2_consistency_report
+from app.services.vacancy_v2_consistency_gate import (
+    build_vacancy_v2_consistency_report,
+    evaluate_vacancy_v2_consistency_report,
+)
 
 
 def _clear_in_memory_state() -> None:
@@ -164,6 +167,31 @@ class VacancyV2ConsistencyGateTests(unittest.TestCase):
         self.assertEqual(report["salary_signal_in_step2_benefits_rate"], 0.3333)
         self.assertEqual(len(report["issue_samples"]), 2)
 
+    def test_evaluation_marks_report_as_failed_when_thresholds_are_not_met(self) -> None:
+        report = {
+            "total_opportunities": 18,
+            "opportunities_with_step2": 3,
+            "opportunities_with_step3": 3,
+            "salary_transfer_eligible": 2,
+            "salary_transfer_ok": 0,
+            "salary_transfer_missing": 2,
+            "salary_transfer_rate": 0.0,
+            "salary_signal_in_step2_benefits": 0,
+            "salary_signal_in_step2_benefits_rate": 0.0,
+            "issue_samples": [],
+        }
+        evaluation = evaluate_vacancy_v2_consistency_report(
+            report,  # type: ignore[arg-type]
+            min_salary_transfer_rate=0.8,
+            max_salary_signal_in_step2_benefits_rate=0.05,
+            min_salary_transfer_eligible=1,
+        )
+        self.assertFalse(evaluation["gate_passed"])
+        self.assertEqual(
+            evaluation["failed_checks"],
+            ["salary_transfer_rate_below_threshold"],
+        )
+
     def test_api_endpoint_applies_sample_limit(self) -> None:
         first = opportunity_store.import_text_opportunity(
             person_id="p-001",
@@ -198,11 +226,17 @@ class VacancyV2ConsistencyGateTests(unittest.TestCase):
         response = opportunities_api.get_vacancy_v2_consistency_report(
             person_id="p-001",
             sample_limit=1,
+            min_salary_transfer_rate=0.75,
+            max_salary_signal_in_step2_benefits_rate=0.2,
+            min_salary_transfer_eligible=1,
             _=self.session,
         )
         self.assertEqual(response.person_id, "p-001")
         self.assertEqual(response.salary_transfer_eligible, 2)
         self.assertEqual(response.salary_transfer_missing, 2)
+        self.assertFalse(response.gate_passed)
+        self.assertIn("salary_transfer_rate_below_threshold", response.failed_checks)
+        self.assertEqual(float(response.thresholds["min_salary_transfer_rate"]), 0.75)
         self.assertEqual(len(response.issue_samples), 1)
 
 

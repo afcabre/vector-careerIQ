@@ -30,6 +30,18 @@ class VacancyV2ConsistencyReport(TypedDict):
     issue_samples: list[VacancyV2ConsistencyIssue]
 
 
+class VacancyV2ConsistencyThresholds(TypedDict):
+    min_salary_transfer_rate: float
+    max_salary_signal_in_step2_benefits_rate: float
+    min_salary_transfer_eligible: int
+
+
+class VacancyV2ConsistencyEvaluation(TypedDict):
+    gate_passed: bool
+    failed_checks: list[str]
+    thresholds: VacancyV2ConsistencyThresholds
+
+
 _SALARY_SIGNAL_PATTERN = re.compile(
     r"(?i)(salary|salario|sueldo|remuner|compens|pay|usd|cop|eur|mxn|\$\s*\d)"
 )
@@ -140,4 +152,39 @@ def build_vacancy_v2_consistency_report(
             with_step2,
         ),
         "issue_samples": issue_samples,
+    }
+
+
+def evaluate_vacancy_v2_consistency_report(
+    report: VacancyV2ConsistencyReport,
+    *,
+    min_salary_transfer_rate: float = 0.8,
+    max_salary_signal_in_step2_benefits_rate: float = 0.05,
+    min_salary_transfer_eligible: int = 1,
+) -> VacancyV2ConsistencyEvaluation:
+    failed_checks: list[str] = []
+
+    if report["salary_transfer_eligible"] < min_salary_transfer_eligible:
+        failed_checks.append("insufficient_salary_transfer_eligible")
+
+    if (
+        report["salary_transfer_eligible"] >= min_salary_transfer_eligible
+        and report["salary_transfer_rate"] < min_salary_transfer_rate
+    ):
+        failed_checks.append("salary_transfer_rate_below_threshold")
+
+    if (
+        report["salary_signal_in_step2_benefits_rate"]
+        > max_salary_signal_in_step2_benefits_rate
+    ):
+        failed_checks.append("salary_signal_in_step2_benefits_rate_above_threshold")
+
+    return {
+        "gate_passed": len(failed_checks) == 0,
+        "failed_checks": failed_checks,
+        "thresholds": {
+            "min_salary_transfer_rate": min_salary_transfer_rate,
+            "max_salary_signal_in_step2_benefits_rate": max_salary_signal_in_step2_benefits_rate,
+            "min_salary_transfer_eligible": min_salary_transfer_eligible,
+        },
     }

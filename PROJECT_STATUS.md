@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `micro-hardening Step 3 aplicado: salario en work_conditions obliga salary.text no vacio cuando exista senal de compensacion`
+- checkpoint_actual: `consistency gate vacancy v2 extendido con evaluacion pass/fail y umbrales configurables por query`
 - repo_status: `flujo V1 operativo con analisis, postulacion, chat, CV semantico, admin de prompts y extraccion estructurada de vacantes en forma legacy estable; propuesta v2 desacoplada en branch experimental`
 - ultima_actualizacion: `2026-04-21`
 
@@ -54,6 +54,9 @@
 - consumo del consistency gate documentado paso a paso en `README.md` y `guia_uso.md` (login, obtencion de `person_id`, invocacion endpoint e interpretacion de metricas)
 - micro-hardening aplicado en Step 3: si `vacancy_blocks.work_conditions` contiene senal salarial, `vacancy_dimensions.work_conditions.salary.text` no puede quedar vacio (regla reforzada en `system_prompt`, fallback y template default)
 - validacion tecnica del micro-hardening Step 3: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_dimensions_service tests.test_vacancy_v2_consistency_gate tests.test_vacancy_v2_endpoints` en verde (`14 tests`)
+- consistency gate extendido: respuesta ahora incluye `gate_passed`, `failed_checks` y `thresholds`
+- endpoint de consistency gate ahora soporta umbrales por query: `min_salary_transfer_rate`, `max_salary_signal_in_step2_benefits_rate`, `min_salary_transfer_eligible`
+- validacion tecnica del gate extendido: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_v2_consistency_gate tests.test_vacancy_v2_endpoints tests.test_vacancy_dimensions_service` en verde (`15 tests`)
 - decision de rediseño registrada: `v2` arranca sin `JobCriteriaMapper`
 - decision de rediseño registrada: Paso 2 persiste como `vacancy_blocks` con claves fijas, `warnings`, `coverage_notes` y texto limpio por bloque
 - decision de rediseño registrada: Paso 2 incluye `contract_version` explicito en la raiz del artefacto
