@@ -3913,6 +3913,19 @@ export default function App() {
     setSelectedOpportunityId((current) => (current === opportunityId ? null : opportunityId));
   }
 
+  function focusSavedOpportunityCard(opportunityId: string) {
+    setSelectedOpportunityId(opportunityId);
+    if (typeof document === "undefined") {
+      return;
+    }
+    const selector = `[data-opportunity-card-id="${CSS.escape(opportunityId)}"]`;
+    const node = document.querySelector(selector);
+    if (node instanceof HTMLElement) {
+      node.scrollIntoView({ behavior: "smooth", block: "center" });
+      node.focus({ preventScroll: true });
+    }
+  }
+
   async function handleSaveNotes() {
     if (!selectedPersonId || !selectedOpportunityId || isSavingNotes) {
       return;
@@ -5855,6 +5868,15 @@ export default function App() {
                         <p className="metaText vacancyV2GateIssueBody">
                           {sample.issues.map((issue) => getVacancyV2IssueLabel(issue)).join(" | ")}
                         </p>
+                        <div className="cardActions">
+                          <button
+                            className="vacancyProfileQuickActionButton"
+                            onClick={() => focusSavedOpportunityCard(sample.opportunity_id)}
+                            type="button"
+                          >
+                            Ir a vacante
+                          </button>
+                        </div>
                       </article>
                     ))}
                   </div>
@@ -5921,10 +5943,17 @@ export default function App() {
                 updatingVacancyV2StatusKey === `vacancy_blocks:${item.opportunity_id}`;
               const isUpdatingVacancyDimensionsStatus =
                 updatingVacancyV2StatusKey === `vacancy_dimensions:${item.opportunity_id}`;
+              const isSelectedSavedOpportunity = selectedOpportunityId === item.opportunity_id;
               return (
                 <article
-                  className="chatBubble chatBubbleUser savedOpportunityCard"
+                  className={
+                    isSelectedSavedOpportunity
+                      ? "chatBubble chatBubbleUser savedOpportunityCard savedOpportunityCardActive"
+                      : "chatBubble chatBubbleUser savedOpportunityCard"
+                  }
+                  data-opportunity-card-id={item.opportunity_id}
                   key={item.opportunity_id}
+                  tabIndex={-1}
                 >
                   <p className="chatRole savedOpportunityStatus">{item.status.toUpperCase()}</p>
                   <p className="chatContent savedOpportunityTitle">{item.title}</p>

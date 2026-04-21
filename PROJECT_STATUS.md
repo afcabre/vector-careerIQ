@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `panel frontend del gate vacancy v2 ahora permite configurar umbrales de corrida sin curl`
+- checkpoint_actual: `panel frontend del gate vacancy v2 permite navegar desde issue_samples directamente a la vacante afectada`
 - repo_status: `flujo V1 operativo con analisis, postulacion, chat, CV semantico, admin de prompts y extraccion estructurada de vacantes en forma legacy estable; propuesta v2 desacoplada en branch experimental`
 - ultima_actualizacion: `2026-04-21`
 
@@ -64,6 +64,8 @@
 - panel frontend del gate extendido con inputs configurables para `sample_limit`, `min_salary_transfer_rate`, `max_salary_signal_in_step2_benefits_rate` y `min_salary_transfer_eligible`
 - corrida del gate desde UI ahora usa umbrales configurables y muestra thresholds aplicados en el resumen
 - validacion tecnica frontend de umbrales configurables en verde: `npm run build` en `apps/frontend`
+- panel frontend del gate extendido con accion `Ir a vacante` por cada `issue_sample`, con foco y scroll a la oportunidad en la lista para acelerar depuracion
+- validacion tecnica frontend de navegacion desde `issue_samples` en verde: `npm run build` en `apps/frontend`
 - decision de rediseño registrada: `v2` arranca sin `JobCriteriaMapper`
 - decision de rediseño registrada: Paso 2 persiste como `vacancy_blocks` con claves fijas, `warnings`, `coverage_notes` y texto limpio por bloque
 - decision de rediseño registrada: Paso 2 incluye `contract_version` explicito en la raiz del artefacto

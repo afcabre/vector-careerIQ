@@ -2321,6 +2321,15 @@ button:disabled {
   color: color-mix(in srgb, var(--accent) 52%, var(--text-primary));
 }
 
+.savedOpportunityCard.savedOpportunityCardActive {
+  border-width: 2px;
+  border-color: color-mix(in srgb, var(--accent) 86%, white);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent),
+    0 0 10px color-mix(in srgb, var(--accent) 20%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
 .savedOpportunitySnippet {
   margin: 0;
   color: color-mix(in srgb, var(--text-secondary) 86%, #ced9ea);
