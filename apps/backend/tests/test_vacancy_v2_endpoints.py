@@ -173,6 +173,36 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         assert stored is not None
         self.assertEqual(stored["vacancy_blocks_status"], "error")
 
+    def test_update_rejects_invalid_vacancy_v2_status_values(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Data Engineer",
+            company="Acme",
+            location="Remote",
+            raw_text="Vacante con requerimientos de datos.",
+        )
+        opportunity_id = created["opportunity_id"]
+
+        with self.assertRaises(HTTPException) as invalid_blocks_status:
+            opportunities_api.update_opportunity(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                payload=opportunities_api.UpdateOpportunityRequest(vacancy_blocks_status="invalid"),
+                _=self.session,
+            )
+        self.assertEqual(invalid_blocks_status.exception.status_code, 422)
+        self.assertEqual(invalid_blocks_status.exception.detail, "Invalid vacancy_blocks_status")
+
+        with self.assertRaises(HTTPException) as invalid_dimensions_status:
+            opportunities_api.update_opportunity(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                payload=opportunities_api.UpdateOpportunityRequest(vacancy_dimensions_status="invalid"),
+                _=self.session,
+            )
+        self.assertEqual(invalid_dimensions_status.exception.status_code, 422)
+        self.assertEqual(invalid_dimensions_status.exception.detail, "Invalid vacancy_dimensions_status")
+
     def test_recompute_vacancy_dimensions_success_sets_draft_artifact(self) -> None:
         created = opportunity_store.import_text_opportunity(
             person_id="p-001",
@@ -208,6 +238,43 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         assert stored is not None
         self.assertEqual(stored["vacancy_dimensions_status"], "draft")
 
+    def test_recompute_vacancy_dimensions_uses_persisted_vacancy_blocks_input(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Backend Engineer",
+            company="Acme",
+            location="Hybrid",
+            raw_text="Vacante con condiciones y responsabilidades.",
+        )
+        opportunity_id = created["opportunity_id"]
+        blocks = _sample_vacancy_blocks(opportunity_id)
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_blocks_artifact=blocks,
+            vacancy_blocks_status="approved",
+        )
+        assert updated is not None
+        dimensions = _sample_vacancy_dimensions(opportunity_id)
+
+        with patch.object(
+            opportunities_api,
+            "extract_vacancy_dimensions",
+            return_value=dimensions,
+        ) as extract_mock:
+            opportunities_api.recompute_vacancy_dimensions(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                _=self.session,
+                settings=get_settings(),
+            )
+
+        kwargs = extract_mock.call_args.kwargs
+        self.assertEqual(kwargs["vacancy_blocks_artifact"]["contract_version"], "vacancy_blocks.v1")
+        self.assertEqual(kwargs["vacancy_blocks_artifact"]["vacancy_id"], opportunity_id)
+
     def test_recompute_vacancy_dimensions_failure_sets_error_status(self) -> None:
         created = opportunity_store.import_text_opportunity(
             person_id="p-001",
@@ -236,6 +303,48 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         stored = opportunity_store.find_opportunity("p-001", opportunity_id)
         assert stored is not None
         self.assertEqual(stored["vacancy_dimensions_status"], "error")
+
+    def test_recompute_vacancy_v2_preserves_legacy_vacancy_profile(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Backend Engineer",
+            company="Acme",
+            location="Hybrid",
+            raw_text="Vacante con condiciones y responsabilidades.",
+        )
+        opportunity_id = created["opportunity_id"]
+        legacy_profile = {"must_have": ["Python", "FastAPI"], "nice_to_have": ["AWS"]}
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_profile=legacy_profile,
+            vacancy_profile_status="approved",
+        )
+        assert updated is not None
+
+        blocks = _sample_vacancy_blocks(opportunity_id)
+        dimensions = _sample_vacancy_dimensions(opportunity_id)
+        with patch.object(opportunities_api, "extract_vacancy_blocks", return_value=blocks):
+            opportunities_api.recompute_vacancy_blocks(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                _=self.session,
+                settings=get_settings(),
+            )
+        with patch.object(opportunities_api, "extract_vacancy_dimensions", return_value=dimensions):
+            opportunities_api.recompute_vacancy_dimensions(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                _=self.session,
+                settings=get_settings(),
+            )
+
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_profile"], legacy_profile)
+        self.assertEqual(stored["vacancy_profile_status"], "approved")
 
     def test_vacancy_blocks_stream_emits_stages_and_message_complete(self) -> None:
         created = opportunity_store.import_text_opportunity(
@@ -266,6 +375,82 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         self.assertIn("vacancy_blocks_saving", stages)
         complete_payload = next(payload for name, payload in events if name == "message_complete")
         self.assertEqual(complete_payload["opportunity"]["vacancy_blocks_status"], "draft")
+
+    def test_vacancy_blocks_stream_emits_error_and_marks_status(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Platform Engineer",
+            company="Acme",
+            location="Remote",
+            raw_text="Rol con plataformas y datos.",
+        )
+        opportunity_id = created["opportunity_id"]
+
+        with patch.object(
+            opportunities_api,
+            "extract_vacancy_blocks",
+            side_effect=VacancyBlocksExtractionError("Step 2 blocked by invalid source"),
+        ):
+            response = asyncio.run(
+                opportunities_api.recompute_vacancy_blocks_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                    settings=get_settings(),
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        names = [name for name, _ in events]
+        self.assertIn("tool_status", names)
+        self.assertIn("error", names)
+        error_payload = next(payload for name, payload in events if name == "error")
+        self.assertIn("Step 2 blocked by invalid source", str(error_payload.get("detail", "")))
+
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_blocks_status"], "error")
+
+    def test_vacancy_dimensions_stream_emits_stages_and_message_complete(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Platform Engineer",
+            company="Acme",
+            location="Remote",
+            raw_text="Rol con plataformas y datos.",
+        )
+        opportunity_id = created["opportunity_id"]
+        blocks = _sample_vacancy_blocks(opportunity_id)
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_blocks_artifact=blocks,
+            vacancy_blocks_status="approved",
+        )
+        assert updated is not None
+        dimensions = _sample_vacancy_dimensions(opportunity_id)
+
+        with patch.object(opportunities_api, "extract_vacancy_dimensions", return_value=dimensions):
+            response = asyncio.run(
+                opportunities_api.recompute_vacancy_dimensions_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                    settings=get_settings(),
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        stages = [payload.get("stage", "") for name, payload in events if name == "tool_status"]
+        self.assertIn("vacancy_dimensions_recompute_started", stages)
+        self.assertIn("vacancy_dimensions_extracting", stages)
+        self.assertIn("vacancy_dimensions_saving", stages)
+        complete_payload = next(payload for name, payload in events if name == "message_complete")
+        self.assertEqual(complete_payload["opportunity"]["vacancy_dimensions_status"], "draft")
 
     def test_vacancy_dimensions_stream_emits_error_and_marks_status(self) -> None:
         created = opportunity_store.import_text_opportunity(

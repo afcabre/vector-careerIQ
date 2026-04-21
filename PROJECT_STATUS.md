@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `panel frontend del gate vacancy v2 permite navegar desde issue_samples directamente a la vacante afectada`
+- checkpoint_actual: `cobertura de endpoints/sse v2 ampliada y alineacion Notion corregida para explicitar Step 3 LLM-first sin heuristicas`
 - repo_status: `flujo V1 operativo con analisis, postulacion, chat, CV semantico, admin de prompts y extraccion estructurada de vacantes en forma legacy estable; propuesta v2 desacoplada en branch experimental`
 - ultima_actualizacion: `2026-04-21`
 
@@ -39,6 +39,8 @@
 - decision de rediseño registrada: Paso 3 opera `LLM-first` sin fallback heuristico de atomizacion; ante entrada Paso 2 invalida o salida LLM invalida falla de forma controlada
 - Slice 5 backend implementado: endpoints `recompute` y `recompute/stream` para `vacancy_blocks` y `vacancy_dimensions`, con persistencia de estado `draft/error` y etapas SSE por flujo
 - Slice 5 validado tecnicamente en `apps/backend/.venv`: `python -m unittest tests.test_vacancy_v2_endpoints` en verde (`6 tests`)
+- cobertura de `test_vacancy_v2_endpoints` extendida: validacion de estados v2 invalidos, simetria SSE success/error para Step 2 y Step 3, preservacion de `vacancy_profile` legacy y verificacion de input Step 2 -> Step 3
+- validacion tecnica de cobertura extendida: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_v2_endpoints` en verde (`11 tests`)
 - Slice runtime config interno implementado: nuevo modulo `vacancy_v2_runtime_config` con schema y defaults para Step 2/3, override opcional por `vacancy_v2_runtime_config_json` y validacion de rango para `llm_temperature`
 - Step 2 y Step 3 ahora leen `llm_temperature` desde el schema interno de `vacancy_v2` (sin cambios en admin runtime)
 - Slice runtime config validado tecnicamente en `apps/backend/.venv`: `python -m unittest tests.test_vacancy_v2_runtime_config tests.test_vacancy_blocks_service tests.test_vacancy_dimensions_service` en verde (`16 tests`)
@@ -66,6 +68,8 @@
 - validacion tecnica frontend de umbrales configurables en verde: `npm run build` en `apps/frontend`
 - panel frontend del gate extendido con accion `Ir a vacante` por cada `issue_sample`, con foco y scroll a la oportunidad en la lista para acelerar depuracion
 - validacion tecnica frontend de navegacion desde `issue_samples` en verde: `npm run build` en `apps/frontend`
+- alineacion de seguimiento en Notion aplicada: task de Step 3 renombrado a `Implement vacancy_dimensions Step 3 extraction service (LLM-first)` y marcado `Done` para evitar lectura de heuristica
+- gate marcado en Notion como `To do` (pausado por decision de producto) y task de cobertura marcado `Doing`
 - decision de rediseño registrada: `v2` arranca sin `JobCriteriaMapper`
 - decision de rediseño registrada: Paso 2 persiste como `vacancy_blocks` con claves fijas, `warnings`, `coverage_notes` y texto limpio por bloque
 - decision de rediseño registrada: Paso 2 incluye `contract_version` explicito en la raiz del artefacto
@@ -108,11 +112,11 @@
 - `apps/backend/tests/test_vacancy_structure_contract_v2.py`: cobertura unitaria del contrato v2
 
 ## Bloqueadores
-- falta ejecutar consistency gate de calidad sobre vacantes reales para cerrar desviaciones de Step 2/Step 3
+- integracion de Step 3 en analisis permanece bloqueada por criterio de calidad hasta retomar corrida de gate en muestras reales
 - falta cerrar si `benefits` requerira luego una normalizacion mas fuerte
 - el experimento de nueva estructura de vacante no debe reintroducirse sobre este baseline ni conectarse al extractor estable antes de acuerdo
 
 ## Siguiente Actividad
-- ejecutar consistency gate en datos reales (10-20 vacantes) usando el endpoint y revisar incidencias muestreadas
-- abrir micro-slice de hardening adicional solo si el gate reporta `salary_transfer_missing` o `salary_signal_in_step2_benefits` por encima del umbral esperado
-- mantener analisis legacy sin integracion v2 hasta validar calidad con datos reales
+- cerrar task `Add contract, endpoint, SSE, and regression coverage` con pruebas adicionales de regresion legacy y persistencia paralela
+- mantener `gate` en pausa hasta instruccion explicita del usuario
+- mantener analisis legacy sin integracion v2 hasta habilitar nuevamente validacion de calidad de Step 2/Step 3
