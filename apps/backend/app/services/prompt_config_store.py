@@ -415,6 +415,7 @@ def _default_configs() -> dict[str, PromptConfigRecord]:
                 "mobility_requirements. "
                 "Toda senal de salario/compensacion debe mapearse a work_conditions.salary; "
                 "benefits es solo para perks no salariales. "
+                "Si el input trae salario/compensacion en work_conditions, salary.text no puede quedar vacio. "
                 "Cada item atomico debe incluir solo: id, campo principal (task/requirement/benefit), "
                 "category, semantic_queries, raw_text. "
                 "Aplica defaults del contrato cuando falte informacion. "

@@ -170,6 +170,7 @@ class VacancyDimensionsServiceTests(unittest.TestCase):
         self.assertIn("salary/compensation", fallback_prompt)
         self.assertIn("work_conditions.salary", fallback_prompt)
         self.assertIn("benefits", fallback_prompt)
+        self.assertIn("salary.text must not be empty", fallback_prompt)
 
     def test_extract_invalid_json_raises_controlled_error(self) -> None:
         with patch(

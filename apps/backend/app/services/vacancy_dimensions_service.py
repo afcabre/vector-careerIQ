@@ -119,7 +119,9 @@ def extract_vacancy_dimensions(
     system_prompt = (
         "You are a vacancy Step 3 normalizer. Return valid JSON only for vacancy_dimensions.v1. "
         "Any compensation/salary signal must be mapped to work_conditions.salary. "
-        "Benefits must not contain compensation or salary statements."
+        "Benefits must not contain compensation or salary statements. "
+        "If vacancy_blocks.work_conditions has salary/compensation signals, "
+        "work_conditions.salary.text must be non-empty, even when min/max are unknown."
     )
     fallback_user_prompt = (
         "Transform vacancy_blocks.v1 into vacancy_dimensions.v1 and respond with valid JSON only. "
@@ -127,6 +129,7 @@ def extract_vacancy_dimensions(
         "Allowed keys inside vacancy_dimensions: work_conditions, responsibilities, required_competencies, "
         "desirable_competencies, benefits. "
         "Map salary/compensation exclusively to work_conditions.salary and keep benefits for non-compensation perks. "
+        "When input includes salary/compensation in work_conditions, salary.text must not be empty. "
         "Do not invent keys and do not embed vacancy_blocks. "
         f"Vacancy title: {opportunity.get('title', '')}. "
         f"Company: {opportunity.get('company', '')}. "
