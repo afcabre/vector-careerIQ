@@ -31,6 +31,10 @@
 - criterio de commit refinado: mensaje en ingles y propuesta de commit solo despues de explicitar pruebas operativas del slice
 - Slice 1 de persistencia paralela implementado en backend/frontend para `vacancy_blocks` y `vacancy_dimensions`
 - Slice 1 validado operativamente por el usuario: creacion de oportunidad, presencia de campos `vacancy_blocks_*`/`vacancy_dimensions_*`, extraccion legacy y analisis `perfil-vacante` sin regresion observada
+- Slice 2 de contratos ejecutables implementado con modulos separados para `vacancy_blocks.v1` y `vacancy_dimensions.v1`
+- Slice 2 validado tecnicamente: `py_compile` y `unittest` dedicados en verde para contratos de Paso 2 y Paso 3
+- Slice 3 de servicio `vacancy_blocks` implementado con flow dedicado `task_vacancy_blocks_extract` y pruebas unitarias dedicadas
+- decision de rediseño registrada: Paso 2 opera `LLM-first` sin fallback heuristico de clasificacion; ante entrada invalida o salida LLM invalida falla de forma controlada
 - decision de rediseño registrada: `v2` arranca sin `JobCriteriaMapper`
 - decision de rediseño registrada: Paso 2 persiste como `vacancy_blocks` con claves fijas, `warnings`, `coverage_notes` y texto limpio por bloque
 - decision de rediseño registrada: Paso 2 incluye `contract_version` explicito en la raiz del artefacto
@@ -78,7 +82,7 @@
 - el experimento de nueva estructura de vacante no debe reintroducirse sobre este baseline ni conectarse al extractor estable antes de acuerdo
 
 ## Siguiente Actividad
-- ejecutar el Slice 2 de contratos ejecutables para `vacancy_blocks` y `vacancy_dimensions`
+- consolidar commit limpio del Slice 2 y Slice 3 ya implementados
 - definir schema interno y defaults de runtime para `vacancy_v2` sin exponer admin
 - implementar Paso 2 y Paso 3 en paralelo al legacy
 - dejar endpoints y UI experimentales separados antes de tocar analisis
