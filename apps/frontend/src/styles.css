@@ -2506,6 +2506,54 @@ button:disabled {
   opacity: 0.95;
 }
 
+.vacancyV2GatePanel {
+  border: 1px dashed color-mix(in srgb, var(--border-subtle) 82%, var(--accent));
+  border-radius: 12px;
+  padding: 10px;
+  margin-bottom: 10px;
+  background: color-mix(in srgb, var(--surface-card) 90%, var(--bg-deep));
+  display: grid;
+  gap: 8px;
+}
+
+.vacancyV2GateHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vacancyV2GateTitle {
+  margin: 0;
+}
+
+.vacancyV2GateSubtitle {
+  margin: 2px 0 0;
+}
+
+.vacancyV2GateActions {
+  align-items: center;
+}
+
+.vacancyV2GateRunSummary {
+  margin: 0;
+}
+
+.vacancyV2GateMetrics {
+  gap: 6px;
+}
+
+.vacancyV2GateFailedChecks {
+  color: color-mix(in srgb, var(--danger) 82%, #ffe4e6);
+  margin: 0;
+}
+
+.vacancyV2GatePassed {
+  color: color-mix(in srgb, var(--success) 78%, #dcfce7);
+  margin: 0;
+}
+
 
 .savedOpportunityExpandRow {
   display: flex;

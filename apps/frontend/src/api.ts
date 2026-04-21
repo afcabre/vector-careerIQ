@@ -95,6 +95,32 @@ export type Opportunity = {
   updated_at: string;
 };
 
+export type VacancyV2ConsistencyIssue = {
+  opportunity_id: string;
+  title: string;
+  company: string;
+  vacancy_blocks_status: string;
+  vacancy_dimensions_status: string;
+  issues: string[];
+};
+
+export type VacancyV2ConsistencyReport = {
+  person_id: string;
+  total_opportunities: number;
+  opportunities_with_step2: number;
+  opportunities_with_step3: number;
+  salary_transfer_eligible: number;
+  salary_transfer_ok: number;
+  salary_transfer_missing: number;
+  salary_transfer_rate: number;
+  salary_signal_in_step2_benefits: number;
+  salary_signal_in_step2_benefits_rate: number;
+  gate_passed: boolean;
+  failed_checks: string[];
+  thresholds: Record<string, number>;
+  issue_samples: VacancyV2ConsistencyIssue[];
+};
+
 export type ApplicationArtifact = {
   artifact_id: string;
   person_id: string;
@@ -848,6 +874,43 @@ export async function listOpportunities(personId: string): Promise<Opportunity[]
   });
   const payload = await parseResponse<{ items: Opportunity[] }>(response);
   return payload.items;
+}
+
+export async function getVacancyV2ConsistencyReport(
+  personId: string,
+  params?: {
+    sample_limit?: number;
+    min_salary_transfer_rate?: number;
+    max_salary_signal_in_step2_benefits_rate?: number;
+    min_salary_transfer_eligible?: number;
+  }
+): Promise<VacancyV2ConsistencyReport> {
+  const search = new URLSearchParams();
+  if (typeof params?.sample_limit === "number") {
+    search.set("sample_limit", String(params.sample_limit));
+  }
+  if (typeof params?.min_salary_transfer_rate === "number") {
+    search.set("min_salary_transfer_rate", String(params.min_salary_transfer_rate));
+  }
+  if (typeof params?.max_salary_signal_in_step2_benefits_rate === "number") {
+    search.set(
+      "max_salary_signal_in_step2_benefits_rate",
+      String(params.max_salary_signal_in_step2_benefits_rate)
+    );
+  }
+  if (typeof params?.min_salary_transfer_eligible === "number") {
+    search.set("min_salary_transfer_eligible", String(params.min_salary_transfer_eligible));
+  }
+  const query = search.toString();
+  const suffix = query ? `?${query}` : "";
+  const response = await safeFetch(
+    `${API_BASE}/persons/${personId}/opportunities/vacancy-v2/consistency${suffix}`,
+    {
+      method: "GET",
+      credentials: "include"
+    }
+  );
+  return parseResponse<VacancyV2ConsistencyReport>(response);
 }
 
 export async function updateOpportunity(

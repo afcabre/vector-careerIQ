@@ -22,6 +22,7 @@ import {
   SearchProviderStatus,
   SearchResult,
   SemanticEvidence,
+  VacancyV2ConsistencyReport,
   analyzeCulturalFitStream,
   analyzeProfileMatchStream,
   analyzeCulturalFit,
@@ -47,6 +48,7 @@ import {
   logout,
   prepareOpportunityStream,
   prepareOpportunity,
+  getVacancyV2ConsistencyReport,
   recomputeOpportunityVacancyBlocks,
   recomputeOpportunityVacancyDimensions,
   recomputeOpportunityVacancyProfile,
@@ -776,6 +778,25 @@ function getVacancyV2StatusClassName(status: string): string {
     return "vacancyV2StatusChip vacancyV2StatusChipError";
   }
   return "vacancyV2StatusChip vacancyV2StatusChipNone";
+}
+
+function getVacancyV2GateChipClassName(gatePassed: boolean): string {
+  return gatePassed
+    ? "vacancyV2StatusChip vacancyV2StatusChipApproved"
+    : "vacancyV2StatusChip vacancyV2StatusChipError";
+}
+
+function getVacancyV2GateFailedCheckLabel(code: string): string {
+  if (code === "salary_transfer_rate_below_threshold") {
+    return "Transferencia de salario por debajo del umbral";
+  }
+  if (code === "salary_signal_in_step2_benefits_rate_above_threshold") {
+    return "Salario mal clasificado en benefits por encima del umbral";
+  }
+  if (code === "insufficient_salary_transfer_eligible") {
+    return "Muestra insuficiente de casos elegibles";
+  }
+  return code;
 }
 
 function getVacancyProfileSourceBadge(source: string): { label: string; className: string } {
@@ -1527,6 +1548,8 @@ export default function App() {
   const [manualUrlRawText, setManualUrlRawText] = useState("");
   const [isImportingUrl, setIsImportingUrl] = useState(false);
   const [savedOpportunities, setSavedOpportunities] = useState<Opportunity[]>([]);
+  const [vacancyV2GateReport, setVacancyV2GateReport] = useState<VacancyV2ConsistencyReport | null>(null);
+  const [isLoadingVacancyV2Gate, setIsLoadingVacancyV2Gate] = useState(false);
   const [editingOpportunityProfileId, setEditingOpportunityProfileId] = useState<string | null>(
     null
   );
@@ -1916,6 +1939,7 @@ export default function App() {
     const loadOpportunities = async () => {
       if (!selectedPersonId || view !== "workspace") {
         setSavedOpportunities([]);
+        setVacancyV2GateReport(null);
         setSelectedOpportunityId(null);
         setAnalysisText("");
         setProfileAnalysisText("");
@@ -1944,6 +1968,7 @@ export default function App() {
         setResultsPanelTab("analysis");
         return;
       }
+      setVacancyV2GateReport(null);
       setIsLoadingOpportunities(true);
       setErrorMessage(null);
       try {
@@ -3182,6 +3207,29 @@ export default function App() {
       setErrorMessage(message);
     } finally {
       setRecomputingVacancyDimensionsId(null);
+    }
+  }
+
+  async function handleRunVacancyV2Gate() {
+    if (!selectedPersonId || isLoadingVacancyV2Gate) {
+      return;
+    }
+    setIsLoadingVacancyV2Gate(true);
+    setErrorMessage(null);
+    try {
+      const report = await getVacancyV2ConsistencyReport(selectedPersonId, {
+        sample_limit: 20,
+        min_salary_transfer_rate: 0.8,
+        max_salary_signal_in_step2_benefits_rate: 0.05,
+        min_salary_transfer_eligible: 1,
+      });
+      setVacancyV2GateReport(report);
+      setToastMessage("Gate Vacancy V2 actualizado");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "No se pudo ejecutar el gate Vacancy V2";
+      setErrorMessage(message);
+    } finally {
+      setIsLoadingVacancyV2Gate(false);
     }
   }
 
@@ -5659,6 +5707,73 @@ export default function App() {
           </form>
         )}
         <h3 className="subheading savedOpportunitiesHeading">Oportunidades guardadas</h3>
+        <article className="vacancyV2GatePanel">
+          <div className="vacancyV2GateHeader">
+            <div>
+              <p className="chatRole vacancyV2GateTitle">Gate Vacancy V2</p>
+              <p className="metaText vacancyV2GateSubtitle">
+                Chequeo de consistencia Step 2 -&gt; Step 3 (salary mapping)
+              </p>
+            </div>
+            <div className="metaChips">
+              <span
+                className={`metaChip ${
+                  vacancyV2GateReport
+                    ? getVacancyV2GateChipClassName(vacancyV2GateReport.gate_passed)
+                    : "vacancyV2StatusChip vacancyV2StatusChipNone"
+                }`}
+              >
+                {!vacancyV2GateReport
+                  ? "Sin corrida"
+                  : vacancyV2GateReport.gate_passed
+                    ? "PASS"
+                    : "FAIL"}
+              </span>
+            </div>
+          </div>
+          <div className="cardActions vacancyV2GateActions">
+            <button
+              className="vacancyProfileQuickActionButton"
+              disabled={!selectedPersonId || isLoadingVacancyV2Gate}
+              onClick={() => void handleRunVacancyV2Gate()}
+              type="button"
+            >
+              {isLoadingVacancyV2Gate ? "Ejecutando..." : "Ejecutar Gate V2"}
+            </button>
+            {vacancyV2GateReport ? (
+              <p className="metaText vacancyV2GateRunSummary">
+                muestra={vacancyV2GateReport.total_opportunities} · step2=
+                {vacancyV2GateReport.opportunities_with_step2} · step3=
+                {vacancyV2GateReport.opportunities_with_step3}
+              </p>
+            ) : null}
+          </div>
+          {vacancyV2GateReport ? (
+            <>
+              <div className="metaChips vacancyV2GateMetrics">
+                <span className="metaChip">
+                  transfer_rate={vacancyV2GateReport.salary_transfer_rate.toFixed(4)}
+                </span>
+                <span className="metaChip">
+                  missing={vacancyV2GateReport.salary_transfer_missing}/
+                  {vacancyV2GateReport.salary_transfer_eligible}
+                </span>
+                <span className="metaChip">
+                  salary_in_benefits={vacancyV2GateReport.salary_signal_in_step2_benefits}
+                </span>
+              </div>
+              {vacancyV2GateReport.failed_checks.length > 0 ? (
+                <p className="metaText vacancyV2GateFailedChecks">
+                  {vacancyV2GateReport.failed_checks
+                    .map((code) => getVacancyV2GateFailedCheckLabel(code))
+                    .join(" | ")}
+                </p>
+              ) : (
+                <p className="metaText vacancyV2GatePassed">Sin incumplimientos en umbrales.</p>
+              )}
+            </>
+          ) : null}
+        </article>
         {isLoadingOpportunities ? (
           <p className="metaText">Cargando oportunidades...</p>
         ) : savedOpportunities.length === 0 ? (
