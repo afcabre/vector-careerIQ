@@ -191,9 +191,53 @@ Mapa rapido endpoint -> flow:
 - `PATCH /api/admin/search-providers/{provider_key}`: habilitar/deshabilitar proveedor (`adzuna`, `remotive`, `tavily`)
 - `GET /api/admin/ai-runtime-config`: ver parametros globales de ejecucion IA (incluye `top_k` y modo de investigacion de entrevista)
 - `PATCH /api/admin/ai-runtime-config`: actualizar `top_k_semantic_analysis`, `top_k_semantic_interview`, `cv_chunking_strategy`, `cv_markdown_extraction_mode`, `interview_research_mode`, `interview_research_max_steps`
+- `GET /api/persons/{person_id}/opportunities/vacancy-v2/consistency`: reporte de consistencia Step 2/Step 3 para `vacancy_v2` (metricas de salary mapping)
 - `POST /api/persons/{person_id}/search`: `search_jobs_tavily`
 - senales culturales en `analyze_cultural_fit`: `search_culture_tavily`
 - contexto pre-entrevista en `interview_brief`: `search_interview_tavily`
+
+## Consumo Paso A Paso Del Gate `vacancy_v2`
+Objetivo:
+- medir calidad de consistencia entre `Step 2 (vacancy_blocks)` y `Step 3 (vacancy_dimensions)` por persona
+
+Precondiciones:
+- backend corriendo en `http://localhost:8000`
+- tener credenciales de tutor validas
+- tener oportunidades con artefactos `vacancy_blocks` y `vacancy_dimensions`
+
+### 1) Login y obtener token de sesion
+```bash
+API="http://localhost:8000/api"
+USER="tutor"
+PASS="change_me"
+
+TOKEN=$(curl -s -X POST "$API/auth/login" \
+  -H "Content-Type: application/json" \
+  -d "{\"username\":\"$USER\",\"password\":\"$PASS\"}" | jq -r '.session_token')
+```
+
+### 2) Listar personas y elegir `person_id`
+```bash
+curl -s "$API/persons" -H "x-session-id: $TOKEN" | jq
+```
+
+### 3) Ejecutar consistency gate
+```bash
+PERSON_ID="p-001"
+curl -s "$API/persons/$PERSON_ID/opportunities/vacancy-v2/consistency?sample_limit=20" \
+  -H "x-session-id: $TOKEN" | jq
+```
+
+### 4) Interpretar resultado
+- `salary_transfer_eligible`: oportunidades donde Step 2 si detecto salario/compensacion en `work_conditions`
+- `salary_transfer_ok`: casos donde Step 3 reflejo salario en `work_conditions.salary`
+- `salary_transfer_missing`: casos elegibles donde Step 3 quedo vacio para salario
+- `salary_transfer_rate`: `salary_transfer_ok / salary_transfer_eligible`
+- `salary_signal_in_step2_benefits`: casos donde salario aparecio mal en `benefits` de Step 2
+- `issue_samples`: muestra de oportunidades concretas para depuracion
+
+Ejemplo de alerta:
+- si `salary_transfer_rate = 0.0` con `salary_transfer_missing > 0`, hay brecha real de mapeo Step 2 -> Step 3 y corresponde abrir micro-slice de hardening antes de integrar Step 3 al analisis.
 
 Reglas de contexto OpenAI (resumen V1):
 - `chat/chat-stream`: `1 system + hasta 12` mensajes de historial reciente (max `13`); incluye contexto CV semantico (`top_k=24`) y limites de texto para contexto (`7000` chars) con fallback preview (`1600` chars).

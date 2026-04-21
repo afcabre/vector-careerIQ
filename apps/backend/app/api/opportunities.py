@@ -54,6 +54,7 @@ from app.services.opportunity_store import (
 )
 from app.services.opportunity_profile_service import extract_structured_opportunity_profile
 from app.services.person_store import get_person
+from app.services.vacancy_v2_consistency_gate import build_vacancy_v2_consistency_report
 from app.services.vacancy_blocks_service import (
     VacancyBlocksExtractionError,
     extract_vacancy_blocks,
@@ -96,6 +97,29 @@ class OpportunityResponse(BaseModel):
 class OpportunityListResponse(BaseModel):
     items: list[OpportunityResponse]
     person_id: str
+
+
+class VacancyV2ConsistencyIssueResponse(BaseModel):
+    opportunity_id: str
+    title: str
+    company: str
+    vacancy_blocks_status: str
+    vacancy_dimensions_status: str
+    issues: list[str]
+
+
+class VacancyV2ConsistencyResponse(BaseModel):
+    person_id: str
+    total_opportunities: int
+    opportunities_with_step2: int
+    opportunities_with_step3: int
+    salary_transfer_eligible: int
+    salary_transfer_ok: int
+    salary_transfer_missing: int
+    salary_transfer_rate: float
+    salary_signal_in_step2_benefits: int
+    salary_signal_in_step2_benefits_rate: float
+    issue_samples: list[VacancyV2ConsistencyIssueResponse]
 
 
 class FromSearchRequest(BaseModel):
@@ -928,6 +952,43 @@ async def recompute_vacancy_dimensions_stream(
             )
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.get("/vacancy-v2/consistency")
+def get_vacancy_v2_consistency_report(
+    person_id: str,
+    sample_limit: int = Query(default=20, ge=1, le=100),
+    _: SessionData = Depends(require_operator_session),
+) -> VacancyV2ConsistencyResponse:
+    _require_person(person_id)
+    items = list_saved_opportunities(person_id)
+    report = build_vacancy_v2_consistency_report(
+        items,
+        issue_sample_limit=sample_limit,
+    )
+    return VacancyV2ConsistencyResponse(
+        person_id=person_id,
+        total_opportunities=report["total_opportunities"],
+        opportunities_with_step2=report["opportunities_with_step2"],
+        opportunities_with_step3=report["opportunities_with_step3"],
+        salary_transfer_eligible=report["salary_transfer_eligible"],
+        salary_transfer_ok=report["salary_transfer_ok"],
+        salary_transfer_missing=report["salary_transfer_missing"],
+        salary_transfer_rate=report["salary_transfer_rate"],
+        salary_signal_in_step2_benefits=report["salary_signal_in_step2_benefits"],
+        salary_signal_in_step2_benefits_rate=report["salary_signal_in_step2_benefits_rate"],
+        issue_samples=[
+            VacancyV2ConsistencyIssueResponse(
+                opportunity_id=issue["opportunity_id"],
+                title=issue["title"],
+                company=issue["company"],
+                vacancy_blocks_status=issue["vacancy_blocks_status"],
+                vacancy_dimensions_status=issue["vacancy_dimensions_status"],
+                issues=issue["issues"],
+            )
+            for issue in report["issue_samples"]
+        ],
+    )
 
 
 @router.get("/{opportunity_id}")

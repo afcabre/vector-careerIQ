@@ -118,3 +118,31 @@ Una secuencia útil es:
 9. Conversar en el chat sobre los resultados.
 10. Generar materiales de `Postulación`.
 11. Actualizar estado y notas de la vacante.
+
+## 12. Consumir gate de consistencia `Vacancy V2` (operativo técnico)
+Usa este flujo cuando quieras validar calidad de Step 2/Step 3 en lote para una persona.
+
+1. Inicia sesión por API y conserva el `session_token`.
+```bash
+API="http://localhost:8000/api"
+TOKEN=$(curl -s -X POST "$API/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"tutor","password":"change_me"}' | jq -r '.session_token')
+```
+2. Identifica el `person_id`.
+```bash
+curl -s "$API/persons" -H "x-session-id: $TOKEN" | jq
+```
+3. Ejecuta el gate.
+```bash
+PERSON_ID="p-001"
+curl -s "$API/persons/$PERSON_ID/opportunities/vacancy-v2/consistency?sample_limit=20" \
+  -H "x-session-id: $TOKEN" | jq
+```
+4. Revisa principalmente:
+- `salary_transfer_rate`
+- `salary_transfer_missing`
+- `salary_signal_in_step2_benefits`
+- `issue_samples`
+
+Si `salary_transfer_rate` cae a `0.0` y `salary_transfer_missing` es mayor a `0`, considera el gate en falla para salario y abre hardening antes de cerrar integracion de `v2`.

@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `slice 6 frontend + micro-ajuste prompts salary mapping completados y listos como baseline del experimento v2`
+- checkpoint_actual: `consistency gate tecnico para vacancy v2 implementado en backend con endpoint de reporte y pruebas dedicadas`
 - repo_status: `flujo V1 operativo con analisis, postulacion, chat, CV semantico, admin de prompts y extraccion estructurada de vacantes en forma legacy estable; propuesta v2 desacoplada en branch experimental`
 - ultima_actualizacion: `2026-04-21`
 
@@ -47,6 +47,11 @@
 - micro-ajuste de calidad aplicado en Step 2/Step 3: toda señal de salario/compensacion se fuerza por prompt a `work_conditions` (no `benefits`)
 - ajuste aplicado en tres capas: `system_prompt` de servicios, fallback prompts de servicios y templates default en `prompt_config_store`
 - validacion tecnica del ajuste salary mapping: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_blocks_service tests.test_vacancy_dimensions_service` en verde (`12 tests`)
+- consistency gate tecnico implementado en backend para `vacancy v2`: metrica de traspaso salary Step 2 -> Step 3, deteccion de salary mal clasificado en `benefits` y muestreo de incidencias por oportunidad
+- endpoint nuevo de reporte por persona: `GET /persons/{person_id}/opportunities/vacancy-v2/consistency?sample_limit=20`
+- pruebas dedicadas del consistency gate en verde: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_v2_consistency_gate` (`2 tests`)
+- prueba de no-regresion de endpoints v2 existente en verde: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_v2_endpoints` (`6 tests`)
+- consumo del consistency gate documentado paso a paso en `README.md` y `guia_uso.md` (login, obtencion de `person_id`, invocacion endpoint e interpretacion de metricas)
 - decision de rediseño registrada: `v2` arranca sin `JobCriteriaMapper`
 - decision de rediseño registrada: Paso 2 persiste como `vacancy_blocks` con claves fijas, `warnings`, `coverage_notes` y texto limpio por bloque
 - decision de rediseño registrada: Paso 2 incluye `contract_version` explicito en la raiz del artefacto
@@ -94,6 +99,6 @@
 - el experimento de nueva estructura de vacante no debe reintroducirse sobre este baseline ni conectarse al extractor estable antes de acuerdo
 
 ## Siguiente Actividad
-- ejecutar consistency gate de vacantes v2 (10-20 casos reales) y medir traspaso salary Step 2 -> Step 3
-- abrir micro-slice de hardening adicional solo si consistency gate falla umbral esperado
+- ejecutar consistency gate en datos reales (10-20 vacantes) usando el endpoint y revisar incidencias muestreadas
+- abrir micro-slice de hardening adicional solo si el gate reporta `salary_transfer_missing` o `salary_signal_in_step2_benefits` por encima del umbral esperado
 - mantener analisis legacy sin integracion v2 hasta validar calidad con datos reales
