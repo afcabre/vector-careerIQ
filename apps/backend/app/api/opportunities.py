@@ -54,6 +54,14 @@ from app.services.opportunity_store import (
 )
 from app.services.opportunity_profile_service import extract_structured_opportunity_profile
 from app.services.person_store import get_person
+from app.services.vacancy_blocks_service import (
+    VacancyBlocksExtractionError,
+    extract_vacancy_blocks,
+)
+from app.services.vacancy_dimensions_service import (
+    VacancyDimensionsExtractionError,
+    extract_vacancy_dimensions,
+)
 
 
 router = APIRouter()
@@ -619,6 +627,294 @@ async def recompute_vacancy_profile_stream(
                 "message_complete",
                 {
                     "opportunity": updated,
+                },
+            )
+        except Exception as exc:  # pragma: no cover - stream runtime path
+            yield _serialize_sse(
+                "error",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "detail": str(exc),
+                },
+            )
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.post("/{opportunity_id}/vacancy-blocks/recompute")
+def recompute_vacancy_blocks(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+    settings: Settings = Depends(get_settings),
+) -> OpportunityResponse:
+    _require_person(person_id)
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+    try:
+        artifact = extract_vacancy_blocks(opportunity, settings)
+    except VacancyBlocksExtractionError as exc:
+        update_saved_opportunity(
+            person_id=person_id,
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_blocks_status="error",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    updated = update_saved_opportunity(
+        person_id=person_id,
+        opportunity_id=opportunity_id,
+        status=None,
+        notes=None,
+        vacancy_blocks_artifact=artifact,
+        vacancy_blocks_status="draft",
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Could not recompute vacancy blocks",
+        )
+    return _to_response(updated)
+
+
+@router.post("/{opportunity_id}/vacancy-blocks/recompute/stream")
+async def recompute_vacancy_blocks_stream(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+    settings: Settings = Depends(get_settings),
+) -> StreamingResponse:
+    _require_person(person_id)
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    async def event_generator():
+        try:
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "vacancy_blocks_recompute_started",
+                },
+            )
+            await asyncio.sleep(0)
+
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "vacancy_blocks_extracting",
+                },
+            )
+            await asyncio.sleep(0)
+
+            artifact = extract_vacancy_blocks(opportunity, settings)
+
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "vacancy_blocks_saving",
+                },
+            )
+            await asyncio.sleep(0)
+
+            updated = update_saved_opportunity(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                status=None,
+                notes=None,
+                vacancy_blocks_artifact=artifact,
+                vacancy_blocks_status="draft",
+            )
+            if not updated:
+                raise RuntimeError("Could not recompute vacancy blocks")
+
+            yield _serialize_sse(
+                "message_complete",
+                {
+                    "opportunity": updated,
+                },
+            )
+        except VacancyBlocksExtractionError as exc:
+            update_saved_opportunity(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                status=None,
+                notes=None,
+                vacancy_blocks_status="error",
+            )
+            yield _serialize_sse(
+                "error",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "detail": str(exc),
+                },
+            )
+        except Exception as exc:  # pragma: no cover - stream runtime path
+            yield _serialize_sse(
+                "error",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "detail": str(exc),
+                },
+            )
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.post("/{opportunity_id}/vacancy-dimensions/recompute")
+def recompute_vacancy_dimensions(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+    settings: Settings = Depends(get_settings),
+) -> OpportunityResponse:
+    _require_person(person_id)
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    try:
+        artifact = extract_vacancy_dimensions(
+            opportunity=opportunity,
+            vacancy_blocks_artifact=opportunity.get("vacancy_blocks_artifact", {}),
+            settings=settings,
+        )
+    except VacancyDimensionsExtractionError as exc:
+        update_saved_opportunity(
+            person_id=person_id,
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_dimensions_status="error",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    updated = update_saved_opportunity(
+        person_id=person_id,
+        opportunity_id=opportunity_id,
+        status=None,
+        notes=None,
+        vacancy_dimensions_artifact=artifact,
+        vacancy_dimensions_status="draft",
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Could not recompute vacancy dimensions",
+        )
+    return _to_response(updated)
+
+
+@router.post("/{opportunity_id}/vacancy-dimensions/recompute/stream")
+async def recompute_vacancy_dimensions_stream(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+    settings: Settings = Depends(get_settings),
+) -> StreamingResponse:
+    _require_person(person_id)
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    async def event_generator():
+        try:
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "vacancy_dimensions_recompute_started",
+                },
+            )
+            await asyncio.sleep(0)
+
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "vacancy_dimensions_extracting",
+                },
+            )
+            await asyncio.sleep(0)
+
+            artifact = extract_vacancy_dimensions(
+                opportunity=opportunity,
+                vacancy_blocks_artifact=opportunity.get("vacancy_blocks_artifact", {}),
+                settings=settings,
+            )
+
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "vacancy_dimensions_saving",
+                },
+            )
+            await asyncio.sleep(0)
+
+            updated = update_saved_opportunity(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                status=None,
+                notes=None,
+                vacancy_dimensions_artifact=artifact,
+                vacancy_dimensions_status="draft",
+            )
+            if not updated:
+                raise RuntimeError("Could not recompute vacancy dimensions")
+
+            yield _serialize_sse(
+                "message_complete",
+                {
+                    "opportunity": updated,
+                },
+            )
+        except VacancyDimensionsExtractionError as exc:
+            update_saved_opportunity(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                status=None,
+                notes=None,
+                vacancy_dimensions_status="error",
+            )
+            yield _serialize_sse(
+                "error",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "detail": str(exc),
                 },
             )
         except Exception as exc:  # pragma: no cover - stream runtime path

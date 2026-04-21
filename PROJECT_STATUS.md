@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `baseline estable de extraccion de vacantes restaurado; contrato de estructura v2 aislado para revision sin integracion runtime`
+- checkpoint_actual: `slice 5 backend completado: endpoints de recomputo y SSE para vacancy_blocks/vacancy_dimensions en paralelo al legacy`
 - repo_status: `flujo V1 operativo con analisis, postulacion, chat, CV semantico, admin de prompts y extraccion estructurada de vacantes en forma legacy estable; propuesta v2 desacoplada en branch experimental`
 - ultima_actualizacion: `2026-04-21`
 
@@ -35,6 +35,10 @@
 - Slice 2 validado tecnicamente: `py_compile` y `unittest` dedicados en verde para contratos de Paso 2 y Paso 3
 - Slice 3 de servicio `vacancy_blocks` implementado con flow dedicado `task_vacancy_blocks_extract` y pruebas unitarias dedicadas
 - decision de rediseño registrada: Paso 2 opera `LLM-first` sin fallback heuristico de clasificacion; ante entrada invalida o salida LLM invalida falla de forma controlada
+- Slice 4 de servicio `vacancy_dimensions` implementado con flow dedicado `task_vacancy_dimensions_extract` y pruebas unitarias dedicadas
+- decision de rediseño registrada: Paso 3 opera `LLM-first` sin fallback heuristico de atomizacion; ante entrada Paso 2 invalida o salida LLM invalida falla de forma controlada
+- Slice 5 backend implementado: endpoints `recompute` y `recompute/stream` para `vacancy_blocks` y `vacancy_dimensions`, con persistencia de estado `draft/error` y etapas SSE por flujo
+- Slice 5 validado tecnicamente en `apps/backend/.venv`: `python -m unittest tests.test_vacancy_v2_endpoints` en verde (`6 tests`)
 - decision de rediseño registrada: `v2` arranca sin `JobCriteriaMapper`
 - decision de rediseño registrada: Paso 2 persiste como `vacancy_blocks` con claves fijas, `warnings`, `coverage_notes` y texto limpio por bloque
 - decision de rediseño registrada: Paso 2 incluye `contract_version` explicito en la raiz del artefacto
@@ -82,7 +86,7 @@
 - el experimento de nueva estructura de vacante no debe reintroducirse sobre este baseline ni conectarse al extractor estable antes de acuerdo
 
 ## Siguiente Actividad
-- consolidar commit limpio del Slice 2 y Slice 3 ya implementados
+- consolidar commit limpio del Slice 5 ya implementado
+- abrir Slice 6 con panel experimental frontend para inspeccion y aprobacion de `vacancy_blocks`/`vacancy_dimensions`
 - definir schema interno y defaults de runtime para `vacancy_v2` sin exponer admin
-- implementar Paso 2 y Paso 3 en paralelo al legacy
-- dejar endpoints y UI experimentales separados antes de tocar analisis
+- mantener analisis legacy sin integracion v2 hasta validar calidad con datos reales
