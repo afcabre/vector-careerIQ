@@ -82,6 +82,10 @@ from app.services.vacancy_retrieval_evidence_service import (
     VacancyRetrievalEvidenceBuildError,
     build_vacancy_retrieval_evidence,
 )
+from app.services.vacancy_evidence_analysis_service import (
+    VacancyEvidenceAnalysisBuildError,
+    build_vacancy_evidence_analysis,
+)
 
 
 router = APIRouter()
@@ -121,6 +125,9 @@ class OpportunityResponse(BaseModel):
     vacancy_retrieval_evidence_artifact: dict[str, Any]
     vacancy_retrieval_evidence_status: str
     vacancy_retrieval_evidence_generated_at: str
+    vacancy_evidence_analysis_artifact: dict[str, Any]
+    vacancy_evidence_analysis_status: str
+    vacancy_evidence_analysis_generated_at: str
     created_at: str
     updated_at: str
 
@@ -214,6 +221,8 @@ class UpdateOpportunityRequest(BaseModel):
     vacancy_retrieval_queries_status: str | None = Field(default=None)
     vacancy_retrieval_evidence_artifact: dict[str, Any] | None = Field(default=None)
     vacancy_retrieval_evidence_status: str | None = Field(default=None)
+    vacancy_evidence_analysis_artifact: dict[str, Any] | None = Field(default=None)
+    vacancy_evidence_analysis_status: str | None = Field(default=None)
 
 
 class ActionRequest(BaseModel):
@@ -603,6 +612,14 @@ def update_opportunity(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Invalid vacancy_retrieval_evidence_status",
         )
+    if (
+        payload.vacancy_evidence_analysis_status is not None
+        and payload.vacancy_evidence_analysis_status not in VACANCY_V2_ARTIFACT_STATUSES
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid vacancy_evidence_analysis_status",
+        )
 
     item = update_saved_opportunity(
         person_id=person_id,
@@ -623,6 +640,8 @@ def update_opportunity(
         vacancy_retrieval_queries_status=payload.vacancy_retrieval_queries_status,
         vacancy_retrieval_evidence_artifact=payload.vacancy_retrieval_evidence_artifact,
         vacancy_retrieval_evidence_status=payload.vacancy_retrieval_evidence_status,
+        vacancy_evidence_analysis_artifact=payload.vacancy_evidence_analysis_artifact,
+        vacancy_evidence_analysis_status=payload.vacancy_evidence_analysis_status,
     )
     if not item:
         existing = find_opportunity(person_id, opportunity_id)
@@ -1417,6 +1436,151 @@ async def recompute_vacancy_retrieval_evidence_stream(
                 status=None,
                 notes=None,
                 vacancy_retrieval_evidence_status="error",
+            )
+            yield _serialize_sse(
+                "error",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "detail": str(exc),
+                },
+            )
+        except Exception as exc:  # pragma: no cover - stream runtime path
+            yield _serialize_sse(
+                "error",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "detail": str(exc),
+                },
+            )
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.post("/{opportunity_id}/vacancy-evidence-analysis/recompute")
+def recompute_vacancy_evidence_analysis(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+) -> OpportunityResponse:
+    _require_person(person_id)
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    try:
+        artifact = build_vacancy_evidence_analysis(
+            opportunity=opportunity,
+            vacancy_retrieval_evidence_artifact=opportunity.get("vacancy_retrieval_evidence_artifact", {}),
+        )
+    except VacancyEvidenceAnalysisBuildError as exc:
+        update_saved_opportunity(
+            person_id=person_id,
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_evidence_analysis_status="error",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    updated = update_saved_opportunity(
+        person_id=person_id,
+        opportunity_id=opportunity_id,
+        status=None,
+        notes=None,
+        vacancy_evidence_analysis_artifact=artifact,
+        vacancy_evidence_analysis_status="draft",
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Could not recompute vacancy evidence analysis",
+        )
+    return _to_response(updated)
+
+
+@router.post("/{opportunity_id}/vacancy-evidence-analysis/recompute/stream")
+async def recompute_vacancy_evidence_analysis_stream(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+) -> StreamingResponse:
+    _require_person(person_id)
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    async def event_generator():
+        try:
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "vacancy_evidence_analysis_recompute_started",
+                },
+            )
+            await asyncio.sleep(0)
+
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "vacancy_evidence_analysis_building",
+                },
+            )
+            await asyncio.sleep(0)
+
+            artifact = build_vacancy_evidence_analysis(
+                opportunity=opportunity,
+                vacancy_retrieval_evidence_artifact=opportunity.get("vacancy_retrieval_evidence_artifact", {}),
+            )
+
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "vacancy_evidence_analysis_saving",
+                },
+            )
+            await asyncio.sleep(0)
+
+            updated = update_saved_opportunity(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                status=None,
+                notes=None,
+                vacancy_evidence_analysis_artifact=artifact,
+                vacancy_evidence_analysis_status="draft",
+            )
+            if not updated:
+                raise RuntimeError("Could not recompute vacancy evidence analysis")
+
+            yield _serialize_sse(
+                "message_complete",
+                {
+                    "opportunity": updated,
+                },
+            )
+        except VacancyEvidenceAnalysisBuildError as exc:
+            update_saved_opportunity(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                status=None,
+                notes=None,
+                vacancy_evidence_analysis_status="error",
             )
             yield _serialize_sse(
                 "error",

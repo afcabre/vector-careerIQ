@@ -632,12 +632,103 @@ Regla:
   - falla de forma controlada si no existe `vacancy_retrieval_queries.v1` valido o si no hay CV activo/indexado
   - no falla por ausencia de matches; en ese caso persiste evidencia vacia por item
 
-## Criterio propuesto de lectura de scores
-- `score > 0.85`: evidencia casi textual
-- `score >= 0.70 y <= 0.85`: evidencia semantica razonable
-- `score < 0.60`: probable ruido o senal debil
+## Criterio operativo acordado para clasificacion en S6
+- `score >= 0.75`: evidencia fuerte
+- `score >= 0.45 y < 0.75`: evidencia util
+- `score >= 0.30 y < 0.45`: evidencia debil o para revision
+- `score < 0.30`: probable ruido
 
-Este criterio es operativo y debe validarse con corridas reales antes de tratarse como regla cerrada de producto.
+Reglas:
+- este criterio no aplica para aceptar o borrar matches en `S5`
+- `S5` persiste toda la evidencia recuperada
+- `S6` decide que pasa a analisis principal y que queda como `discarded`
+- lo `discarded` no se elimina; debe conservarse con razon explicita
+- los umbrales quedan expuestos en Runtime IA para ajuste operativo sin tocar codigo
+
+## Paso 6 implementado para consolidacion deterministica de evidencia
+Objetivo:
+- consolidar la evidencia recuperada en `S5` por item, deduplicar por fragmento y dejar una lectura trazable para analisis posterior
+
+Artefacto:
+- `vacancy_evidence_analysis.v1`
+
+Output esperado:
+```json
+{
+  "contract_version": "vacancy_evidence_analysis.v1",
+  "vacancy_id": "VAL-123",
+  "generated_at": "2026-04-24T15:00:00Z",
+  "thresholds": {
+    "strong_min": 0.75,
+    "useful_min": 0.45,
+    "review_min": 0.30
+  },
+  "analysis": {
+    "responsibilities": [
+      {
+        "item_id": "resp_ab12cd34ef",
+        "item_index": 0,
+        "group_code": "resp",
+        "raw_text": "Liderar equipo de desarrollo",
+        "item_status": "useful_evidence",
+        "best_score": 0.62,
+        "raw_match_count": 3,
+        "accepted_match_count": 1,
+        "discarded_match_count": 1,
+        "distinct_query_hits": 2,
+        "best_evidence": [
+          {
+            "source_ref": "cv:block:17",
+            "snippet": "Lidere un equipo de 6 desarrolladores",
+            "best_score": 0.62,
+            "query_texts": ["liderazgo de equipos", "gestion de programadores"],
+            "query_indexes": [0, 1],
+            "section": "experience",
+            "block_type": "bullet",
+            "block_title": "Engineering",
+            "raw_match_count": 2
+          }
+        ],
+        "accepted_matches": [],
+        "discarded_matches": [
+          {
+            "source_ref": "cv:block:44",
+            "snippet": "Participe en reuniones tecnicas",
+            "best_score": 0.24,
+            "query_texts": ["liderazgo de equipos"],
+            "query_indexes": [0],
+            "section": "experience",
+            "block_type": "bullet",
+            "block_title": "Engineering",
+            "raw_match_count": 1,
+            "discard_reason": "score_below_review_threshold"
+          }
+        ]
+      }
+    ],
+    "required_criteria": [],
+    "desirable_criteria": [],
+    "benefits": [],
+    "about_the_company": [],
+    "work_conditions": {
+      "salary": [],
+      "modality": [],
+      "location": [],
+      "contract_type": [],
+      "other_conditions": []
+    }
+  }
+}
+```
+
+Reglas:
+- `snippet` representa el fragmento recuperado por retrieval; no reemplaza el texto completo del CV
+- `best_evidence` es una lista corta, no un solo item
+- `S6` no consulta Pinecone y no usa LLM
+- `S6` deduplica por `source_ref + snippet`
+- `S6` consolida queries repetidas sobre el mismo fragmento
+- `S6` no borra evidencia cruda de `S5`; `S5` sigue siendo la fuente detallada
+- `S7` debe consumir principalmente `S6` y apoyarse en `S5` solo si necesita inspeccion mas profunda
 
 ## Ambiguedades abiertas de Paso 3
 - falta confirmar si `vacancy_dimensions.v2` debe generarse en un solo paso logico con `Paso 3 + Paso 3.1` o si ambos artefactos deben persistirse por separado

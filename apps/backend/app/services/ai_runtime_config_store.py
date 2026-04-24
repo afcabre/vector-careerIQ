@@ -46,6 +46,9 @@ DEFAULT_INTERVIEW_RESEARCH_MAX_STEPS = 5
 RETRIEVAL_QUERIES_PER_ITEM_MIN = 1
 RETRIEVAL_QUERIES_PER_ITEM_MAX = 5
 DEFAULT_VACANCY_RETRIEVAL_QUERIES_PER_ITEM = 2
+DEFAULT_VACANCY_RETRIEVAL_SCORE_STRONG_MIN = 0.75
+DEFAULT_VACANCY_RETRIEVAL_SCORE_USEFUL_MIN = 0.45
+DEFAULT_VACANCY_RETRIEVAL_SCORE_REVIEW_MIN = 0.30
 
 
 class AIRuntimeConfigRecord(TypedDict):
@@ -59,6 +62,9 @@ class AIRuntimeConfigRecord(TypedDict):
     interview_research_mode: str
     interview_research_max_steps: int
     vacancy_retrieval_queries_per_item: int
+    vacancy_retrieval_score_strong_min: float
+    vacancy_retrieval_score_useful_min: float
+    vacancy_retrieval_score_review_min: float
     trace_truncation_enabled: bool
     updated_by: str
     created_at: str
@@ -91,6 +97,9 @@ def _default_config() -> AIRuntimeConfigRecord:
         interview_research_mode=DEFAULT_INTERVIEW_RESEARCH_MODE,
         interview_research_max_steps=DEFAULT_INTERVIEW_RESEARCH_MAX_STEPS,
         vacancy_retrieval_queries_per_item=DEFAULT_VACANCY_RETRIEVAL_QUERIES_PER_ITEM,
+        vacancy_retrieval_score_strong_min=DEFAULT_VACANCY_RETRIEVAL_SCORE_STRONG_MIN,
+        vacancy_retrieval_score_useful_min=DEFAULT_VACANCY_RETRIEVAL_SCORE_USEFUL_MIN,
+        vacancy_retrieval_score_review_min=DEFAULT_VACANCY_RETRIEVAL_SCORE_REVIEW_MIN,
         trace_truncation_enabled=True,
         updated_by="system",
         created_at=now,
@@ -119,6 +128,18 @@ def _coerce_retrieval_queries_per_item(value: Any, default: int) -> int:
         return RETRIEVAL_QUERIES_PER_ITEM_MIN
     if number > RETRIEVAL_QUERIES_PER_ITEM_MAX:
         return RETRIEVAL_QUERIES_PER_ITEM_MAX
+    return number
+
+
+def _coerce_score_threshold(value: Any, default: float) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    if number < 0.0:
+        return 0.0
+    if number > 1.0:
+        return 1.0
     return number
 
 
@@ -194,6 +215,18 @@ def _normalize_firestore_record(payload: dict[str, Any] | None) -> AIRuntimeConf
         vacancy_retrieval_queries_per_item=_coerce_retrieval_queries_per_item(
             source.get("vacancy_retrieval_queries_per_item"),
             base["vacancy_retrieval_queries_per_item"],
+        ),
+        vacancy_retrieval_score_strong_min=_coerce_score_threshold(
+            source.get("vacancy_retrieval_score_strong_min"),
+            base["vacancy_retrieval_score_strong_min"],
+        ),
+        vacancy_retrieval_score_useful_min=_coerce_score_threshold(
+            source.get("vacancy_retrieval_score_useful_min"),
+            base["vacancy_retrieval_score_useful_min"],
+        ),
+        vacancy_retrieval_score_review_min=_coerce_score_threshold(
+            source.get("vacancy_retrieval_score_review_min"),
+            base["vacancy_retrieval_score_review_min"],
         ),
         trace_truncation_enabled=bool(
             source.get("trace_truncation_enabled", base["trace_truncation_enabled"])
@@ -282,6 +315,13 @@ def _validate_retrieval_queries_per_item(value: int) -> int:
     return number
 
 
+def _validate_score_threshold(value: float, field_name: str) -> float:
+    number = float(value)
+    if number < 0.0 or number > 1.0:
+        raise ValueError(f"{field_name} must be between 0.0 and 1.0")
+    return number
+
+
 def _validate_cv_chunking_strategy(value: str) -> str:
     normalized = str(value).strip().lower()
     if normalized not in CV_CHUNKING_STRATEGIES:
@@ -308,6 +348,23 @@ def _validate_retrieval_evidence_persistence_mode(value: str) -> str:
     return normalized
 
 
+def _validate_vacancy_retrieval_score_threshold_order(
+    strong_min: float,
+    useful_min: float,
+    review_min: float,
+) -> None:
+    if strong_min < useful_min:
+        raise ValueError(
+            "vacancy_retrieval_score_strong_min must be greater than or equal to "
+            "vacancy_retrieval_score_useful_min"
+        )
+    if useful_min < review_min:
+        raise ValueError(
+            "vacancy_retrieval_score_useful_min must be greater than or equal to "
+            "vacancy_retrieval_score_review_min"
+        )
+
+
 def update_ai_runtime_config(
     *,
     top_k_semantic_analysis: int | None = None,
@@ -319,6 +376,9 @@ def update_ai_runtime_config(
     interview_research_mode: str | None = None,
     interview_research_max_steps: int | None = None,
     vacancy_retrieval_queries_per_item: int | None = None,
+    vacancy_retrieval_score_strong_min: float | None = None,
+    vacancy_retrieval_score_useful_min: float | None = None,
+    vacancy_retrieval_score_review_min: float | None = None,
     trace_truncation_enabled: bool | None = None,
     updated_by: str,
 ) -> AIRuntimeConfigRecord:
@@ -365,6 +425,26 @@ def update_ai_runtime_config(
         current["vacancy_retrieval_queries_per_item"] = _validate_retrieval_queries_per_item(
             vacancy_retrieval_queries_per_item
         )
+    if vacancy_retrieval_score_strong_min is not None:
+        current["vacancy_retrieval_score_strong_min"] = _validate_score_threshold(
+            vacancy_retrieval_score_strong_min,
+            "vacancy_retrieval_score_strong_min",
+        )
+    if vacancy_retrieval_score_useful_min is not None:
+        current["vacancy_retrieval_score_useful_min"] = _validate_score_threshold(
+            vacancy_retrieval_score_useful_min,
+            "vacancy_retrieval_score_useful_min",
+        )
+    if vacancy_retrieval_score_review_min is not None:
+        current["vacancy_retrieval_score_review_min"] = _validate_score_threshold(
+            vacancy_retrieval_score_review_min,
+            "vacancy_retrieval_score_review_min",
+        )
+    _validate_vacancy_retrieval_score_threshold_order(
+        current["vacancy_retrieval_score_strong_min"],
+        current["vacancy_retrieval_score_useful_min"],
+        current["vacancy_retrieval_score_review_min"],
+    )
     if trace_truncation_enabled is not None:
         current["trace_truncation_enabled"] = bool(trace_truncation_enabled)
 

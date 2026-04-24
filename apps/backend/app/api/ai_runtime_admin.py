@@ -30,6 +30,9 @@ class AIRuntimeConfigResponse(BaseModel):
     interview_research_mode: str
     interview_research_max_steps: int
     vacancy_retrieval_queries_per_item: int
+    vacancy_retrieval_score_strong_min: float
+    vacancy_retrieval_score_useful_min: float
+    vacancy_retrieval_score_review_min: float
     trace_truncation_enabled: bool
     updated_by: str
     created_at: str
@@ -66,6 +69,9 @@ class UpdateAIRuntimeConfigRequest(BaseModel):
         ge=RETRIEVAL_QUERIES_PER_ITEM_MIN,
         le=RETRIEVAL_QUERIES_PER_ITEM_MAX,
     )
+    vacancy_retrieval_score_strong_min: float | None = Field(default=None, ge=0.0, le=1.0)
+    vacancy_retrieval_score_useful_min: float | None = Field(default=None, ge=0.0, le=1.0)
+    vacancy_retrieval_score_review_min: float | None = Field(default=None, ge=0.0, le=1.0)
     trace_truncation_enabled: bool | None = None
 
 
@@ -91,6 +97,9 @@ def patch_config(
         and payload.interview_research_mode is None
         and payload.interview_research_max_steps is None
         and payload.vacancy_retrieval_queries_per_item is None
+        and payload.vacancy_retrieval_score_strong_min is None
+        and payload.vacancy_retrieval_score_useful_min is None
+        and payload.vacancy_retrieval_score_review_min is None
         and payload.trace_truncation_enabled is None
     ):
         raise HTTPException(
@@ -124,6 +133,9 @@ def patch_config(
             interview_research_mode=payload.interview_research_mode,
             interview_research_max_steps=payload.interview_research_max_steps,
             vacancy_retrieval_queries_per_item=payload.vacancy_retrieval_queries_per_item,
+            vacancy_retrieval_score_strong_min=payload.vacancy_retrieval_score_strong_min,
+            vacancy_retrieval_score_useful_min=payload.vacancy_retrieval_score_useful_min,
+            vacancy_retrieval_score_review_min=payload.vacancy_retrieval_score_review_min,
             trace_truncation_enabled=payload.trace_truncation_enabled,
             updated_by=session.username,
         )

@@ -55,6 +55,7 @@ import {
   recomputeOpportunityVacancyProfile,
   recomputeOpportunityVacancyRetrievalQueries,
   recomputeOpportunityVacancyRetrievalEvidence,
+  recomputeOpportunityVacancyEvidenceAnalysis,
   recomputeOpportunityVacancySalary,
   saveOpportunityFromSearch,
   searchOpportunities,
@@ -380,6 +381,8 @@ const AI_RUNTIME_TOP_K_MIN = 4;
 const AI_RUNTIME_TOP_K_MAX = 30;
 const AI_RUNTIME_INTERVIEW_STEPS_MIN = 3;
 const AI_RUNTIME_INTERVIEW_STEPS_MAX = 8;
+const AI_RUNTIME_SCORE_THRESHOLD_MIN = 0;
+const AI_RUNTIME_SCORE_THRESHOLD_MAX = 1;
 
 type PromptConfigDraft = {
   template_text: string;
@@ -1537,6 +1540,12 @@ export default function App() {
   const [aiRuntimeInterviewMaxStepsInput, setAiRuntimeInterviewMaxStepsInput] = useState("");
   const [aiRuntimeVacancyRetrievalQueriesPerItemInput, setAiRuntimeVacancyRetrievalQueriesPerItemInput] =
     useState("");
+  const [aiRuntimeVacancyRetrievalScoreStrongMinInput, setAiRuntimeVacancyRetrievalScoreStrongMinInput] =
+    useState("");
+  const [aiRuntimeVacancyRetrievalScoreUsefulMinInput, setAiRuntimeVacancyRetrievalScoreUsefulMinInput] =
+    useState("");
+  const [aiRuntimeVacancyRetrievalScoreReviewMinInput, setAiRuntimeVacancyRetrievalScoreReviewMinInput] =
+    useState("");
   const [aiRuntimeTraceTruncationEnabled, setAiRuntimeTraceTruncationEnabled] = useState(true);
   const [isLoadingAiRuntimeConfig, setIsLoadingAiRuntimeConfig] = useState(false);
   const [isSavingAiRuntimeConfig, setIsSavingAiRuntimeConfig] = useState(false);
@@ -1599,6 +1608,8 @@ export default function App() {
   const [recomputingVacancyRetrievalQueriesId, setRecomputingVacancyRetrievalQueriesId] =
     useState<string | null>(null);
   const [recomputingVacancyRetrievalEvidenceId, setRecomputingVacancyRetrievalEvidenceId] =
+    useState<string | null>(null);
+  const [recomputingVacancyEvidenceAnalysisId, setRecomputingVacancyEvidenceAnalysisId] =
     useState<string | null>(null);
   const [updatingVacancyV2StatusKey, setUpdatingVacancyV2StatusKey] = useState<string | null>(null);
   const [opportunityProfileDrafts, setOpportunityProfileDrafts] = useState<
@@ -1786,6 +1797,9 @@ export default function App() {
         setAiRuntimeInterviewResearchModeInput("guided");
         setAiRuntimeInterviewMaxStepsInput("");
         setAiRuntimeVacancyRetrievalQueriesPerItemInput("");
+        setAiRuntimeVacancyRetrievalScoreStrongMinInput("");
+        setAiRuntimeVacancyRetrievalScoreUsefulMinInput("");
+        setAiRuntimeVacancyRetrievalScoreReviewMinInput("");
         setSearchProviderConfigs([]);
         setPromptConfigs([]);
         setPromptConfigDrafts({});
@@ -1816,6 +1830,15 @@ export default function App() {
         setAiRuntimeInterviewMaxStepsInput(String(runtimeConfig.interview_research_max_steps));
         setAiRuntimeVacancyRetrievalQueriesPerItemInput(
           String(runtimeConfig.vacancy_retrieval_queries_per_item)
+        );
+        setAiRuntimeVacancyRetrievalScoreStrongMinInput(
+          String(runtimeConfig.vacancy_retrieval_score_strong_min)
+        );
+        setAiRuntimeVacancyRetrievalScoreUsefulMinInput(
+          String(runtimeConfig.vacancy_retrieval_score_useful_min)
+        );
+        setAiRuntimeVacancyRetrievalScoreReviewMinInput(
+          String(runtimeConfig.vacancy_retrieval_score_review_min)
         );
         setAiRuntimeTraceTruncationEnabled(runtimeConfig.trace_truncation_enabled);
       } catch (error) {
@@ -2708,6 +2731,15 @@ export default function App() {
       aiRuntimeVacancyRetrievalQueriesPerItemInput,
       10
     );
+    const parsedRetrievalScoreStrongMin = Number.parseFloat(
+      aiRuntimeVacancyRetrievalScoreStrongMinInput
+    );
+    const parsedRetrievalScoreUsefulMin = Number.parseFloat(
+      aiRuntimeVacancyRetrievalScoreUsefulMinInput
+    );
+    const parsedRetrievalScoreReviewMin = Number.parseFloat(
+      aiRuntimeVacancyRetrievalScoreReviewMinInput
+    );
 
     if (
       !Number.isFinite(parsedAnalysis) ||
@@ -2759,6 +2791,38 @@ export default function App() {
       return;
     }
     if (
+      !Number.isFinite(parsedRetrievalScoreStrongMin) ||
+      parsedRetrievalScoreStrongMin < AI_RUNTIME_SCORE_THRESHOLD_MIN ||
+      parsedRetrievalScoreStrongMin > AI_RUNTIME_SCORE_THRESHOLD_MAX
+    ) {
+      setErrorMessage("umbral fuerte de S6 debe estar entre 0.0 y 1.0.");
+      return;
+    }
+    if (
+      !Number.isFinite(parsedRetrievalScoreUsefulMin) ||
+      parsedRetrievalScoreUsefulMin < AI_RUNTIME_SCORE_THRESHOLD_MIN ||
+      parsedRetrievalScoreUsefulMin > AI_RUNTIME_SCORE_THRESHOLD_MAX
+    ) {
+      setErrorMessage("umbral util de S6 debe estar entre 0.0 y 1.0.");
+      return;
+    }
+    if (
+      !Number.isFinite(parsedRetrievalScoreReviewMin) ||
+      parsedRetrievalScoreReviewMin < AI_RUNTIME_SCORE_THRESHOLD_MIN ||
+      parsedRetrievalScoreReviewMin > AI_RUNTIME_SCORE_THRESHOLD_MAX
+    ) {
+      setErrorMessage("umbral revisar de S6 debe estar entre 0.0 y 1.0.");
+      return;
+    }
+    if (parsedRetrievalScoreStrongMin < parsedRetrievalScoreUsefulMin) {
+      setErrorMessage("umbral fuerte de S6 debe ser mayor o igual al umbral util.");
+      return;
+    }
+    if (parsedRetrievalScoreUsefulMin < parsedRetrievalScoreReviewMin) {
+      setErrorMessage("umbral util de S6 debe ser mayor o igual al umbral revisar.");
+      return;
+    }
+    if (
       aiRuntimeCvChunkingStrategyInput !== "token_window"
       && aiRuntimeCvChunkingStrategyInput !== "semantic_sections"
     ) {
@@ -2792,6 +2856,9 @@ export default function App() {
         interview_research_mode: aiRuntimeInterviewResearchModeInput,
         interview_research_max_steps: parsedInterviewSteps,
         vacancy_retrieval_queries_per_item: parsedRetrievalQueriesPerItem,
+        vacancy_retrieval_score_strong_min: parsedRetrievalScoreStrongMin,
+        vacancy_retrieval_score_useful_min: parsedRetrievalScoreUsefulMin,
+        vacancy_retrieval_score_review_min: parsedRetrievalScoreReviewMin,
         trace_truncation_enabled: aiRuntimeTraceTruncationEnabled,
       });
       setAiRuntimeConfig(updated);
@@ -2804,6 +2871,15 @@ export default function App() {
       setAiRuntimeInterviewMaxStepsInput(String(updated.interview_research_max_steps));
       setAiRuntimeVacancyRetrievalQueriesPerItemInput(
         String(updated.vacancy_retrieval_queries_per_item)
+      );
+      setAiRuntimeVacancyRetrievalScoreStrongMinInput(
+        String(updated.vacancy_retrieval_score_strong_min)
+      );
+      setAiRuntimeVacancyRetrievalScoreUsefulMinInput(
+        String(updated.vacancy_retrieval_score_useful_min)
+      );
+      setAiRuntimeVacancyRetrievalScoreReviewMinInput(
+        String(updated.vacancy_retrieval_score_review_min)
       );
       setAiRuntimeTraceTruncationEnabled(updated.trace_truncation_enabled);
     } catch (error) {
@@ -3386,6 +3462,35 @@ export default function App() {
     }
   }
 
+  async function handleRecomputeVacancyEvidenceAnalysis(item: Opportunity) {
+    if (!selectedPersonId || recomputingVacancyEvidenceAnalysisId) {
+      return;
+    }
+    setRecomputingVacancyEvidenceAnalysisId(item.opportunity_id);
+    setErrorMessage(null);
+    try {
+      await recomputeOpportunityVacancyEvidenceAnalysis(selectedPersonId, item.opportunity_id);
+      const items = await listOpportunities(selectedPersonId);
+      setSavedOpportunities(items);
+      if (selectedOpportunityId === item.opportunity_id) {
+        const refreshed = items.find((entry) => entry.opportunity_id === item.opportunity_id);
+        if (refreshed) {
+          setOpportunityStatus(refreshed.status);
+          setOpportunityNotes(refreshed.notes);
+        }
+      }
+      setToastMessage("Vacancy Evidence Analysis recalculado");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "No se pudo recalcular Vacancy Evidence Analysis";
+      setErrorMessage(message);
+    } finally {
+      setRecomputingVacancyEvidenceAnalysisId(null);
+    }
+  }
+
   async function handleRunVacancyV2Gate() {
     if (!selectedPersonId || isLoadingVacancyV2Gate) {
       return;
@@ -3437,7 +3542,8 @@ export default function App() {
       | "vacancy_salary"
       | "vacancy_dimensions_enriched"
       | "vacancy_retrieval_queries"
-      | "vacancy_retrieval_evidence",
+      | "vacancy_retrieval_evidence"
+      | "vacancy_evidence_analysis",
     status: "none" | "draft" | "approved" | "error"
   ) {
     if (!selectedPersonId || updatingVacancyV2StatusKey) {
@@ -3467,9 +3573,13 @@ export default function App() {
         await updateOpportunity(selectedPersonId, item.opportunity_id, {
           vacancy_retrieval_queries_status: status,
         });
-      } else {
+      } else if (artifact === "vacancy_retrieval_evidence") {
         await updateOpportunity(selectedPersonId, item.opportunity_id, {
           vacancy_retrieval_evidence_status: status,
+        });
+      } else {
+        await updateOpportunity(selectedPersonId, item.opportunity_id, {
+          vacancy_evidence_analysis_status: status,
         });
       }
       const items = await listOpportunities(selectedPersonId);
@@ -4994,6 +5104,52 @@ export default function App() {
                 <p className="metaText">
                   Controla cuantas queries semanticas se piden por item en `task_vacancy_retrieval_queries_extract`.
                 </p>
+                <label className="field">
+                  umbral score fuerte para S6
+                  <input
+                    disabled={isSavingAiRuntimeConfig}
+                    max={AI_RUNTIME_SCORE_THRESHOLD_MAX}
+                    min={AI_RUNTIME_SCORE_THRESHOLD_MIN}
+                    onChange={(event) =>
+                      setAiRuntimeVacancyRetrievalScoreStrongMinInput(event.target.value)
+                    }
+                    step={0.01}
+                    type="number"
+                    value={aiRuntimeVacancyRetrievalScoreStrongMinInput}
+                  />
+                </label>
+                <label className="field">
+                  umbral score util para S6
+                  <input
+                    disabled={isSavingAiRuntimeConfig}
+                    max={AI_RUNTIME_SCORE_THRESHOLD_MAX}
+                    min={AI_RUNTIME_SCORE_THRESHOLD_MIN}
+                    onChange={(event) =>
+                      setAiRuntimeVacancyRetrievalScoreUsefulMinInput(event.target.value)
+                    }
+                    step={0.01}
+                    type="number"
+                    value={aiRuntimeVacancyRetrievalScoreUsefulMinInput}
+                  />
+                </label>
+                <label className="field">
+                  umbral score revisar para S6
+                  <input
+                    disabled={isSavingAiRuntimeConfig}
+                    max={AI_RUNTIME_SCORE_THRESHOLD_MAX}
+                    min={AI_RUNTIME_SCORE_THRESHOLD_MIN}
+                    onChange={(event) =>
+                      setAiRuntimeVacancyRetrievalScoreReviewMinInput(event.target.value)
+                    }
+                    step={0.01}
+                    type="number"
+                    value={aiRuntimeVacancyRetrievalScoreReviewMinInput}
+                  />
+                </label>
+                <p className="metaText">
+                  S5 persiste todo. Estos umbrales se usaran en S6 para clasificar `strong`, `useful`,
+                  `review` y `discarded`, sin borrar evidencia cruda.
+                </p>
                 <label className="checkboxRow">
                   <input
                     checked={aiRuntimeTraceTruncationEnabled}
@@ -6137,6 +6293,8 @@ export default function App() {
                 Object.keys(item.vacancy_retrieval_queries_artifact ?? {}).length > 0;
               const hasVacancyRetrievalEvidenceArtifact =
                 Object.keys(item.vacancy_retrieval_evidence_artifact ?? {}).length > 0;
+              const hasVacancyEvidenceAnalysisArtifact =
+                Object.keys(item.vacancy_evidence_analysis_artifact ?? {}).length > 0;
               const vacancyBlocksStatusLabel = getVacancyV2StatusLabel(item.vacancy_blocks_status);
               const vacancyDimensionsStatusLabel = getVacancyV2StatusLabel(
                 item.vacancy_dimensions_status
@@ -6150,6 +6308,9 @@ export default function App() {
               );
               const vacancyRetrievalEvidenceStatusLabel = getVacancyV2StatusLabel(
                 item.vacancy_retrieval_evidence_status
+              );
+              const vacancyEvidenceAnalysisStatusLabel = getVacancyV2StatusLabel(
+                item.vacancy_evidence_analysis_status
               );
               const vacancyBlocksGeneratedAt = item.vacancy_blocks_generated_at
                 ? formatAiRunTimestamp(item.vacancy_blocks_generated_at)
@@ -6169,6 +6330,9 @@ export default function App() {
               const vacancyRetrievalEvidenceGeneratedAt = item.vacancy_retrieval_evidence_generated_at
                 ? formatAiRunTimestamp(item.vacancy_retrieval_evidence_generated_at)
                 : "Sin generar";
+              const vacancyEvidenceAnalysisGeneratedAt = item.vacancy_evidence_analysis_generated_at
+                ? formatAiRunTimestamp(item.vacancy_evidence_analysis_generated_at)
+                : "Sin generar";
               const isUpdatingVacancyBlocksStatus =
                 updatingVacancyV2StatusKey === `vacancy_blocks:${item.opportunity_id}`;
               const isUpdatingVacancyDimensionsStatus =
@@ -6181,6 +6345,8 @@ export default function App() {
                 updatingVacancyV2StatusKey === `vacancy_retrieval_queries:${item.opportunity_id}`;
               const isUpdatingVacancyRetrievalEvidenceStatus =
                 updatingVacancyV2StatusKey === `vacancy_retrieval_evidence:${item.opportunity_id}`;
+              const isUpdatingVacancyEvidenceAnalysisStatus =
+                updatingVacancyV2StatusKey === `vacancy_evidence_analysis:${item.opportunity_id}`;
               const isSelectedSavedOpportunity = selectedOpportunityId === item.opportunity_id;
               return (
                 <article
@@ -6993,6 +7159,75 @@ export default function App() {
                       ) : (
                         <p className="metaText">
                           Sin artefacto S5. Requiere S4 valido, CV activo e indexado para recuperar evidencia.
+                        </p>
+                      )}
+                    </section>
+
+                    <section className="vacancyV2Section">
+                      <div className="vacancyV2SectionHeader">
+                        <div>
+                          <p className="metaText vacancyV2SectionTitle">
+                            S6 · Vacancy Evidence Analysis
+                          </p>
+                          <p className="metaText">Generado: {vacancyEvidenceAnalysisGeneratedAt}</p>
+                        </div>
+                        <div className="metaChips vacancyV2HeaderChips">
+                          <span
+                            className={`metaChip ${getVacancyV2StatusClassName(item.vacancy_evidence_analysis_status)}`}
+                          >
+                            {vacancyEvidenceAnalysisStatusLabel}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="cardActions">
+                        <button
+                          className="vacancyProfileQuickActionButton"
+                          disabled={
+                            !hasVacancyRetrievalEvidenceArtifact
+                            || recomputingVacancyEvidenceAnalysisId === item.opportunity_id
+                          }
+                          onClick={() => void handleRecomputeVacancyEvidenceAnalysis(item)}
+                          type="button"
+                        >
+                          {recomputingVacancyEvidenceAnalysisId === item.opportunity_id
+                            ? "Recalculando..."
+                            : "Recalcular S6"}
+                        </button>
+                        {hasVacancyEvidenceAnalysisArtifact ? (
+                          <button
+                            className="vacancyProfileQuickActionButton"
+                            disabled={isUpdatingVacancyEvidenceAnalysisStatus}
+                            onClick={() =>
+                              void handleSetVacancyV2Status(
+                                item,
+                                "vacancy_evidence_analysis",
+                                item.vacancy_evidence_analysis_status === "approved"
+                                  ? "draft"
+                                  : "approved"
+                              )}
+                            type="button"
+                          >
+                            {isUpdatingVacancyEvidenceAnalysisStatus
+                              ? "Actualizando..."
+                              : item.vacancy_evidence_analysis_status === "approved"
+                                ? "Marcar borrador"
+                                : "Aprobar S6"}
+                          </button>
+                        ) : null}
+                      </div>
+                      {hasVacancyEvidenceAnalysisArtifact ? (
+                        <label className="field">
+                          JSON S6
+                          <textarea
+                            className="vacancyV2JsonTextarea"
+                            readOnly
+                            rows={14}
+                            value={safePrettyJson(item.vacancy_evidence_analysis_artifact)}
+                          />
+                        </label>
+                      ) : (
+                        <p className="metaText">
+                          Sin artefacto S6. Requiere S5 valido para consolidar y clasificar evidencia.
                         </p>
                       )}
                     </section>

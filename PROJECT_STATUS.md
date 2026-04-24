@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `S5 ya esta expuesto en la UI experimental de Vacancy V2 con recompute, status y JSON para prueba operativa`
+- checkpoint_actual: `S6 ya existe como artefacto deterministico con backend y UI experimental; Runtime IA expone sus umbrales de clasificacion`
 - repo_status: `flujo V1 operativo con analisis, postulacion, chat, CV semantico, admin de prompts y extraccion estructurada de vacantes en forma legacy estable; propuesta v2 desacoplada en branch experimental`
 - ultima_actualizacion: `2026-04-24`
 
@@ -114,6 +114,13 @@
 - validacion tecnica del slice inicial `S5`: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_retrieval_evidence_contract tests.test_vacancy_retrieval_evidence_service tests.test_vacancy_v2_endpoints` en verde (`33 tests`)
 - slice frontend nuevo: la UI experimental de `Vacancy V2` ahora expone `S5` (`Vacancy Retrieval Evidence`) con recompute, visualizacion de `status`/`generated_at`, inspeccion JSON read-only y cambio manual de estado `draft/approved`
 - validacion tecnica del slice frontend `S5`: `npm run build` en `apps/frontend` en verde
+- decision operativa nueva: `S5` persiste toda la evidencia recuperada y no descarta por score; la clasificacion y descarte explicito pasan a `S6`
+- Runtime IA ahora expone umbrales operativos para `S6`: `vacancy_retrieval_score_strong_min`, `vacancy_retrieval_score_useful_min`, `vacancy_retrieval_score_review_min`
+- regla actual documentada para `S6`: `score >= 0.75` fuerte, `>= 0.45` util, `>= 0.30` revision, `< 0.30` probable ruido; estos umbrales se ajustan desde Admin y no afectan persistencia de `S5`
+- `S6` implementado en backend: contrato `vacancy_evidence_analysis.v1`, servicio programatico sin LLM, persistencia propia y endpoints `recompute` / `recompute/stream`
+- `S6` consolida matches de `S5`, deduplica por `source_ref + snippet`, clasifica por umbrales de Admin y produce `accepted_matches`, `discarded_matches`, `best_evidence` e `item_status`
+- slice frontend nuevo: la UI experimental de `Vacancy V2` ahora expone `S6` (`Vacancy Evidence Analysis`) con recompute, visualizacion de `status`/`generated_at`, inspeccion JSON read-only y cambio manual de estado `draft/approved`
+- validacion tecnica del slice `S6`: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_evidence_analysis_contract tests.test_vacancy_evidence_analysis_service tests.test_vacancy_v2_endpoints` en verde (`35 tests`) y `npm run build` en `apps/frontend` en verde
 - validacion funcional nueva: el gate actual `Vacancy V2` mide solo consistencia parcial `S2 -> S3` (`vacancy_blocks` -> `vacancy_dimensions`) y no incorpora aun artefactos `S3.1` ni `S3.9`
 - slice frontend nuevo: la UI experimental de `Vacancy V2` ahora expone `S3.1` (`Vacancy Salary`) y `S3.9` (`Vacancy Dimensions Enriched`) con recompute, visualizacion de `status`/`generated_at`, inspeccion JSON read-only y cambio manual de estado `draft/approved`
 - validacion tecnica del slice frontend `S3.1 + S3.9`: `npm run build` en `apps/frontend` en verde
@@ -171,7 +178,8 @@
 
 ## Siguiente Actividad
 - probar operativamente `S4` (`vacancy_retrieval_queries`) y `S5` (`vacancy_retrieval_evidence`) sobre una oportunidad con CV activo indexado
-- revisar si el artifact de `S5` necesita compactacion visual o una presentacion mas legible que JSON crudo antes de abrir `S6`
+- validar en Admin si los umbrales iniciales de `S6` (`0.75 / 0.45 / 0.30`) reflejan mejor la lectura real de evidencia
 - observar si `S4` aporta valor real para `work_conditions`, `benefits` y `about_the_company` antes de abrir control adicional por tipologia
 - mantener el gate actual solo como chequeo parcial `S2 -> S3`, sin abrir por ahora trabajo dedicado de hardening ni expansion de cobertura
-- despues de validar `S5`, abrir `S6` para analisis/presentacion sobre evidencia por item
+- probar operativamente `S6` sobre una oportunidad con CV activo indexado y revisar si el JSON resultante ya es suficiente para que `S7` consuma sin reconsultar demasiado a `S5`
+- despues de validar `S6`, abrir `S7` para tablas, resumen y presentacion final

@@ -103,6 +103,9 @@ export type Opportunity = {
   vacancy_retrieval_evidence_artifact: Record<string, unknown>;
   vacancy_retrieval_evidence_status: "none" | "draft" | "approved" | "error";
   vacancy_retrieval_evidence_generated_at: string;
+  vacancy_evidence_analysis_artifact: Record<string, unknown>;
+  vacancy_evidence_analysis_status: "none" | "draft" | "approved" | "error";
+  vacancy_evidence_analysis_generated_at: string;
   created_at: string;
   updated_at: string;
 };
@@ -380,6 +383,9 @@ export type AIRuntimeConfig = {
   interview_research_mode: "guided" | "adaptive";
   interview_research_max_steps: number;
   vacancy_retrieval_queries_per_item: number;
+  vacancy_retrieval_score_strong_min: number;
+  vacancy_retrieval_score_useful_min: number;
+  vacancy_retrieval_score_review_min: number;
   trace_truncation_enabled: boolean;
   updated_by: string;
   created_at: string;
@@ -560,6 +566,9 @@ export async function updateAiRuntimeConfig(payload: {
   interview_research_mode?: "guided" | "adaptive";
   interview_research_max_steps?: number;
   vacancy_retrieval_queries_per_item?: number;
+  vacancy_retrieval_score_strong_min?: number;
+  vacancy_retrieval_score_useful_min?: number;
+  vacancy_retrieval_score_review_min?: number;
   trace_truncation_enabled?: boolean;
 }): Promise<AIRuntimeConfig> {
   const response = await safeFetch(`${API_BASE}/admin/ai-runtime-config`, {
@@ -947,6 +956,8 @@ export async function updateOpportunity(
     vacancy_retrieval_queries_status?: "none" | "draft" | "approved" | "error";
     vacancy_retrieval_evidence_artifact?: Record<string, unknown>;
     vacancy_retrieval_evidence_status?: "none" | "draft" | "approved" | "error";
+    vacancy_evidence_analysis_artifact?: Record<string, unknown>;
+    vacancy_evidence_analysis_status?: "none" | "draft" | "approved" | "error";
   }
 ): Promise<Opportunity> {
   const response = await safeFetch(
@@ -1051,6 +1062,20 @@ export async function recomputeOpportunityVacancyRetrievalEvidence(
 ): Promise<Opportunity> {
   const response = await safeFetch(
     `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/vacancy-retrieval-evidence/recompute`,
+    {
+      method: "POST",
+      credentials: "include"
+    }
+  );
+  return parseResponse<Opportunity>(response);
+}
+
+export async function recomputeOpportunityVacancyEvidenceAnalysis(
+  personId: string,
+  opportunityId: string
+): Promise<Opportunity> {
+  const response = await safeFetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/vacancy-evidence-analysis/recompute`,
     {
       method: "POST",
       credentials: "include"

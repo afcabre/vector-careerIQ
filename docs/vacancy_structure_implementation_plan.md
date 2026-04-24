@@ -377,15 +377,43 @@ Regla:
   - tomar `top_k_semantic_per_criterion` desde Runtime IA
   - permitir evidencia vacia por item sin tratarlo como error del paso
 
-### Criterio operativo inicial de lectura de scores
-- `score > 0.85`: evidencia casi textual
-- `score >= 0.70 y <= 0.85`: evidencia semantica razonable
-- `score < 0.60`: probable ruido o senal debil
+### Criterio operativo acordado para clasificacion en S6
+- `score >= 0.75`: evidencia fuerte
+- `score >= 0.45 y < 0.75`: evidencia util
+- `score >= 0.30 y < 0.45`: evidencia debil o para revision
+- `score < 0.30`: probable ruido
 
 Nota:
-- este criterio queda documentado como referencia operativa inicial y debe validarse con corridas reales antes de tratarse como regla cerrada
+- estos umbrales no filtran `S5`
+- `S5` persiste toda la evidencia recuperada
+- `S6` clasifica y decide que entra a analisis principal
+- lo descartado no se borra; se conserva con razon explicita
+- Runtime IA debe exponer estos umbrales para ajuste operativo
 
 ### S6. Analisis y presentacion
+Objetivo:
+- consolidar evidencia de `S5` de forma deterministica antes de cualquier presentacion final
+
+Output esperado:
+- `accepted_matches`
+- `discarded_matches`
+- `best_evidence`
+- `item_status`
+- score consolidado por item
+
+Regla:
+- sin LLM en esta primera iteracion
+- deduplicar por fragmento recuperado, no por query
+- conservar trazabilidad de queries que dispararon cada match
+- usar los umbrales configurados en Runtime IA para clasificacion
+- implementacion actual:
+  - artefacto separado `vacancy_evidence_analysis.v1`
+  - input: `vacancy_retrieval_evidence.v1`
+  - output: `accepted_matches`, `discarded_matches`, `best_evidence`, `item_status`
+  - `best_evidence` queda como lista corta y no como item unico
+  - `snippet` se entiende como fragmento recuperado del retrieval, no como texto completo del CV
+
+### S7. Analisis y presentacion
 Objetivo:
 - construir tablas de alineacion, resumen narrativo y recomendaciones accionables para el candidato
 

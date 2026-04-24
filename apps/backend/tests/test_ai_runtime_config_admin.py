@@ -18,6 +18,9 @@ from app.services.ai_runtime_config_store import (
     DEFAULT_INTERVIEW_RESEARCH_MODE,
     DEFAULT_INTERVIEW_RESEARCH_MAX_STEPS,
     DEFAULT_VACANCY_RETRIEVAL_QUERIES_PER_ITEM,
+    DEFAULT_VACANCY_RETRIEVAL_SCORE_REVIEW_MIN,
+    DEFAULT_VACANCY_RETRIEVAL_SCORE_STRONG_MIN,
+    DEFAULT_VACANCY_RETRIEVAL_SCORE_USEFUL_MIN,
     reset_ai_runtime_config,
     update_ai_runtime_config,
 )
@@ -58,6 +61,18 @@ class AIRuntimeConfigAdminTests(unittest.TestCase):
             response.vacancy_retrieval_queries_per_item,
             DEFAULT_VACANCY_RETRIEVAL_QUERIES_PER_ITEM,
         )
+        self.assertEqual(
+            response.vacancy_retrieval_score_strong_min,
+            DEFAULT_VACANCY_RETRIEVAL_SCORE_STRONG_MIN,
+        )
+        self.assertEqual(
+            response.vacancy_retrieval_score_useful_min,
+            DEFAULT_VACANCY_RETRIEVAL_SCORE_USEFUL_MIN,
+        )
+        self.assertEqual(
+            response.vacancy_retrieval_score_review_min,
+            DEFAULT_VACANCY_RETRIEVAL_SCORE_REVIEW_MIN,
+        )
         self.assertTrue(response.trace_truncation_enabled)
 
     def test_patch_ai_runtime_config_updates_values(self) -> None:
@@ -70,6 +85,9 @@ class AIRuntimeConfigAdminTests(unittest.TestCase):
                 interview_research_mode="adaptive",
                 interview_research_max_steps=6,
                 vacancy_retrieval_queries_per_item=3,
+                vacancy_retrieval_score_strong_min=0.8,
+                vacancy_retrieval_score_useful_min=0.5,
+                vacancy_retrieval_score_review_min=0.35,
                 trace_truncation_enabled=False,
             ),
             session=self.session,
@@ -81,6 +99,9 @@ class AIRuntimeConfigAdminTests(unittest.TestCase):
         self.assertEqual(updated.interview_research_mode, "adaptive")
         self.assertEqual(updated.interview_research_max_steps, 6)
         self.assertEqual(updated.vacancy_retrieval_queries_per_item, 3)
+        self.assertEqual(updated.vacancy_retrieval_score_strong_min, 0.8)
+        self.assertEqual(updated.vacancy_retrieval_score_useful_min, 0.5)
+        self.assertEqual(updated.vacancy_retrieval_score_review_min, 0.35)
         self.assertFalse(updated.trace_truncation_enabled)
         self.assertEqual(updated.updated_by, "tutor")
 
@@ -101,6 +122,17 @@ class AIRuntimeConfigAdminTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             update_ai_runtime_config(
                 vacancy_retrieval_queries_per_item=99,
+                updated_by="tutor",
+            )
+        with self.assertRaises(ValueError):
+            update_ai_runtime_config(
+                vacancy_retrieval_score_strong_min=0.4,
+                vacancy_retrieval_score_useful_min=0.5,
+                updated_by="tutor",
+            )
+        with self.assertRaises(ValueError):
+            update_ai_runtime_config(
+                vacancy_retrieval_score_review_min=1.2,
                 updated_by="tutor",
             )
 
