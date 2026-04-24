@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `S5 backend ya corre como paso programatico con persistencia y endpoints propios; pendiente definir si se expone de inmediato en UI`
+- checkpoint_actual: `S5 ya esta expuesto en la UI experimental de Vacancy V2 con recompute, status y JSON para prueba operativa`
 - repo_status: `flujo V1 operativo con analisis, postulacion, chat, CV semantico, admin de prompts y extraccion estructurada de vacantes en forma legacy estable; propuesta v2 desacoplada en branch experimental`
 - ultima_actualizacion: `2026-04-24`
 
@@ -112,6 +112,8 @@
 - `S5` iniciado en backend: contrato `vacancy_retrieval_evidence.v1`, servicio programatico sin LLM, persistencia propia y endpoints `recompute` / `recompute/stream`
 - `S5` reutiliza `query_cv_matches`, exige CV activo indexado y toma `top_k_semantic_per_criterion` desde Runtime IA
 - validacion tecnica del slice inicial `S5`: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_retrieval_evidence_contract tests.test_vacancy_retrieval_evidence_service tests.test_vacancy_v2_endpoints` en verde (`33 tests`)
+- slice frontend nuevo: la UI experimental de `Vacancy V2` ahora expone `S5` (`Vacancy Retrieval Evidence`) con recompute, visualizacion de `status`/`generated_at`, inspeccion JSON read-only y cambio manual de estado `draft/approved`
+- validacion tecnica del slice frontend `S5`: `npm run build` en `apps/frontend` en verde
 - validacion funcional nueva: el gate actual `Vacancy V2` mide solo consistencia parcial `S2 -> S3` (`vacancy_blocks` -> `vacancy_dimensions`) y no incorpora aun artefactos `S3.1` ni `S3.9`
 - slice frontend nuevo: la UI experimental de `Vacancy V2` ahora expone `S3.1` (`Vacancy Salary`) y `S3.9` (`Vacancy Dimensions Enriched`) con recompute, visualizacion de `status`/`generated_at`, inspeccion JSON read-only y cambio manual de estado `draft/approved`
 - validacion tecnica del slice frontend `S3.1 + S3.9`: `npm run build` en `apps/frontend` en verde
@@ -169,7 +171,7 @@
 
 ## Siguiente Actividad
 - probar operativamente `S4` (`vacancy_retrieval_queries`) y `S5` (`vacancy_retrieval_evidence`) sobre una oportunidad con CV activo indexado
-- decidir si `S5` se expone ya en la UI experimental o si se deja primero como endpoint/backend para validar artefacto
+- revisar si el artifact de `S5` necesita compactacion visual o una presentacion mas legible que JSON crudo antes de abrir `S6`
 - observar si `S4` aporta valor real para `work_conditions`, `benefits` y `about_the_company` antes de abrir control adicional por tipologia
 - mantener el gate actual solo como chequeo parcial `S2 -> S3`, sin abrir por ahora trabajo dedicado de hardening ni expansion de cobertura
 - despues de validar `S5`, abrir `S6` para analisis/presentacion sobre evidencia por item

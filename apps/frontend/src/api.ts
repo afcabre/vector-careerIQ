@@ -100,6 +100,9 @@ export type Opportunity = {
   vacancy_retrieval_queries_artifact: Record<string, unknown>;
   vacancy_retrieval_queries_status: "none" | "draft" | "approved" | "error";
   vacancy_retrieval_queries_generated_at: string;
+  vacancy_retrieval_evidence_artifact: Record<string, unknown>;
+  vacancy_retrieval_evidence_status: "none" | "draft" | "approved" | "error";
+  vacancy_retrieval_evidence_generated_at: string;
   created_at: string;
   updated_at: string;
 };
@@ -942,6 +945,8 @@ export async function updateOpportunity(
     vacancy_dimensions_enriched_status?: "none" | "draft" | "approved" | "error";
     vacancy_retrieval_queries_artifact?: Record<string, unknown>;
     vacancy_retrieval_queries_status?: "none" | "draft" | "approved" | "error";
+    vacancy_retrieval_evidence_artifact?: Record<string, unknown>;
+    vacancy_retrieval_evidence_status?: "none" | "draft" | "approved" | "error";
   }
 ): Promise<Opportunity> {
   const response = await safeFetch(
@@ -1032,6 +1037,20 @@ export async function recomputeOpportunityVacancyRetrievalQueries(
 ): Promise<Opportunity> {
   const response = await safeFetch(
     `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/vacancy-retrieval-queries/recompute`,
+    {
+      method: "POST",
+      credentials: "include"
+    }
+  );
+  return parseResponse<Opportunity>(response);
+}
+
+export async function recomputeOpportunityVacancyRetrievalEvidence(
+  personId: string,
+  opportunityId: string
+): Promise<Opportunity> {
+  const response = await safeFetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/vacancy-retrieval-evidence/recompute`,
     {
       method: "POST",
       credentials: "include"

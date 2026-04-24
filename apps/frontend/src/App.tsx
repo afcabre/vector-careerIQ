@@ -54,6 +54,7 @@ import {
   recomputeOpportunityVacancyDimensionsEnriched,
   recomputeOpportunityVacancyProfile,
   recomputeOpportunityVacancyRetrievalQueries,
+  recomputeOpportunityVacancyRetrievalEvidence,
   recomputeOpportunityVacancySalary,
   saveOpportunityFromSearch,
   searchOpportunities,
@@ -1596,6 +1597,8 @@ export default function App() {
   const [recomputingVacancySalaryId, setRecomputingVacancySalaryId] = useState<string | null>(null);
   const [recomputingVacancyDimensionsEnrichedId, setRecomputingVacancyDimensionsEnrichedId] = useState<string | null>(null);
   const [recomputingVacancyRetrievalQueriesId, setRecomputingVacancyRetrievalQueriesId] =
+    useState<string | null>(null);
+  const [recomputingVacancyRetrievalEvidenceId, setRecomputingVacancyRetrievalEvidenceId] =
     useState<string | null>(null);
   const [updatingVacancyV2StatusKey, setUpdatingVacancyV2StatusKey] = useState<string | null>(null);
   const [opportunityProfileDrafts, setOpportunityProfileDrafts] = useState<
@@ -3354,6 +3357,35 @@ export default function App() {
     }
   }
 
+  async function handleRecomputeVacancyRetrievalEvidence(item: Opportunity) {
+    if (!selectedPersonId || recomputingVacancyRetrievalEvidenceId) {
+      return;
+    }
+    setRecomputingVacancyRetrievalEvidenceId(item.opportunity_id);
+    setErrorMessage(null);
+    try {
+      await recomputeOpportunityVacancyRetrievalEvidence(selectedPersonId, item.opportunity_id);
+      const items = await listOpportunities(selectedPersonId);
+      setSavedOpportunities(items);
+      if (selectedOpportunityId === item.opportunity_id) {
+        const refreshed = items.find((entry) => entry.opportunity_id === item.opportunity_id);
+        if (refreshed) {
+          setOpportunityStatus(refreshed.status);
+          setOpportunityNotes(refreshed.notes);
+        }
+      }
+      setToastMessage("Vacancy Retrieval Evidence recalculado");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "No se pudo recalcular Vacancy Retrieval Evidence";
+      setErrorMessage(message);
+    } finally {
+      setRecomputingVacancyRetrievalEvidenceId(null);
+    }
+  }
+
   async function handleRunVacancyV2Gate() {
     if (!selectedPersonId || isLoadingVacancyV2Gate) {
       return;
@@ -3404,7 +3436,8 @@ export default function App() {
       | "vacancy_dimensions"
       | "vacancy_salary"
       | "vacancy_dimensions_enriched"
-      | "vacancy_retrieval_queries",
+      | "vacancy_retrieval_queries"
+      | "vacancy_retrieval_evidence",
     status: "none" | "draft" | "approved" | "error"
   ) {
     if (!selectedPersonId || updatingVacancyV2StatusKey) {
@@ -3430,9 +3463,13 @@ export default function App() {
         await updateOpportunity(selectedPersonId, item.opportunity_id, {
           vacancy_dimensions_enriched_status: status,
         });
-      } else {
+      } else if (artifact === "vacancy_retrieval_queries") {
         await updateOpportunity(selectedPersonId, item.opportunity_id, {
           vacancy_retrieval_queries_status: status,
+        });
+      } else {
+        await updateOpportunity(selectedPersonId, item.opportunity_id, {
+          vacancy_retrieval_evidence_status: status,
         });
       }
       const items = await listOpportunities(selectedPersonId);
@@ -6098,6 +6135,8 @@ export default function App() {
                 Object.keys(item.vacancy_dimensions_enriched_artifact ?? {}).length > 0;
               const hasVacancyRetrievalQueriesArtifact =
                 Object.keys(item.vacancy_retrieval_queries_artifact ?? {}).length > 0;
+              const hasVacancyRetrievalEvidenceArtifact =
+                Object.keys(item.vacancy_retrieval_evidence_artifact ?? {}).length > 0;
               const vacancyBlocksStatusLabel = getVacancyV2StatusLabel(item.vacancy_blocks_status);
               const vacancyDimensionsStatusLabel = getVacancyV2StatusLabel(
                 item.vacancy_dimensions_status
@@ -6108,6 +6147,9 @@ export default function App() {
               );
               const vacancyRetrievalQueriesStatusLabel = getVacancyV2StatusLabel(
                 item.vacancy_retrieval_queries_status
+              );
+              const vacancyRetrievalEvidenceStatusLabel = getVacancyV2StatusLabel(
+                item.vacancy_retrieval_evidence_status
               );
               const vacancyBlocksGeneratedAt = item.vacancy_blocks_generated_at
                 ? formatAiRunTimestamp(item.vacancy_blocks_generated_at)
@@ -6124,6 +6166,9 @@ export default function App() {
               const vacancyRetrievalQueriesGeneratedAt = item.vacancy_retrieval_queries_generated_at
                 ? formatAiRunTimestamp(item.vacancy_retrieval_queries_generated_at)
                 : "Sin generar";
+              const vacancyRetrievalEvidenceGeneratedAt = item.vacancy_retrieval_evidence_generated_at
+                ? formatAiRunTimestamp(item.vacancy_retrieval_evidence_generated_at)
+                : "Sin generar";
               const isUpdatingVacancyBlocksStatus =
                 updatingVacancyV2StatusKey === `vacancy_blocks:${item.opportunity_id}`;
               const isUpdatingVacancyDimensionsStatus =
@@ -6134,6 +6179,8 @@ export default function App() {
                 updatingVacancyV2StatusKey === `vacancy_dimensions_enriched:${item.opportunity_id}`;
               const isUpdatingVacancyRetrievalQueriesStatus =
                 updatingVacancyV2StatusKey === `vacancy_retrieval_queries:${item.opportunity_id}`;
+              const isUpdatingVacancyRetrievalEvidenceStatus =
+                updatingVacancyV2StatusKey === `vacancy_retrieval_evidence:${item.opportunity_id}`;
               const isSelectedSavedOpportunity = selectedOpportunityId === item.opportunity_id;
               return (
                 <article
@@ -6877,6 +6924,75 @@ export default function App() {
                       ) : (
                         <p className="metaText">
                           Sin artefacto S4. Requiere S3.9 valido para generar queries de retrieval.
+                        </p>
+                      )}
+                    </section>
+
+                    <section className="vacancyV2Section">
+                      <div className="vacancyV2SectionHeader">
+                        <div>
+                          <p className="metaText vacancyV2SectionTitle">
+                            S5 · Vacancy Retrieval Evidence
+                          </p>
+                          <p className="metaText">Generado: {vacancyRetrievalEvidenceGeneratedAt}</p>
+                        </div>
+                        <div className="metaChips vacancyV2HeaderChips">
+                          <span
+                            className={`metaChip ${getVacancyV2StatusClassName(item.vacancy_retrieval_evidence_status)}`}
+                          >
+                            {vacancyRetrievalEvidenceStatusLabel}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="cardActions">
+                        <button
+                          className="vacancyProfileQuickActionButton"
+                          disabled={
+                            !hasVacancyRetrievalQueriesArtifact
+                            || recomputingVacancyRetrievalEvidenceId === item.opportunity_id
+                          }
+                          onClick={() => void handleRecomputeVacancyRetrievalEvidence(item)}
+                          type="button"
+                        >
+                          {recomputingVacancyRetrievalEvidenceId === item.opportunity_id
+                            ? "Recalculando..."
+                            : "Recalcular S5"}
+                        </button>
+                        {hasVacancyRetrievalEvidenceArtifact ? (
+                          <button
+                            className="vacancyProfileQuickActionButton"
+                            disabled={isUpdatingVacancyRetrievalEvidenceStatus}
+                            onClick={() =>
+                              void handleSetVacancyV2Status(
+                                item,
+                                "vacancy_retrieval_evidence",
+                                item.vacancy_retrieval_evidence_status === "approved"
+                                  ? "draft"
+                                  : "approved"
+                              )}
+                            type="button"
+                          >
+                            {isUpdatingVacancyRetrievalEvidenceStatus
+                              ? "Actualizando..."
+                              : item.vacancy_retrieval_evidence_status === "approved"
+                                ? "Marcar borrador"
+                                : "Aprobar S5"}
+                          </button>
+                        ) : null}
+                      </div>
+                      {hasVacancyRetrievalEvidenceArtifact ? (
+                        <label className="field">
+                          JSON S5
+                          <textarea
+                            className="vacancyV2JsonTextarea"
+                            readOnly
+                            rows={12}
+                            value={safePrettyJson(item.vacancy_retrieval_evidence_artifact)}
+                          />
+                        </label>
+                      ) : (
+                        <p className="metaText">
+                          Sin artefacto S5. Requiere S4 valido, CV activo e indexado para recuperar evidencia.
                         </p>
                       )}
                     </section>
