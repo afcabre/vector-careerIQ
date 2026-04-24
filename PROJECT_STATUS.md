@@ -96,6 +96,8 @@
 - decision documental nueva: `S3.9` se persiste como artefacto separado `vacancy_dimensions_enriched.v1` para trazabilidad previa a `S4`
 - `S3.9` ya quedó cableado a oportunidad con persistencia propia y endpoint `POST /persons/{person_id}/opportunities/{opportunity_id}/vacancy-dimensions-enriched/recompute`
 - validacion tecnica del runtime `S3.9`: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_dimensions_enriched_contract tests.test_vacancy_dimensions_enrichment_service tests.test_vacancy_v2_endpoints` en verde (`21 tests`)
+- endpoints SSE agregados para `S3.1` (`/vacancy-salary/recompute/stream`) y `S3.9` (`/vacancy-dimensions-enriched/recompute/stream`) con etapas `tool_status`, persistencia `draft/error` y evento final `message_complete`
+- validacion tecnica del slice SSE `S3.1 + S3.9`: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_v2_endpoints` en verde (`19 tests`)
 - validacion funcional nueva: el gate actual `Vacancy V2` mide solo consistencia parcial `S2 -> S3` (`vacancy_blocks` -> `vacancy_dimensions`) y no incorpora aun artefactos `S3.1` ni `S3.9`
 - slice frontend nuevo: la UI experimental de `Vacancy V2` ahora expone `S3.1` (`Vacancy Salary`) y `S3.9` (`Vacancy Dimensions Enriched`) con recompute, visualizacion de `status`/`generated_at`, inspeccion JSON read-only y cambio manual de estado `draft/approved`
 - validacion tecnica del slice frontend `S3.1 + S3.9`: `npm run build` en `apps/frontend` en verde

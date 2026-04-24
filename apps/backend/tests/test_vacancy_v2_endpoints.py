@@ -711,6 +711,174 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         assert stored is not None
         self.assertEqual(stored["vacancy_dimensions_status"], "error")
 
+    def test_vacancy_salary_stream_emits_stages_and_message_complete(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Platform Engineer",
+            company="Acme",
+            location="Remote",
+            raw_text="Rol con salario.",
+        )
+        opportunity_id = created["opportunity_id"]
+        dimensions = _sample_vacancy_dimensions(opportunity_id)
+        dimensions["vacancy_dimensions"]["work_conditions"]["salary"]["raw_text"] = "Salario COP 12M a 18M mensual"
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_dimensions_artifact=dimensions,
+            vacancy_dimensions_status="approved",
+        )
+        assert updated is not None
+        salary_artifact = _sample_vacancy_salary(opportunity_id)
+
+        with patch.object(opportunities_api, "extract_vacancy_salary_normalization", return_value=salary_artifact):
+            response = asyncio.run(
+                opportunities_api.recompute_vacancy_salary_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                    settings=get_settings(),
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        stages = [payload.get("stage", "") for name, payload in events if name == "tool_status"]
+        self.assertIn("vacancy_salary_recompute_started", stages)
+        self.assertIn("vacancy_salary_extracting", stages)
+        self.assertIn("vacancy_salary_saving", stages)
+        complete_payload = next(payload for name, payload in events if name == "message_complete")
+        self.assertEqual(complete_payload["vacancy_salary_status"], "draft")
+
+    def test_vacancy_salary_stream_emits_error_and_marks_status(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Platform Engineer",
+            company="Acme",
+            location="Remote",
+            raw_text="Rol con salario.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_dimensions_artifact=_sample_vacancy_dimensions(opportunity_id),
+            vacancy_dimensions_status="approved",
+        )
+        assert updated is not None
+
+        with patch.object(
+            opportunities_api,
+            "extract_vacancy_salary_normalization",
+            side_effect=VacancySalaryNormalizationError("Step 3.1 requires salary raw text"),
+        ):
+            response = asyncio.run(
+                opportunities_api.recompute_vacancy_salary_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                    settings=get_settings(),
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        names = [name for name, _ in events]
+        self.assertIn("tool_status", names)
+        self.assertIn("error", names)
+        error_payload = next(payload for name, payload in events if name == "error")
+        self.assertIn("Step 3.1 requires salary raw text", str(error_payload.get("detail", "")))
+
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_salary_status"], "error")
+
+    def test_vacancy_dimensions_enriched_stream_emits_stages_and_message_complete(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Platform Engineer",
+            company="Acme",
+            location="Remote",
+            raw_text="Rol con responsabilidades.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_dimensions_artifact=_sample_vacancy_dimensions(opportunity_id),
+            vacancy_dimensions_status="approved",
+        )
+        assert updated is not None
+        enriched_artifact = _sample_vacancy_dimensions_enriched(opportunity_id)
+
+        with patch.object(opportunities_api, "enrich_vacancy_dimensions_artifact", return_value=enriched_artifact):
+            response = asyncio.run(
+                opportunities_api.recompute_vacancy_dimensions_enriched_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        stages = [payload.get("stage", "") for name, payload in events if name == "tool_status"]
+        self.assertIn("vacancy_dimensions_enriched_recompute_started", stages)
+        self.assertIn("vacancy_dimensions_enriched_building", stages)
+        self.assertIn("vacancy_dimensions_enriched_saving", stages)
+        complete_payload = next(payload for name, payload in events if name == "message_complete")
+        self.assertEqual(complete_payload["vacancy_dimensions_enriched_status"], "draft")
+
+    def test_vacancy_dimensions_enriched_stream_emits_error_and_marks_status(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Platform Engineer",
+            company="Acme",
+            location="Remote",
+            raw_text="Rol con responsabilidades.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_dimensions_artifact=_sample_vacancy_dimensions(opportunity_id),
+            vacancy_dimensions_status="approved",
+        )
+        assert updated is not None
+
+        with patch.object(
+            opportunities_api,
+            "enrich_vacancy_dimensions_artifact",
+            side_effect=VacancyDimensionsEnrichmentError("Step 3.9 produced no enrichable atomic items"),
+        ):
+            response = asyncio.run(
+                opportunities_api.recompute_vacancy_dimensions_enriched_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        names = [name for name, _ in events]
+        self.assertIn("tool_status", names)
+        self.assertIn("error", names)
+        error_payload = next(payload for name, payload in events if name == "error")
+        self.assertIn("Step 3.9 produced no enrichable atomic items", str(error_payload.get("detail", "")))
+
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_dimensions_enriched_status"], "error")
+
 
 if __name__ == "__main__":
     unittest.main()
