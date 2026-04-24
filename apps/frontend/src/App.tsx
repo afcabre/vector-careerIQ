@@ -51,7 +51,9 @@ import {
   getVacancyV2ConsistencyReport,
   recomputeOpportunityVacancyBlocks,
   recomputeOpportunityVacancyDimensions,
+  recomputeOpportunityVacancyDimensionsEnriched,
   recomputeOpportunityVacancyProfile,
+  recomputeOpportunityVacancySalary,
   saveOpportunityFromSearch,
   searchOpportunities,
   sendMessage,
@@ -1572,6 +1574,8 @@ export default function App() {
   const [clearingOpportunityProfileId, setClearingOpportunityProfileId] = useState<string | null>(null);
   const [recomputingVacancyBlocksId, setRecomputingVacancyBlocksId] = useState<string | null>(null);
   const [recomputingVacancyDimensionsId, setRecomputingVacancyDimensionsId] = useState<string | null>(null);
+  const [recomputingVacancySalaryId, setRecomputingVacancySalaryId] = useState<string | null>(null);
+  const [recomputingVacancyDimensionsEnrichedId, setRecomputingVacancyDimensionsEnrichedId] = useState<string | null>(null);
   const [updatingVacancyV2StatusKey, setUpdatingVacancyV2StatusKey] = useState<string | null>(null);
   const [opportunityProfileDrafts, setOpportunityProfileDrafts] = useState<
     Record<string, VacancyStructuredProfileDraft>
@@ -3224,6 +3228,62 @@ export default function App() {
     }
   }
 
+  async function handleRecomputeVacancySalary(item: Opportunity) {
+    if (!selectedPersonId || recomputingVacancySalaryId) {
+      return;
+    }
+    setRecomputingVacancySalaryId(item.opportunity_id);
+    setErrorMessage(null);
+    try {
+      await recomputeOpportunityVacancySalary(selectedPersonId, item.opportunity_id);
+      const items = await listOpportunities(selectedPersonId);
+      setSavedOpportunities(items);
+      if (selectedOpportunityId === item.opportunity_id) {
+        const refreshed = items.find((entry) => entry.opportunity_id === item.opportunity_id);
+        if (refreshed) {
+          setOpportunityStatus(refreshed.status);
+          setOpportunityNotes(refreshed.notes);
+        }
+      }
+      setToastMessage("Vacancy Salary recalculado");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo recalcular Vacancy Salary";
+      setErrorMessage(message);
+    } finally {
+      setRecomputingVacancySalaryId(null);
+    }
+  }
+
+  async function handleRecomputeVacancyDimensionsEnriched(item: Opportunity) {
+    if (!selectedPersonId || recomputingVacancyDimensionsEnrichedId) {
+      return;
+    }
+    setRecomputingVacancyDimensionsEnrichedId(item.opportunity_id);
+    setErrorMessage(null);
+    try {
+      await recomputeOpportunityVacancyDimensionsEnriched(selectedPersonId, item.opportunity_id);
+      const items = await listOpportunities(selectedPersonId);
+      setSavedOpportunities(items);
+      if (selectedOpportunityId === item.opportunity_id) {
+        const refreshed = items.find((entry) => entry.opportunity_id === item.opportunity_id);
+        if (refreshed) {
+          setOpportunityStatus(refreshed.status);
+          setOpportunityNotes(refreshed.notes);
+        }
+      }
+      setToastMessage("Vacancy Dimensions Enriched recalculado");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "No se pudo recalcular Vacancy Dimensions Enriched";
+      setErrorMessage(message);
+    } finally {
+      setRecomputingVacancyDimensionsEnrichedId(null);
+    }
+  }
+
   async function handleRunVacancyV2Gate() {
     if (!selectedPersonId || isLoadingVacancyV2Gate) {
       return;
@@ -3269,7 +3329,11 @@ export default function App() {
 
   async function handleSetVacancyV2Status(
     item: Opportunity,
-    artifact: "vacancy_blocks" | "vacancy_dimensions",
+    artifact:
+      | "vacancy_blocks"
+      | "vacancy_dimensions"
+      | "vacancy_salary"
+      | "vacancy_dimensions_enriched",
     status: "none" | "draft" | "approved" | "error"
   ) {
     if (!selectedPersonId || updatingVacancyV2StatusKey) {
@@ -3283,9 +3347,17 @@ export default function App() {
         await updateOpportunity(selectedPersonId, item.opportunity_id, {
           vacancy_blocks_status: status,
         });
-      } else {
+      } else if (artifact === "vacancy_dimensions") {
         await updateOpportunity(selectedPersonId, item.opportunity_id, {
           vacancy_dimensions_status: status,
+        });
+      } else if (artifact === "vacancy_salary") {
+        await updateOpportunity(selectedPersonId, item.opportunity_id, {
+          vacancy_salary_status: status,
+        });
+      } else {
+        await updateOpportunity(selectedPersonId, item.opportunity_id, {
+          vacancy_dimensions_enriched_status: status,
         });
       }
       const items = await listOpportunities(selectedPersonId);
@@ -5929,9 +6001,16 @@ export default function App() {
               const hasVacancyBlocksArtifact = Object.keys(item.vacancy_blocks_artifact ?? {}).length > 0;
               const hasVacancyDimensionsArtifact =
                 Object.keys(item.vacancy_dimensions_artifact ?? {}).length > 0;
+              const hasVacancySalaryArtifact = Object.keys(item.vacancy_salary_artifact ?? {}).length > 0;
+              const hasVacancyDimensionsEnrichedArtifact =
+                Object.keys(item.vacancy_dimensions_enriched_artifact ?? {}).length > 0;
               const vacancyBlocksStatusLabel = getVacancyV2StatusLabel(item.vacancy_blocks_status);
               const vacancyDimensionsStatusLabel = getVacancyV2StatusLabel(
                 item.vacancy_dimensions_status
+              );
+              const vacancySalaryStatusLabel = getVacancyV2StatusLabel(item.vacancy_salary_status);
+              const vacancyDimensionsEnrichedStatusLabel = getVacancyV2StatusLabel(
+                item.vacancy_dimensions_enriched_status
               );
               const vacancyBlocksGeneratedAt = item.vacancy_blocks_generated_at
                 ? formatAiRunTimestamp(item.vacancy_blocks_generated_at)
@@ -5939,10 +6018,20 @@ export default function App() {
               const vacancyDimensionsGeneratedAt = item.vacancy_dimensions_generated_at
                 ? formatAiRunTimestamp(item.vacancy_dimensions_generated_at)
                 : "Sin generar";
+              const vacancySalaryGeneratedAt = item.vacancy_salary_generated_at
+                ? formatAiRunTimestamp(item.vacancy_salary_generated_at)
+                : "Sin generar";
+              const vacancyDimensionsEnrichedGeneratedAt = item.vacancy_dimensions_enriched_generated_at
+                ? formatAiRunTimestamp(item.vacancy_dimensions_enriched_generated_at)
+                : "Sin generar";
               const isUpdatingVacancyBlocksStatus =
                 updatingVacancyV2StatusKey === `vacancy_blocks:${item.opportunity_id}`;
               const isUpdatingVacancyDimensionsStatus =
                 updatingVacancyV2StatusKey === `vacancy_dimensions:${item.opportunity_id}`;
+              const isUpdatingVacancySalaryStatus =
+                updatingVacancyV2StatusKey === `vacancy_salary:${item.opportunity_id}`;
+              const isUpdatingVacancyDimensionsEnrichedStatus =
+                updatingVacancyV2StatusKey === `vacancy_dimensions_enriched:${item.opportunity_id}`;
               const isSelectedSavedOpportunity = selectedOpportunityId === item.opportunity_id;
               return (
                 <article
@@ -6483,6 +6572,140 @@ export default function App() {
                       ) : (
                         <p className="metaText">
                           Sin artefacto Step 3. Requiere Step 2 valido para generar contenido.
+                        </p>
+                      )}
+                    </section>
+
+                    <section className="vacancyV2Section">
+                      <div className="vacancyV2SectionHeader">
+                        <div>
+                          <p className="metaText vacancyV2SectionTitle">S3.1 · Vacancy Salary</p>
+                          <p className="metaText">Generado: {vacancySalaryGeneratedAt}</p>
+                        </div>
+                        <div className="metaChips vacancyV2HeaderChips">
+                          <span
+                            className={`metaChip ${getVacancyV2StatusClassName(item.vacancy_salary_status)}`}
+                          >
+                            {vacancySalaryStatusLabel}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="cardActions">
+                        <button
+                          className="vacancyProfileQuickActionButton"
+                          disabled={
+                            !hasVacancyDimensionsArtifact
+                            || recomputingVacancySalaryId === item.opportunity_id
+                          }
+                          onClick={() => void handleRecomputeVacancySalary(item)}
+                          type="button"
+                        >
+                          {recomputingVacancySalaryId === item.opportunity_id
+                            ? "Recalculando..."
+                            : "Recalcular S3.1"}
+                        </button>
+                        {hasVacancySalaryArtifact ? (
+                          <button
+                            className="vacancyProfileQuickActionButton"
+                            disabled={isUpdatingVacancySalaryStatus}
+                            onClick={() =>
+                              void handleSetVacancyV2Status(
+                                item,
+                                "vacancy_salary",
+                                item.vacancy_salary_status === "approved" ? "draft" : "approved"
+                              )}
+                            type="button"
+                          >
+                            {isUpdatingVacancySalaryStatus
+                              ? "Actualizando..."
+                              : item.vacancy_salary_status === "approved"
+                                ? "Marcar borrador"
+                                : "Aprobar S3.1"}
+                          </button>
+                        ) : null}
+                      </div>
+                      {hasVacancySalaryArtifact ? (
+                        <label className="field">
+                          JSON S3.1
+                          <textarea
+                            className="vacancyV2JsonTextarea"
+                            readOnly
+                            rows={8}
+                            value={safePrettyJson(item.vacancy_salary_artifact)}
+                          />
+                        </label>
+                      ) : (
+                        <p className="metaText">
+                          Sin artefacto S3.1. Requiere Step 3 valido para normalizar salario.
+                        </p>
+                      )}
+                    </section>
+
+                    <section className="vacancyV2Section">
+                      <div className="vacancyV2SectionHeader">
+                        <div>
+                          <p className="metaText vacancyV2SectionTitle">
+                            S3.9 · Vacancy Dimensions Enriched
+                          </p>
+                          <p className="metaText">Generado: {vacancyDimensionsEnrichedGeneratedAt}</p>
+                        </div>
+                        <div className="metaChips vacancyV2HeaderChips">
+                          <span
+                            className={`metaChip ${getVacancyV2StatusClassName(item.vacancy_dimensions_enriched_status)}`}
+                          >
+                            {vacancyDimensionsEnrichedStatusLabel}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="cardActions">
+                        <button
+                          className="vacancyProfileQuickActionButton"
+                          disabled={
+                            !hasVacancyDimensionsArtifact
+                            || recomputingVacancyDimensionsEnrichedId === item.opportunity_id
+                          }
+                          onClick={() => void handleRecomputeVacancyDimensionsEnriched(item)}
+                          type="button"
+                        >
+                          {recomputingVacancyDimensionsEnrichedId === item.opportunity_id
+                            ? "Recalculando..."
+                            : "Recalcular S3.9"}
+                        </button>
+                        {hasVacancyDimensionsEnrichedArtifact ? (
+                          <button
+                            className="vacancyProfileQuickActionButton"
+                            disabled={isUpdatingVacancyDimensionsEnrichedStatus}
+                            onClick={() =>
+                              void handleSetVacancyV2Status(
+                                item,
+                                "vacancy_dimensions_enriched",
+                                item.vacancy_dimensions_enriched_status === "approved"
+                                  ? "draft"
+                                  : "approved"
+                              )}
+                            type="button"
+                          >
+                            {isUpdatingVacancyDimensionsEnrichedStatus
+                              ? "Actualizando..."
+                              : item.vacancy_dimensions_enriched_status === "approved"
+                                ? "Marcar borrador"
+                                : "Aprobar S3.9"}
+                          </button>
+                        ) : null}
+                      </div>
+                      {hasVacancyDimensionsEnrichedArtifact ? (
+                        <label className="field">
+                          JSON S3.9
+                          <textarea
+                            className="vacancyV2JsonTextarea"
+                            readOnly
+                            rows={12}
+                            value={safePrettyJson(item.vacancy_dimensions_enriched_artifact)}
+                          />
+                        </label>
+                      ) : (
+                        <p className="metaText">
+                          Sin artefacto S3.9. Requiere Step 3 valido para enriquecer dimensiones.
                         </p>
                       )}
                     </section>

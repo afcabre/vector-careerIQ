@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `validado que el gate actual y la UI experimental solo cubren S2 -> S3; siguiente frente priorizado: habilitar S3.1 y S3.9 en el flujo para prueba operativa`
+- checkpoint_actual: `S3.1 y S3.9 habilitados en la UI experimental de Vacancy V2 para prueba operativa; gate permanece sin cambios y sigue siendo parcial S2 -> S3`
 - repo_status: `flujo V1 operativo con analisis, postulacion, chat, CV semantico, admin de prompts y extraccion estructurada de vacantes en forma legacy estable; propuesta v2 desacoplada en branch experimental`
 - ultima_actualizacion: `2026-04-24`
 
@@ -97,8 +97,9 @@
 - `S3.9` ya quedó cableado a oportunidad con persistencia propia y endpoint `POST /persons/{person_id}/opportunities/{opportunity_id}/vacancy-dimensions-enriched/recompute`
 - validacion tecnica del runtime `S3.9`: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_dimensions_enriched_contract tests.test_vacancy_dimensions_enrichment_service tests.test_vacancy_v2_endpoints` en verde (`21 tests`)
 - validacion funcional nueva: el gate actual `Vacancy V2` mide solo consistencia parcial `S2 -> S3` (`vacancy_blocks` -> `vacancy_dimensions`) y no incorpora aun artefactos `S3.1` ni `S3.9`
-- validacion funcional nueva: la UI experimental de `Vacancy V2` solo expone recomputo/inspeccion para `Step 2` y `Step 3`; `S3.1` y `S3.9` existen en backend con persistencia y endpoints propios, pero todavia no estan habilitados en el flujo frontend operativo
-- decision operativa vigente refinada: no invertir por ahora en hardening adicional ni en expansion del gate; primero habilitar y probar `S3.1` y `S3.9` dentro del flujo experimental
+- slice frontend nuevo: la UI experimental de `Vacancy V2` ahora expone `S3.1` (`Vacancy Salary`) y `S3.9` (`Vacancy Dimensions Enriched`) con recompute, visualizacion de `status`/`generated_at`, inspeccion JSON read-only y cambio manual de estado `draft/approved`
+- validacion tecnica del slice frontend `S3.1 + S3.9`: `npm run build` en `apps/frontend` en verde
+- decision operativa vigente refinada: no invertir por ahora en hardening adicional ni en expansion del gate; primero probar operativamente `S3.1` y `S3.9` ya habilitados en el flujo experimental
 - `failed_checks` actual: `salary_transfer_rate_below_threshold`
 - `issue_samples` actuales de salario faltante en Step 3: `o-bd4de0f24c`, `o-e2b0ad6661`
 - herramienta operativa agregada: script `apps/backend/scripts/vacancy_v2_gate_report.py` para ejecutar gate por `person_id` o en todos los perfiles desde CLI
@@ -146,11 +147,11 @@
 
 ## Bloqueadores
 - integracion de Step 3 en analisis permanece bloqueada por criterio de calidad: gate real activo en `FAIL` por `salary_transfer_rate` bajo umbral (`0.3333 < 0.8`)
-- gate actual solo cubre `S2 -> S3`; no sirve todavia para validar el valor operativo de `S3.1` y `S3.9`
+- gate actual solo cubre `S2 -> S3`; no sirve todavia para validar el valor operativo completo de `S3.1` y `S3.9`
 - falta cerrar si `benefits` requerira luego una normalizacion mas fuerte
 - el experimento de nueva estructura de vacante no debe reintroducirse sobre este baseline ni conectarse al extractor estable antes de acuerdo
 
 ## Siguiente Actividad
-- habilitar `S3.1` (`vacancy_salary`) y `S3.9` (`vacancy_dimensions_enriched`) dentro del flujo experimental visible para poder probarlos operativamente
+- probar operativamente `S3.1` (`vacancy_salary`) y `S3.9` (`vacancy_dimensions_enriched`) desde la UI experimental para evaluar si aportan valor observable y si requieren ajustes de UX o contrato
 - mantener el gate actual solo como chequeo parcial `S2 -> S3`, sin abrir por ahora trabajo dedicado de hardening ni expansion de cobertura
 - despues de probar `S3.1` y `S3.9`, decidir si vale la pena extender el gate para incluir alguno de esos artefactos antes de avanzar a `S4`

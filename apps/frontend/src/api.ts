@@ -91,6 +91,12 @@ export type Opportunity = {
   vacancy_dimensions_artifact: Record<string, unknown>;
   vacancy_dimensions_status: "none" | "draft" | "approved" | "error";
   vacancy_dimensions_generated_at: string;
+  vacancy_salary_artifact: Record<string, unknown>;
+  vacancy_salary_status: "none" | "draft" | "approved" | "error";
+  vacancy_salary_generated_at: string;
+  vacancy_dimensions_enriched_artifact: Record<string, unknown>;
+  vacancy_dimensions_enriched_status: "none" | "draft" | "approved" | "error";
+  vacancy_dimensions_enriched_generated_at: string;
   created_at: string;
   updated_at: string;
 };
@@ -925,6 +931,10 @@ export async function updateOpportunity(
     vacancy_blocks_status?: "none" | "draft" | "approved" | "error";
     vacancy_dimensions_artifact?: Record<string, unknown>;
     vacancy_dimensions_status?: "none" | "draft" | "approved" | "error";
+    vacancy_salary_artifact?: Record<string, unknown>;
+    vacancy_salary_status?: "none" | "draft" | "approved" | "error";
+    vacancy_dimensions_enriched_artifact?: Record<string, unknown>;
+    vacancy_dimensions_enriched_status?: "none" | "draft" | "approved" | "error";
   }
 ): Promise<Opportunity> {
   const response = await safeFetch(
@@ -973,6 +983,34 @@ export async function recomputeOpportunityVacancyDimensions(
 ): Promise<Opportunity> {
   const response = await safeFetch(
     `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/vacancy-dimensions/recompute`,
+    {
+      method: "POST",
+      credentials: "include"
+    }
+  );
+  return parseResponse<Opportunity>(response);
+}
+
+export async function recomputeOpportunityVacancySalary(
+  personId: string,
+  opportunityId: string
+): Promise<Opportunity> {
+  const response = await safeFetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/vacancy-salary/recompute`,
+    {
+      method: "POST",
+      credentials: "include"
+    }
+  );
+  return parseResponse<Opportunity>(response);
+}
+
+export async function recomputeOpportunityVacancyDimensionsEnriched(
+  personId: string,
+  opportunityId: string
+): Promise<Opportunity> {
+  const response = await safeFetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/vacancy-dimensions-enriched/recompute`,
     {
       method: "POST",
       credentials: "include"
