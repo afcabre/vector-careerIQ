@@ -66,6 +66,14 @@ from app.services.vacancy_dimensions_service import (
     VacancyDimensionsExtractionError,
     extract_vacancy_dimensions,
 )
+from app.services.vacancy_salary_service import (
+    VacancySalaryNormalizationError,
+    extract_vacancy_salary_normalization,
+)
+from app.services.vacancy_dimensions_enrichment_service import (
+    VacancyDimensionsEnrichmentError,
+    enrich_vacancy_dimensions_artifact,
+)
 
 
 router = APIRouter()
@@ -93,6 +101,12 @@ class OpportunityResponse(BaseModel):
     vacancy_dimensions_artifact: dict[str, Any]
     vacancy_dimensions_status: str
     vacancy_dimensions_generated_at: str
+    vacancy_salary_artifact: dict[str, Any]
+    vacancy_salary_status: str
+    vacancy_salary_generated_at: str
+    vacancy_dimensions_enriched_artifact: dict[str, Any]
+    vacancy_dimensions_enriched_status: str
+    vacancy_dimensions_enriched_generated_at: str
     created_at: str
     updated_at: str
 
@@ -178,6 +192,10 @@ class UpdateOpportunityRequest(BaseModel):
     vacancy_blocks_status: str | None = Field(default=None)
     vacancy_dimensions_artifact: dict[str, Any] | None = Field(default=None)
     vacancy_dimensions_status: str | None = Field(default=None)
+    vacancy_salary_artifact: dict[str, Any] | None = Field(default=None)
+    vacancy_salary_status: str | None = Field(default=None)
+    vacancy_dimensions_enriched_artifact: dict[str, Any] | None = Field(default=None)
+    vacancy_dimensions_enriched_status: str | None = Field(default=None)
 
 
 class ActionRequest(BaseModel):
@@ -535,6 +553,22 @@ def update_opportunity(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Invalid vacancy_dimensions_status",
         )
+    if (
+        payload.vacancy_salary_status is not None
+        and payload.vacancy_salary_status not in VACANCY_V2_ARTIFACT_STATUSES
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid vacancy_salary_status",
+        )
+    if (
+        payload.vacancy_dimensions_enriched_status is not None
+        and payload.vacancy_dimensions_enriched_status not in VACANCY_V2_ARTIFACT_STATUSES
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid vacancy_dimensions_enriched_status",
+        )
 
     item = update_saved_opportunity(
         person_id=person_id,
@@ -547,6 +581,10 @@ def update_opportunity(
         vacancy_blocks_status=payload.vacancy_blocks_status,
         vacancy_dimensions_artifact=payload.vacancy_dimensions_artifact,
         vacancy_dimensions_status=payload.vacancy_dimensions_status,
+        vacancy_salary_artifact=payload.vacancy_salary_artifact,
+        vacancy_salary_status=payload.vacancy_salary_status,
+        vacancy_dimensions_enriched_artifact=payload.vacancy_dimensions_enriched_artifact,
+        vacancy_dimensions_enriched_status=payload.vacancy_dimensions_enriched_status,
     )
     if not item:
         existing = find_opportunity(person_id, opportunity_id)
@@ -857,6 +895,104 @@ def recompute_vacancy_dimensions(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Could not recompute vacancy dimensions",
+        )
+    return _to_response(updated)
+
+
+@router.post("/{opportunity_id}/vacancy-salary/recompute")
+def recompute_vacancy_salary(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+    settings: Settings = Depends(get_settings),
+) -> OpportunityResponse:
+    _require_person(person_id)
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    try:
+        artifact = extract_vacancy_salary_normalization(
+            opportunity=opportunity,
+            vacancy_dimensions_artifact=opportunity.get("vacancy_dimensions_artifact", {}),
+            settings=settings,
+        )
+    except VacancySalaryNormalizationError as exc:
+        update_saved_opportunity(
+            person_id=person_id,
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_salary_status="error",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    updated = update_saved_opportunity(
+        person_id=person_id,
+        opportunity_id=opportunity_id,
+        status=None,
+        notes=None,
+        vacancy_salary_artifact=artifact,
+        vacancy_salary_status="draft",
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Could not recompute vacancy salary",
+        )
+    return _to_response(updated)
+
+
+@router.post("/{opportunity_id}/vacancy-dimensions-enriched/recompute")
+def recompute_vacancy_dimensions_enriched(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+) -> OpportunityResponse:
+    _require_person(person_id)
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    try:
+        artifact = enrich_vacancy_dimensions_artifact(
+            opportunity=opportunity,
+            vacancy_dimensions_artifact=opportunity.get("vacancy_dimensions_artifact", {}),
+        )
+    except VacancyDimensionsEnrichmentError as exc:
+        update_saved_opportunity(
+            person_id=person_id,
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_dimensions_enriched_status="error",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    updated = update_saved_opportunity(
+        person_id=person_id,
+        opportunity_id=opportunity_id,
+        status=None,
+        notes=None,
+        vacancy_dimensions_enriched_artifact=artifact,
+        vacancy_dimensions_enriched_status="draft",
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Could not recompute vacancy dimensions enriched artifact",
         )
     return _to_response(updated)
 

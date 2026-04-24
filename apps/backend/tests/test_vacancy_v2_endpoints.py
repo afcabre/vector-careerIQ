@@ -17,6 +17,8 @@ from app.services.person_store import seed_persons
 from app.services.request_trace_store import reset_request_traces
 from app.services.vacancy_blocks_service import VacancyBlocksExtractionError
 from app.services.vacancy_dimensions_service import VacancyDimensionsExtractionError
+from app.services.vacancy_dimensions_enrichment_service import VacancyDimensionsEnrichmentError
+from app.services.vacancy_salary_service import VacancySalaryNormalizationError
 
 
 def _clear_in_memory_state() -> None:
@@ -62,6 +64,50 @@ def _sample_vacancy_dimensions(opportunity_id: str) -> dict[str, Any]:
                 "other_conditions": [],
             },
             "responsibilities": [],
+            "required_criteria": [],
+            "desirable_criteria": [],
+            "benefits": [],
+            "about_the_company": [],
+        },
+    }
+
+
+def _sample_vacancy_salary(opportunity_id: str) -> dict[str, Any]:
+    return {
+        "contract_version": "vacancy_salary_normalization.v1",
+        "vacancy_id": opportunity_id,
+        "generated_at": "2026-04-21T10:02:00Z",
+        "salary": {
+            "min": 12000000,
+            "max": 18000000,
+            "currency": "COP",
+            "period": "mensual",
+            "raw_text": "Salario COP 12M a 18M mensual",
+        },
+    }
+
+
+def _sample_vacancy_dimensions_enriched(opportunity_id: str) -> dict[str, Any]:
+    return {
+        "contract_version": "vacancy_dimensions_enriched.v1",
+        "vacancy_id": opportunity_id,
+        "generated_at": "2026-04-21T10:03:00Z",
+        "vacancy_dimensions": {
+            "work_conditions": {
+                "salary": {"raw_text": "Salario COP 12M a 18M mensual"},
+                "modality": {"value": "Hibrido", "raw_text": "Hibrido en Bogota"},
+                "location": {"places": ["Bogota"], "raw_text": "Bogota"},
+                "contract_type": {"value": "", "raw_text": ""},
+                "other_conditions": [],
+            },
+            "responsibilities": [
+                {
+                    "raw_text": "Liderar backlog de datos",
+                    "item_id": "resp_1234567890",
+                    "item_index": 0,
+                    "group_code": "resp",
+                }
+            ],
             "required_criteria": [],
             "desirable_criteria": [],
             "benefits": [],
@@ -199,6 +245,29 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         self.assertEqual(invalid_dimensions_status.exception.status_code, 422)
         self.assertEqual(invalid_dimensions_status.exception.detail, "Invalid vacancy_dimensions_status")
 
+        with self.assertRaises(HTTPException) as invalid_salary_status:
+            opportunities_api.update_opportunity(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                payload=opportunities_api.UpdateOpportunityRequest(vacancy_salary_status="invalid"),
+                _=self.session,
+            )
+        self.assertEqual(invalid_salary_status.exception.status_code, 422)
+        self.assertEqual(invalid_salary_status.exception.detail, "Invalid vacancy_salary_status")
+
+        with self.assertRaises(HTTPException) as invalid_enriched_status:
+            opportunities_api.update_opportunity(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                payload=opportunities_api.UpdateOpportunityRequest(vacancy_dimensions_enriched_status="invalid"),
+                _=self.session,
+            )
+        self.assertEqual(invalid_enriched_status.exception.status_code, 422)
+        self.assertEqual(
+            invalid_enriched_status.exception.detail,
+            "Invalid vacancy_dimensions_enriched_status",
+        )
+
     def test_recompute_vacancy_dimensions_success_sets_draft_artifact(self) -> None:
         created = opportunity_store.import_text_opportunity(
             person_id="p-001",
@@ -233,6 +302,164 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         stored = opportunity_store.find_opportunity("p-001", opportunity_id)
         assert stored is not None
         self.assertEqual(stored["vacancy_dimensions_status"], "draft")
+
+    def test_recompute_vacancy_salary_success_sets_draft_artifact(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Backend Engineer",
+            company="Acme",
+            location="Hybrid",
+            raw_text="Vacante con salario.",
+        )
+        opportunity_id = created["opportunity_id"]
+        dimensions = _sample_vacancy_dimensions(opportunity_id)
+        dimensions["vacancy_dimensions"]["work_conditions"]["salary"]["raw_text"] = "Salario COP 12M a 18M mensual"
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_dimensions_artifact=dimensions,
+            vacancy_dimensions_status="approved",
+        )
+        assert updated is not None
+        salary_artifact = _sample_vacancy_salary(opportunity_id)
+
+        with patch.object(
+            opportunities_api,
+            "extract_vacancy_salary_normalization",
+            return_value=salary_artifact,
+        ):
+            response = opportunities_api.recompute_vacancy_salary(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                _=self.session,
+                settings=get_settings(),
+            )
+
+        self.assertEqual(response.vacancy_salary_status, "draft")
+        self.assertEqual(
+            response.vacancy_salary_artifact["contract_version"],
+            "vacancy_salary_normalization.v1",
+        )
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_salary_status"], "draft")
+
+    def test_recompute_vacancy_salary_failure_sets_error_status(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Backend Engineer",
+            company="Acme",
+            location="Hybrid",
+            raw_text="Vacante con salario.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_dimensions_artifact=_sample_vacancy_dimensions(opportunity_id),
+            vacancy_dimensions_status="approved",
+        )
+        assert updated is not None
+
+        with patch.object(
+            opportunities_api,
+            "extract_vacancy_salary_normalization",
+            side_effect=VacancySalaryNormalizationError("Step 3.1 requires salary raw text"),
+        ):
+            with self.assertRaises(HTTPException) as ctx:
+                opportunities_api.recompute_vacancy_salary(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                    settings=get_settings(),
+                )
+
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertIn("Step 3.1 requires salary raw text", str(ctx.exception.detail))
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_salary_status"], "error")
+
+    def test_recompute_vacancy_dimensions_enriched_success_sets_draft_artifact(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Backend Engineer",
+            company="Acme",
+            location="Hybrid",
+            raw_text="Vacante con responsabilidades.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_dimensions_artifact=_sample_vacancy_dimensions(opportunity_id),
+            vacancy_dimensions_status="approved",
+        )
+        assert updated is not None
+        enriched_artifact = _sample_vacancy_dimensions_enriched(opportunity_id)
+
+        with patch.object(
+            opportunities_api,
+            "enrich_vacancy_dimensions_artifact",
+            return_value=enriched_artifact,
+        ):
+            response = opportunities_api.recompute_vacancy_dimensions_enriched(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                _=self.session,
+            )
+
+        self.assertEqual(response.vacancy_dimensions_enriched_status, "draft")
+        self.assertEqual(
+            response.vacancy_dimensions_enriched_artifact["contract_version"],
+            "vacancy_dimensions_enriched.v1",
+        )
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_dimensions_enriched_status"], "draft")
+
+    def test_recompute_vacancy_dimensions_enriched_failure_sets_error_status(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Backend Engineer",
+            company="Acme",
+            location="Hybrid",
+            raw_text="Vacante con responsabilidades.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_dimensions_artifact=_sample_vacancy_dimensions(opportunity_id),
+            vacancy_dimensions_status="approved",
+        )
+        assert updated is not None
+
+        with patch.object(
+            opportunities_api,
+            "enrich_vacancy_dimensions_artifact",
+            side_effect=VacancyDimensionsEnrichmentError("Step 3.9 produced no enrichable atomic items"),
+        ):
+            with self.assertRaises(HTTPException) as ctx:
+                opportunities_api.recompute_vacancy_dimensions_enriched(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                )
+
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertIn("Step 3.9 produced no enrichable atomic items", str(ctx.exception.detail))
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_dimensions_enriched_status"], "error")
 
     def test_recompute_vacancy_dimensions_uses_persisted_vacancy_blocks_input(self) -> None:
         created = opportunity_store.import_text_opportunity(

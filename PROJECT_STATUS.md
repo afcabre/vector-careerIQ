@@ -91,6 +91,11 @@
 - validacion tecnica del slice `S3 v2 + S3.1 + S3.9`: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_dimensions_contract tests.test_vacancy_dimensions_service tests.test_vacancy_v2_consistency_gate tests.test_vacancy_v2_endpoints` en verde (`26 tests`)
 - artefacto y servicio separados agregados para `S3.1`: `vacancy_salary_normalization.v1` con flow dedicado `task_vacancy_salary_normalize`, validacion de input sobre `vacancy_dimensions.v2.work_conditions.salary.raw_text` y salida normalizada `min/max/currency/period/raw_text`
 - validacion tecnica del slice `S3.1` aislado: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_salary_contract tests.test_vacancy_salary_service tests.test_vacancy_dimensions_service` en verde (`15 tests`)
+- `S3.1` ya quedó cableado a oportunidad con persistencia propia y endpoint `POST /persons/{person_id}/opportunities/{opportunity_id}/vacancy-salary/recompute`
+- validacion tecnica del runtime `S3.1`: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_salary_contract tests.test_vacancy_salary_service tests.test_vacancy_v2_endpoints` en verde (`22 tests`)
+- decision documental nueva: `S3.9` se persiste como artefacto separado `vacancy_dimensions_enriched.v1` para trazabilidad previa a `S4`
+- `S3.9` ya quedó cableado a oportunidad con persistencia propia y endpoint `POST /persons/{person_id}/opportunities/{opportunity_id}/vacancy-dimensions-enriched/recompute`
+- validacion tecnica del runtime `S3.9`: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_dimensions_enriched_contract tests.test_vacancy_dimensions_enrichment_service tests.test_vacancy_v2_endpoints` en verde (`21 tests`)
 - `failed_checks` actual: `salary_transfer_rate_below_threshold`
 - `issue_samples` actuales de salario faltante en Step 3: `o-bd4de0f24c`, `o-e2b0ad6661`
 - herramienta operativa agregada: script `apps/backend/scripts/vacancy_v2_gate_report.py` para ejecutar gate por `person_id` o en todos los perfiles desde CLI

@@ -313,6 +313,7 @@ Objetivo:
 - asignar referencias tecnicas estables y operativas a cada item atomico antes de `S4`
 
 Output esperado:
+- artefacto `vacancy_dimensions_enriched.v1`
 - cada item atomico enriquecido con:
   - `item_id`
   - `item_index`

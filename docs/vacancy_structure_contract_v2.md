@@ -463,6 +463,9 @@ Naturaleza del paso:
 - no deduplica silenciosamente
 - no genera `semantic_queries`
 
+Artefacto propuesto:
+- `vacancy_dimensions_enriched.v1`
+
 Campos por item:
 - `item_id`: fingerprint estable del contenido
 - `item_index`: posicion del item dentro de su lista padre

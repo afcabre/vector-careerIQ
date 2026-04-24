@@ -52,6 +52,12 @@ class OpportunityRecord(TypedDict):
     vacancy_dimensions_artifact: dict[str, Any]
     vacancy_dimensions_status: str
     vacancy_dimensions_generated_at: str
+    vacancy_salary_artifact: dict[str, Any]
+    vacancy_salary_status: str
+    vacancy_salary_generated_at: str
+    vacancy_dimensions_enriched_artifact: dict[str, Any]
+    vacancy_dimensions_enriched_status: str
+    vacancy_dimensions_enriched_generated_at: str
     created_at: str
     updated_at: str
 
@@ -97,6 +103,12 @@ def _normalize(payload: dict | None) -> OpportunityRecord:
         "vacancy_dimensions_artifact": dict(source.get("vacancy_dimensions_artifact", {})),
         "vacancy_dimensions_status": str(source.get("vacancy_dimensions_status", "none")),
         "vacancy_dimensions_generated_at": str(source.get("vacancy_dimensions_generated_at", "")),
+        "vacancy_salary_artifact": dict(source.get("vacancy_salary_artifact", {})),
+        "vacancy_salary_status": str(source.get("vacancy_salary_status", "none")),
+        "vacancy_salary_generated_at": str(source.get("vacancy_salary_generated_at", "")),
+        "vacancy_dimensions_enriched_artifact": dict(source.get("vacancy_dimensions_enriched_artifact", {})),
+        "vacancy_dimensions_enriched_status": str(source.get("vacancy_dimensions_enriched_status", "none")),
+        "vacancy_dimensions_enriched_generated_at": str(source.get("vacancy_dimensions_enriched_generated_at", "")),
         "created_at": str(source.get("created_at", "")),
         "updated_at": str(source.get("updated_at", "")),
     }
@@ -195,6 +207,12 @@ def create_opportunity(
         "vacancy_dimensions_artifact": {},
         "vacancy_dimensions_status": "none",
         "vacancy_dimensions_generated_at": "",
+        "vacancy_salary_artifact": {},
+        "vacancy_salary_status": "none",
+        "vacancy_salary_generated_at": "",
+        "vacancy_dimensions_enriched_artifact": {},
+        "vacancy_dimensions_enriched_status": "none",
+        "vacancy_dimensions_enriched_generated_at": "",
         "created_at": now,
         "updated_at": now,
     }
@@ -290,6 +308,10 @@ def update_opportunity(
     vacancy_blocks_status: str | None = None,
     vacancy_dimensions_artifact: dict[str, Any] | None = None,
     vacancy_dimensions_status: str | None = None,
+    vacancy_salary_artifact: dict[str, Any] | None = None,
+    vacancy_salary_status: str | None = None,
+    vacancy_dimensions_enriched_artifact: dict[str, Any] | None = None,
+    vacancy_dimensions_enriched_status: str | None = None,
 ) -> OpportunityRecord | None:
     existing = find_opportunity(person_id, opportunity_id)
     if not existing:
@@ -335,6 +357,28 @@ def update_opportunity(
         existing["vacancy_dimensions_status"] = vacancy_dimensions_status
         if vacancy_dimensions_artifact is None:
             existing["vacancy_dimensions_generated_at"] = _now_iso()
+
+    if vacancy_salary_artifact is not None:
+        existing["vacancy_salary_artifact"] = dict(vacancy_salary_artifact)
+        existing["vacancy_salary_generated_at"] = _now_iso()
+
+    if vacancy_salary_status is not None:
+        if vacancy_salary_status not in VACANCY_V2_ARTIFACT_STATUSES:
+            return None
+        existing["vacancy_salary_status"] = vacancy_salary_status
+        if vacancy_salary_artifact is None:
+            existing["vacancy_salary_generated_at"] = _now_iso()
+
+    if vacancy_dimensions_enriched_artifact is not None:
+        existing["vacancy_dimensions_enriched_artifact"] = dict(vacancy_dimensions_enriched_artifact)
+        existing["vacancy_dimensions_enriched_generated_at"] = _now_iso()
+
+    if vacancy_dimensions_enriched_status is not None:
+        if vacancy_dimensions_enriched_status not in VACANCY_V2_ARTIFACT_STATUSES:
+            return None
+        existing["vacancy_dimensions_enriched_status"] = vacancy_dimensions_enriched_status
+        if vacancy_dimensions_enriched_artifact is None:
+            existing["vacancy_dimensions_enriched_generated_at"] = _now_iso()
 
     existing["updated_at"] = _now_iso()
     return _save(existing)
