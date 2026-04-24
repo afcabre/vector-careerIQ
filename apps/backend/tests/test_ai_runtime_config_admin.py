@@ -17,6 +17,7 @@ from app.services.ai_runtime_config_store import (
     DEFAULT_TOP_K_SEMANTIC_PER_CRITERION,
     DEFAULT_INTERVIEW_RESEARCH_MODE,
     DEFAULT_INTERVIEW_RESEARCH_MAX_STEPS,
+    DEFAULT_VACANCY_RETRIEVAL_QUERIES_PER_ITEM,
     reset_ai_runtime_config,
     update_ai_runtime_config,
 )
@@ -53,6 +54,10 @@ class AIRuntimeConfigAdminTests(unittest.TestCase):
         self.assertEqual(response.cv_chunking_strategy, DEFAULT_CV_CHUNKING_STRATEGY)
         self.assertEqual(response.interview_research_mode, DEFAULT_INTERVIEW_RESEARCH_MODE)
         self.assertEqual(response.interview_research_max_steps, DEFAULT_INTERVIEW_RESEARCH_MAX_STEPS)
+        self.assertEqual(
+            response.vacancy_retrieval_queries_per_item,
+            DEFAULT_VACANCY_RETRIEVAL_QUERIES_PER_ITEM,
+        )
         self.assertTrue(response.trace_truncation_enabled)
 
     def test_patch_ai_runtime_config_updates_values(self) -> None:
@@ -64,6 +69,7 @@ class AIRuntimeConfigAdminTests(unittest.TestCase):
                 cv_chunking_strategy="token_window",
                 interview_research_mode="adaptive",
                 interview_research_max_steps=6,
+                vacancy_retrieval_queries_per_item=3,
                 trace_truncation_enabled=False,
             ),
             session=self.session,
@@ -74,6 +80,7 @@ class AIRuntimeConfigAdminTests(unittest.TestCase):
         self.assertEqual(updated.cv_chunking_strategy, "token_window")
         self.assertEqual(updated.interview_research_mode, "adaptive")
         self.assertEqual(updated.interview_research_max_steps, 6)
+        self.assertEqual(updated.vacancy_retrieval_queries_per_item, 3)
         self.assertFalse(updated.trace_truncation_enabled)
         self.assertEqual(updated.updated_by, "tutor")
 
@@ -89,6 +96,11 @@ class AIRuntimeConfigAdminTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             update_ai_runtime_config(
                 top_k_semantic_analysis=99,
+                updated_by="tutor",
+            )
+        with self.assertRaises(ValueError):
+            update_ai_runtime_config(
+                vacancy_retrieval_queries_per_item=99,
                 updated_by="tutor",
             )
 

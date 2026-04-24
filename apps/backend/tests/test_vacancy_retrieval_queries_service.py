@@ -139,19 +139,27 @@ class VacancyRetrievalQueriesServiceTests(unittest.TestCase):
             return_value="prompt listo",
         ) as prompt_builder_mock:
             with patch(
-                "app.services.vacancy_retrieval_queries_service.complete_prompt",
-                return_value=llm_response,
-            ) as complete_prompt_mock:
-                extract_vacancy_retrieval_queries(
-                    _opportunity(),
-                    _vacancy_dimensions_enriched(),
-                    _vacancy_salary(),
-                    settings=object(),
-                )
+                "app.services.vacancy_retrieval_queries_service.get_ai_runtime_config",
+                return_value={"vacancy_retrieval_queries_per_item": 3},
+            ):
+                with patch(
+                    "app.services.vacancy_retrieval_queries_service.complete_prompt",
+                    return_value=llm_response,
+                ) as complete_prompt_mock:
+                    extract_vacancy_retrieval_queries(
+                        _opportunity(),
+                        _vacancy_dimensions_enriched(),
+                        _vacancy_salary(),
+                        settings=object(),
+                    )
 
         self.assertEqual(
             prompt_builder_mock.call_args.kwargs["flow_key"],
             FLOW_TASK_VACANCY_RETRIEVAL_QUERIES_EXTRACT,
+        )
+        self.assertEqual(
+            prompt_builder_mock.call_args.kwargs["context"]["retrieval_queries_per_item"],
+            "3",
         )
         self.assertEqual(
             complete_prompt_mock.call_args.kwargs["flow_key"],

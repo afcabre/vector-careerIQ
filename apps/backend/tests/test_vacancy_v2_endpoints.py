@@ -1004,6 +1004,102 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         assert stored is not None
         self.assertEqual(stored["vacancy_dimensions_enriched_status"], "error")
 
+    def test_vacancy_retrieval_queries_stream_emits_stages_and_message_complete(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Platform Engineer",
+            company="Acme",
+            location="Remote",
+            raw_text="Rol con responsabilidades.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_dimensions_enriched_artifact=_sample_vacancy_dimensions_enriched(opportunity_id),
+            vacancy_dimensions_enriched_status="approved",
+            vacancy_salary_artifact=_sample_vacancy_salary(opportunity_id),
+            vacancy_salary_status="approved",
+        )
+        assert updated is not None
+        queries_artifact = _sample_vacancy_retrieval_queries(opportunity_id)
+
+        with patch.object(
+            opportunities_api,
+            "extract_vacancy_retrieval_queries",
+            return_value=queries_artifact,
+        ):
+            response = asyncio.run(
+                opportunities_api.recompute_vacancy_retrieval_queries_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                    settings=get_settings(),
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        stages = [payload.get("stage", "") for name, payload in events if name == "tool_status"]
+        self.assertIn("vacancy_retrieval_queries_recompute_started", stages)
+        self.assertIn("vacancy_retrieval_queries_extracting", stages)
+        self.assertIn("vacancy_retrieval_queries_saving", stages)
+        complete_payload = next(payload for name, payload in events if name == "message_complete")
+        self.assertEqual(
+            complete_payload["opportunity"]["vacancy_retrieval_queries_status"],
+            "draft",
+        )
+
+    def test_vacancy_retrieval_queries_stream_emits_error_and_marks_status(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Platform Engineer",
+            company="Acme",
+            location="Remote",
+            raw_text="Rol con responsabilidades.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_dimensions_enriched_artifact=_sample_vacancy_dimensions_enriched(opportunity_id),
+            vacancy_dimensions_enriched_status="approved",
+        )
+        assert updated is not None
+
+        with patch.object(
+            opportunities_api,
+            "extract_vacancy_retrieval_queries",
+            side_effect=VacancyRetrievalQueriesExtractionError("Step 4 requires a valid vacancy_dimensions_enriched.v1 artifact."),
+        ):
+            response = asyncio.run(
+                opportunities_api.recompute_vacancy_retrieval_queries_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                    settings=get_settings(),
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        names = [name for name, _ in events]
+        self.assertIn("tool_status", names)
+        self.assertIn("error", names)
+        error_payload = next(payload for name, payload in events if name == "error")
+        self.assertIn(
+            "Step 4 requires a valid vacancy_dimensions_enriched.v1 artifact.",
+            str(error_payload.get("detail", "")),
+        )
+
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_retrieval_queries_status"], "error")
+
 
 if __name__ == "__main__":
     unittest.main()

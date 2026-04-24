@@ -43,6 +43,9 @@ INTERVIEW_RESEARCH_MAX_STEPS_MIN = 3
 INTERVIEW_RESEARCH_MAX_STEPS_MAX = 8
 DEFAULT_INTERVIEW_RESEARCH_MODE = INTERVIEW_RESEARCH_MODE_GUIDED
 DEFAULT_INTERVIEW_RESEARCH_MAX_STEPS = 5
+RETRIEVAL_QUERIES_PER_ITEM_MIN = 1
+RETRIEVAL_QUERIES_PER_ITEM_MAX = 5
+DEFAULT_VACANCY_RETRIEVAL_QUERIES_PER_ITEM = 2
 
 
 class AIRuntimeConfigRecord(TypedDict):
@@ -55,6 +58,7 @@ class AIRuntimeConfigRecord(TypedDict):
     retrieval_evidence_persistence_mode: str
     interview_research_mode: str
     interview_research_max_steps: int
+    vacancy_retrieval_queries_per_item: int
     trace_truncation_enabled: bool
     updated_by: str
     created_at: str
@@ -86,6 +90,7 @@ def _default_config() -> AIRuntimeConfigRecord:
         retrieval_evidence_persistence_mode=DEFAULT_RETRIEVAL_EVIDENCE_PERSISTENCE_MODE,
         interview_research_mode=DEFAULT_INTERVIEW_RESEARCH_MODE,
         interview_research_max_steps=DEFAULT_INTERVIEW_RESEARCH_MAX_STEPS,
+        vacancy_retrieval_queries_per_item=DEFAULT_VACANCY_RETRIEVAL_QUERIES_PER_ITEM,
         trace_truncation_enabled=True,
         updated_by="system",
         created_at=now,
@@ -102,6 +107,18 @@ def _coerce_top_k(value: Any, default: int) -> int:
         return AI_RUNTIME_TOP_K_MIN
     if number > AI_RUNTIME_TOP_K_MAX:
         return AI_RUNTIME_TOP_K_MAX
+    return number
+
+
+def _coerce_retrieval_queries_per_item(value: Any, default: int) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return default
+    if number < RETRIEVAL_QUERIES_PER_ITEM_MIN:
+        return RETRIEVAL_QUERIES_PER_ITEM_MIN
+    if number > RETRIEVAL_QUERIES_PER_ITEM_MAX:
+        return RETRIEVAL_QUERIES_PER_ITEM_MAX
     return number
 
 
@@ -174,6 +191,10 @@ def _normalize_firestore_record(payload: dict[str, Any] | None) -> AIRuntimeConf
         retrieval_evidence_persistence_mode=normalized_retrieval_persistence_mode,
         interview_research_mode=normalized_mode,
         interview_research_max_steps=max_steps,
+        vacancy_retrieval_queries_per_item=_coerce_retrieval_queries_per_item(
+            source.get("vacancy_retrieval_queries_per_item"),
+            base["vacancy_retrieval_queries_per_item"],
+        ),
         trace_truncation_enabled=bool(
             source.get("trace_truncation_enabled", base["trace_truncation_enabled"])
         ),
@@ -248,6 +269,19 @@ def _validate_interview_max_steps(value: int) -> int:
     return number
 
 
+def _validate_retrieval_queries_per_item(value: int) -> int:
+    number = int(value)
+    if (
+        number < RETRIEVAL_QUERIES_PER_ITEM_MIN
+        or number > RETRIEVAL_QUERIES_PER_ITEM_MAX
+    ):
+        raise ValueError(
+            "vacancy_retrieval_queries_per_item must be between "
+            f"{RETRIEVAL_QUERIES_PER_ITEM_MIN} and {RETRIEVAL_QUERIES_PER_ITEM_MAX}"
+        )
+    return number
+
+
 def _validate_cv_chunking_strategy(value: str) -> str:
     normalized = str(value).strip().lower()
     if normalized not in CV_CHUNKING_STRATEGIES:
@@ -284,6 +318,7 @@ def update_ai_runtime_config(
     retrieval_evidence_persistence_mode: str | None = None,
     interview_research_mode: str | None = None,
     interview_research_max_steps: int | None = None,
+    vacancy_retrieval_queries_per_item: int | None = None,
     trace_truncation_enabled: bool | None = None,
     updated_by: str,
 ) -> AIRuntimeConfigRecord:
@@ -325,6 +360,10 @@ def update_ai_runtime_config(
     if interview_research_max_steps is not None:
         current["interview_research_max_steps"] = _validate_interview_max_steps(
             interview_research_max_steps
+        )
+    if vacancy_retrieval_queries_per_item is not None:
+        current["vacancy_retrieval_queries_per_item"] = _validate_retrieval_queries_per_item(
+            vacancy_retrieval_queries_per_item
         )
     if trace_truncation_enabled is not None:
         current["trace_truncation_enabled"] = bool(trace_truncation_enabled)

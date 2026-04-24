@@ -121,7 +121,7 @@ def _required_placeholders(flow_key: str) -> set[str]:
     if flow_key == FLOW_TASK_VACANCY_SALARY_NORMALIZE:
         return {"salary_raw_text"}
     if flow_key == FLOW_TASK_VACANCY_RETRIEVAL_QUERIES_EXTRACT:
-        return {"vacancy_dimensions_enriched_json"}
+        return {"vacancy_dimensions_enriched_json", "retrieval_queries_per_item"}
     if flow_key == FLOW_TASK_PREPARE_GUIDANCE:
         return {"person_context", "opportunity_context"}
     if flow_key == FLOW_TASK_PREPARE_COVER_LETTER:
@@ -471,6 +471,7 @@ def _default_configs() -> dict[str, PromptConfigRecord]:
                 "Dentro de work_conditions usa exactamente: salary, modality, location, contract_type, other_conditions. "
                 "Cada item debe incluir exactamente: item_id, item_index, group_code, raw_text, queries. "
                 "No reclasifiques ni resumes la vacante. Formula queries orientadas a buscar evidencia en el CV. "
+                "Para cada item que amerite query, genera exactamente {retrieval_queries_per_item} queries distintas y utiles. "
                 "Si un item no amerita query util, deja queries vacio. "
                 "Vacante titulo: {opportunity_title}. "
                 "Empresa: {opportunity_company}. "

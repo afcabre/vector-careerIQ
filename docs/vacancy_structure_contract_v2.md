@@ -556,6 +556,26 @@ Regla:
 - Paso 4 formula consultas orientadas a evidencia de CV por item
 - si un item no amerita query util, puede devolver `queries: []`
 - mientras no exista schema runtime dedicado para `S4`, la implementacion inicial puede reutilizar el `llm_temperature` de `step3`
+- decision operativa vigente:
+  - no hay filtro programatico previo al LLM por tipologia
+  - las tipologias habilitadas se controlan hoy desde el contrato y el prompt
+  - `work_conditions` permanece permitido dentro de `S4` y puede producir queries para `salary`, `modality`, `location`, `contract_type` y `other_conditions`
+
+### TODO posterior de mejora posible para S4
+Estado:
+- `documentado`
+- no implementado
+- sin cambios sobre la ejecucion actual
+
+Recomendacion:
+- observar primero corridas reales de `S4` con el prompt actual
+- si aparece demasiado ruido, evaluar luego control administrable por tipologia dentro del prompt
+- no mover esa mejora a logica programatica mientras no exista evidencia clara de necesidad
+
+Direccion sugerida si mas adelante se habilita ese control:
+- empezar solo con `responsibilities`, `required_criteria` y `desirable_criteria`
+- dejar `benefits`, `about_the_company` y `work_conditions` fuera por defecto
+- conservar trazabilidad de la configuracion activa usada por cada corrida
 
 ## Paso 5 propuesto para retrieval de evidencia
 Objetivo:

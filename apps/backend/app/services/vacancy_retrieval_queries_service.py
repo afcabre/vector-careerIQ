@@ -5,6 +5,7 @@ import json
 from typing import Any
 
 from app.services.llm_service import FALLBACK_MESSAGE, complete_prompt
+from app.services.ai_runtime_config_store import get_ai_runtime_config
 from app.services.prompt_config_store import (
     FLOW_TASK_VACANCY_RETRIEVAL_QUERIES_EXTRACT,
     build_prompt_text,
@@ -98,11 +99,14 @@ def extract_vacancy_retrieval_queries(
             normalize_vacancy_salary_normalization_contract(vacancy_salary_artifact),
             ensure_ascii=False,
         )
+    ai_runtime_config = get_ai_runtime_config()
+    retrieval_queries_per_item = int(ai_runtime_config["vacancy_retrieval_queries_per_item"])
 
     system_prompt = (
         "You are a vacancy retrieval query generator. Return valid JSON only for vacancy_retrieval_queries.v1. "
         "Do not reclassify the vacancy. Do not generate categories. Do not decide compliance. "
-        "Generate search queries that help retrieve evidence from the CV for each item."
+        "Generate search queries that help retrieve evidence from the CV for each item. "
+        f"For each item that merits queries, generate exactly {retrieval_queries_per_item} distinct useful queries."
     )
     fallback_user_prompt = (
         "Generate retrieval queries and respond with valid JSON only. "
@@ -112,6 +116,7 @@ def extract_vacancy_retrieval_queries(
         "Each query item must include exactly: item_id, item_index, group_code, raw_text, queries. "
         "Use the metadata already present in the input items. Do not invent new ids or group codes. "
         "Queries should be phrased to retrieve evidence from the CV, not to summarize the vacancy. "
+        f"For each item that merits queries, generate exactly {retrieval_queries_per_item} distinct useful queries. "
         "If an item does not justify a useful query, leave queries empty. "
         f"Vacancy title: {opportunity.get('title', '')}. "
         f"Company: {opportunity.get('company', '')}. "
@@ -129,6 +134,7 @@ def extract_vacancy_retrieval_queries(
             "opportunity_url": str(opportunity.get("source_url", "")).strip(),
             "vacancy_dimensions_enriched_json": enriched_json,
             "vacancy_salary_json": salary_json,
+            "retrieval_queries_per_item": str(retrieval_queries_per_item),
         },
         fallback=fallback_user_prompt,
     )

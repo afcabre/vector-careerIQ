@@ -53,6 +53,7 @@ import {
   recomputeOpportunityVacancyDimensions,
   recomputeOpportunityVacancyDimensionsEnriched,
   recomputeOpportunityVacancyProfile,
+  recomputeOpportunityVacancyRetrievalQueries,
   recomputeOpportunityVacancySalary,
   saveOpportunityFromSearch,
   searchOpportunities,
@@ -281,6 +282,7 @@ const PROMPT_FLOW_LABELS: Record<string, string> = {
   task_interview_research_plan: "Prompt de tarea: Plan de investigacion entrevista",
   task_interview_brief: "Prompt de tarea: Brief de entrevista",
   task_vacancy_profile_extract: "Prompt de tarea: Estructurar vacante",
+  task_vacancy_retrieval_queries_extract: "Prompt de tarea: Queries de retrieval de vacante",
   task_prepare_guidance: "Prompt de tarea: Preparar guia de perfil",
   task_prepare_cover_letter: "Prompt de tarea: Preparar carta",
   task_prepare_experience_summary: "Prompt de tarea: Preparar resumen"
@@ -298,6 +300,7 @@ const PROMPT_FLOW_ORDER: string[] = [
   "task_interview_research_plan",
   "task_interview_brief",
   "task_vacancy_profile_extract",
+  "task_vacancy_retrieval_queries_extract",
   "task_prepare_guidance",
   "task_prepare_cover_letter",
   "task_prepare_experience_summary"
@@ -347,6 +350,20 @@ Empresa: {opportunity_company}
 Ubicacion: {opportunity_location}
 URL: {opportunity_url}
 Descripcion: {opportunity_raw_text}`,
+  task_vacancy_retrieval_queries_extract: `Genera queries de retrieval para la vacante y responde SOLO JSON valido.
+Usa solo estas claves raiz: queries.
+Dentro de queries usa exactamente: responsibilities, required_criteria, desirable_criteria, benefits, about_the_company, work_conditions.
+Dentro de work_conditions usa exactamente: salary, modality, location, contract_type, other_conditions.
+Cada item debe incluir exactamente: item_id, item_index, group_code, raw_text, queries.
+No reclasifiques ni resumes la vacante. Formula queries orientadas a buscar evidencia en el CV.
+Para cada item que amerite query, genera exactamente {retrieval_queries_per_item} queries distintas y utiles.
+Si un item no amerita query util, deja queries vacio.
+Vacante titulo: {opportunity_title}.
+Empresa: {opportunity_company}.
+Ubicacion: {opportunity_location}.
+URL: {opportunity_url}.
+Entrada vacancy_dimensions_enriched.v1: {vacancy_dimensions_enriched_json}.
+Entrada vacancy_salary_normalization.v1: {vacancy_salary_json}`
 };
 const PROMPT_SOURCE_FLOW_KEYS = new Set([
   "search_jobs_tavily",
@@ -1517,6 +1534,8 @@ export default function App() {
     "guided" | "adaptive"
   >("guided");
   const [aiRuntimeInterviewMaxStepsInput, setAiRuntimeInterviewMaxStepsInput] = useState("");
+  const [aiRuntimeVacancyRetrievalQueriesPerItemInput, setAiRuntimeVacancyRetrievalQueriesPerItemInput] =
+    useState("");
   const [aiRuntimeTraceTruncationEnabled, setAiRuntimeTraceTruncationEnabled] = useState(true);
   const [isLoadingAiRuntimeConfig, setIsLoadingAiRuntimeConfig] = useState(false);
   const [isSavingAiRuntimeConfig, setIsSavingAiRuntimeConfig] = useState(false);
@@ -1576,6 +1595,8 @@ export default function App() {
   const [recomputingVacancyDimensionsId, setRecomputingVacancyDimensionsId] = useState<string | null>(null);
   const [recomputingVacancySalaryId, setRecomputingVacancySalaryId] = useState<string | null>(null);
   const [recomputingVacancyDimensionsEnrichedId, setRecomputingVacancyDimensionsEnrichedId] = useState<string | null>(null);
+  const [recomputingVacancyRetrievalQueriesId, setRecomputingVacancyRetrievalQueriesId] =
+    useState<string | null>(null);
   const [updatingVacancyV2StatusKey, setUpdatingVacancyV2StatusKey] = useState<string | null>(null);
   const [opportunityProfileDrafts, setOpportunityProfileDrafts] = useState<
     Record<string, VacancyStructuredProfileDraft>
@@ -1761,6 +1782,7 @@ export default function App() {
         setAiRuntimeCvMarkdownExtractionModeInput("heuristic");
         setAiRuntimeInterviewResearchModeInput("guided");
         setAiRuntimeInterviewMaxStepsInput("");
+        setAiRuntimeVacancyRetrievalQueriesPerItemInput("");
         setSearchProviderConfigs([]);
         setPromptConfigs([]);
         setPromptConfigDrafts({});
@@ -1789,6 +1811,9 @@ export default function App() {
         setAiRuntimeCvMarkdownExtractionModeInput(runtimeConfig.cv_markdown_extraction_mode);
         setAiRuntimeInterviewResearchModeInput(runtimeConfig.interview_research_mode);
         setAiRuntimeInterviewMaxStepsInput(String(runtimeConfig.interview_research_max_steps));
+        setAiRuntimeVacancyRetrievalQueriesPerItemInput(
+          String(runtimeConfig.vacancy_retrieval_queries_per_item)
+        );
         setAiRuntimeTraceTruncationEnabled(runtimeConfig.trace_truncation_enabled);
       } catch (error) {
         const message =
@@ -2676,6 +2701,10 @@ export default function App() {
     const parsedInterview = Number.parseInt(aiRuntimeTopKInterviewInput, 10);
     const parsedPerCriterion = Number.parseInt(aiRuntimeTopKPerCriterionInput, 10);
     const parsedInterviewSteps = Number.parseInt(aiRuntimeInterviewMaxStepsInput, 10);
+    const parsedRetrievalQueriesPerItem = Number.parseInt(
+      aiRuntimeVacancyRetrievalQueriesPerItemInput,
+      10
+    );
 
     if (
       !Number.isFinite(parsedAnalysis) ||
@@ -2719,6 +2748,14 @@ export default function App() {
       return;
     }
     if (
+      !Number.isFinite(parsedRetrievalQueriesPerItem) ||
+      parsedRetrievalQueriesPerItem < 1 ||
+      parsedRetrievalQueriesPerItem > 5
+    ) {
+      setErrorMessage("queries por item para S4 debe estar entre 1 y 5.");
+      return;
+    }
+    if (
       aiRuntimeCvChunkingStrategyInput !== "token_window"
       && aiRuntimeCvChunkingStrategyInput !== "semantic_sections"
     ) {
@@ -2751,6 +2788,7 @@ export default function App() {
         cv_markdown_extraction_mode: aiRuntimeCvMarkdownExtractionModeInput,
         interview_research_mode: aiRuntimeInterviewResearchModeInput,
         interview_research_max_steps: parsedInterviewSteps,
+        vacancy_retrieval_queries_per_item: parsedRetrievalQueriesPerItem,
         trace_truncation_enabled: aiRuntimeTraceTruncationEnabled,
       });
       setAiRuntimeConfig(updated);
@@ -2761,6 +2799,9 @@ export default function App() {
       setAiRuntimeCvMarkdownExtractionModeInput(updated.cv_markdown_extraction_mode);
       setAiRuntimeInterviewResearchModeInput(updated.interview_research_mode);
       setAiRuntimeInterviewMaxStepsInput(String(updated.interview_research_max_steps));
+      setAiRuntimeVacancyRetrievalQueriesPerItemInput(
+        String(updated.vacancy_retrieval_queries_per_item)
+      );
       setAiRuntimeTraceTruncationEnabled(updated.trace_truncation_enabled);
     } catch (error) {
       const message =
@@ -3284,6 +3325,35 @@ export default function App() {
     }
   }
 
+  async function handleRecomputeVacancyRetrievalQueries(item: Opportunity) {
+    if (!selectedPersonId || recomputingVacancyRetrievalQueriesId) {
+      return;
+    }
+    setRecomputingVacancyRetrievalQueriesId(item.opportunity_id);
+    setErrorMessage(null);
+    try {
+      await recomputeOpportunityVacancyRetrievalQueries(selectedPersonId, item.opportunity_id);
+      const items = await listOpportunities(selectedPersonId);
+      setSavedOpportunities(items);
+      if (selectedOpportunityId === item.opportunity_id) {
+        const refreshed = items.find((entry) => entry.opportunity_id === item.opportunity_id);
+        if (refreshed) {
+          setOpportunityStatus(refreshed.status);
+          setOpportunityNotes(refreshed.notes);
+        }
+      }
+      setToastMessage("Vacancy Retrieval Queries recalculado");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "No se pudo recalcular Vacancy Retrieval Queries";
+      setErrorMessage(message);
+    } finally {
+      setRecomputingVacancyRetrievalQueriesId(null);
+    }
+  }
+
   async function handleRunVacancyV2Gate() {
     if (!selectedPersonId || isLoadingVacancyV2Gate) {
       return;
@@ -3333,7 +3403,8 @@ export default function App() {
       | "vacancy_blocks"
       | "vacancy_dimensions"
       | "vacancy_salary"
-      | "vacancy_dimensions_enriched",
+      | "vacancy_dimensions_enriched"
+      | "vacancy_retrieval_queries",
     status: "none" | "draft" | "approved" | "error"
   ) {
     if (!selectedPersonId || updatingVacancyV2StatusKey) {
@@ -3355,9 +3426,13 @@ export default function App() {
         await updateOpportunity(selectedPersonId, item.opportunity_id, {
           vacancy_salary_status: status,
         });
-      } else {
+      } else if (artifact === "vacancy_dimensions_enriched") {
         await updateOpportunity(selectedPersonId, item.opportunity_id, {
           vacancy_dimensions_enriched_status: status,
+        });
+      } else {
+        await updateOpportunity(selectedPersonId, item.opportunity_id, {
+          vacancy_retrieval_queries_status: status,
         });
       }
       const items = await listOpportunities(selectedPersonId);
@@ -4865,6 +4940,23 @@ export default function App() {
                 <p className="metaText">
                   steps permitidos: {AI_RUNTIME_INTERVIEW_STEPS_MIN} a {AI_RUNTIME_INTERVIEW_STEPS_MAX}
                 </p>
+                <label className="field">
+                  queries por item para S4
+                  <input
+                    disabled={isSavingAiRuntimeConfig}
+                    max={5}
+                    min={1}
+                    onChange={(event) =>
+                      setAiRuntimeVacancyRetrievalQueriesPerItemInput(event.target.value)
+                    }
+                    step={1}
+                    type="number"
+                    value={aiRuntimeVacancyRetrievalQueriesPerItemInput}
+                  />
+                </label>
+                <p className="metaText">
+                  Controla cuantas queries semanticas se piden por item en `task_vacancy_retrieval_queries_extract`.
+                </p>
                 <label className="checkboxRow">
                   <input
                     checked={aiRuntimeTraceTruncationEnabled}
@@ -6004,6 +6096,8 @@ export default function App() {
               const hasVacancySalaryArtifact = Object.keys(item.vacancy_salary_artifact ?? {}).length > 0;
               const hasVacancyDimensionsEnrichedArtifact =
                 Object.keys(item.vacancy_dimensions_enriched_artifact ?? {}).length > 0;
+              const hasVacancyRetrievalQueriesArtifact =
+                Object.keys(item.vacancy_retrieval_queries_artifact ?? {}).length > 0;
               const vacancyBlocksStatusLabel = getVacancyV2StatusLabel(item.vacancy_blocks_status);
               const vacancyDimensionsStatusLabel = getVacancyV2StatusLabel(
                 item.vacancy_dimensions_status
@@ -6011,6 +6105,9 @@ export default function App() {
               const vacancySalaryStatusLabel = getVacancyV2StatusLabel(item.vacancy_salary_status);
               const vacancyDimensionsEnrichedStatusLabel = getVacancyV2StatusLabel(
                 item.vacancy_dimensions_enriched_status
+              );
+              const vacancyRetrievalQueriesStatusLabel = getVacancyV2StatusLabel(
+                item.vacancy_retrieval_queries_status
               );
               const vacancyBlocksGeneratedAt = item.vacancy_blocks_generated_at
                 ? formatAiRunTimestamp(item.vacancy_blocks_generated_at)
@@ -6024,6 +6121,9 @@ export default function App() {
               const vacancyDimensionsEnrichedGeneratedAt = item.vacancy_dimensions_enriched_generated_at
                 ? formatAiRunTimestamp(item.vacancy_dimensions_enriched_generated_at)
                 : "Sin generar";
+              const vacancyRetrievalQueriesGeneratedAt = item.vacancy_retrieval_queries_generated_at
+                ? formatAiRunTimestamp(item.vacancy_retrieval_queries_generated_at)
+                : "Sin generar";
               const isUpdatingVacancyBlocksStatus =
                 updatingVacancyV2StatusKey === `vacancy_blocks:${item.opportunity_id}`;
               const isUpdatingVacancyDimensionsStatus =
@@ -6032,6 +6132,8 @@ export default function App() {
                 updatingVacancyV2StatusKey === `vacancy_salary:${item.opportunity_id}`;
               const isUpdatingVacancyDimensionsEnrichedStatus =
                 updatingVacancyV2StatusKey === `vacancy_dimensions_enriched:${item.opportunity_id}`;
+              const isUpdatingVacancyRetrievalQueriesStatus =
+                updatingVacancyV2StatusKey === `vacancy_retrieval_queries:${item.opportunity_id}`;
               const isSelectedSavedOpportunity = selectedOpportunityId === item.opportunity_id;
               return (
                 <article
@@ -6706,6 +6808,75 @@ export default function App() {
                       ) : (
                         <p className="metaText">
                           Sin artefacto S3.9. Requiere Step 3 valido para enriquecer dimensiones.
+                        </p>
+                      )}
+                    </section>
+
+                    <section className="vacancyV2Section">
+                      <div className="vacancyV2SectionHeader">
+                        <div>
+                          <p className="metaText vacancyV2SectionTitle">
+                            S4 · Vacancy Retrieval Queries
+                          </p>
+                          <p className="metaText">Generado: {vacancyRetrievalQueriesGeneratedAt}</p>
+                        </div>
+                        <div className="metaChips vacancyV2HeaderChips">
+                          <span
+                            className={`metaChip ${getVacancyV2StatusClassName(item.vacancy_retrieval_queries_status)}`}
+                          >
+                            {vacancyRetrievalQueriesStatusLabel}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="cardActions">
+                        <button
+                          className="vacancyProfileQuickActionButton"
+                          disabled={
+                            !hasVacancyDimensionsEnrichedArtifact
+                            || recomputingVacancyRetrievalQueriesId === item.opportunity_id
+                          }
+                          onClick={() => void handleRecomputeVacancyRetrievalQueries(item)}
+                          type="button"
+                        >
+                          {recomputingVacancyRetrievalQueriesId === item.opportunity_id
+                            ? "Recalculando..."
+                            : "Recalcular S4"}
+                        </button>
+                        {hasVacancyRetrievalQueriesArtifact ? (
+                          <button
+                            className="vacancyProfileQuickActionButton"
+                            disabled={isUpdatingVacancyRetrievalQueriesStatus}
+                            onClick={() =>
+                              void handleSetVacancyV2Status(
+                                item,
+                                "vacancy_retrieval_queries",
+                                item.vacancy_retrieval_queries_status === "approved"
+                                  ? "draft"
+                                  : "approved"
+                              )}
+                            type="button"
+                          >
+                            {isUpdatingVacancyRetrievalQueriesStatus
+                              ? "Actualizando..."
+                              : item.vacancy_retrieval_queries_status === "approved"
+                                ? "Marcar borrador"
+                                : "Aprobar S4"}
+                          </button>
+                        ) : null}
+                      </div>
+                      {hasVacancyRetrievalQueriesArtifact ? (
+                        <label className="field">
+                          JSON S4
+                          <textarea
+                            className="vacancyV2JsonTextarea"
+                            readOnly
+                            rows={12}
+                            value={safePrettyJson(item.vacancy_retrieval_queries_artifact)}
+                          />
+                        </label>
+                      ) : (
+                        <p className="metaText">
+                          Sin artefacto S4. Requiere S3.9 valido para generar queries de retrieval.
                         </p>
                       )}
                     </section>

@@ -346,6 +346,15 @@ Regla:
 - formula queries orientadas a recuperacion de evidencia
 - este paso puede devolver `queries: []` cuando no exista una formulacion util
 - mientras no exista schema runtime dedicado para `S4`, la implementacion inicial puede reutilizar `step3.llm_temperature`
+- decision operativa vigente:
+  - mantener por ahora el control dentro del prompt
+  - no introducir aun filtro programatico por tipologia
+  - observar primero el comportamiento real de `S4` sobre todas las tipologias habilitadas en el contrato
+
+### TODO posterior a observacion de S4
+- si `S4` genera ruido en corridas reales, evaluar control administrable de tipologias dentro del prompt
+- no mover esa mejora a logica programatica mientras no exista evidencia de necesidad
+- si se adopta despues, empezar por `responsibilities`, `required_criteria` y `desirable_criteria`
 
 ### S5. Retrieval de evidencia
 Objetivo:

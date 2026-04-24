@@ -1169,6 +1169,108 @@ def recompute_vacancy_retrieval_queries(
     return _to_response(updated)
 
 
+@router.post("/{opportunity_id}/vacancy-retrieval-queries/recompute/stream")
+async def recompute_vacancy_retrieval_queries_stream(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+    settings: Settings = Depends(get_settings),
+) -> StreamingResponse:
+    _require_person(person_id)
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    async def event_generator():
+        try:
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "vacancy_retrieval_queries_recompute_started",
+                },
+            )
+            await asyncio.sleep(0)
+
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "vacancy_retrieval_queries_extracting",
+                },
+            )
+            await asyncio.sleep(0)
+
+            artifact = extract_vacancy_retrieval_queries(
+                opportunity=opportunity,
+                vacancy_dimensions_enriched_artifact=opportunity.get(
+                    "vacancy_dimensions_enriched_artifact", {}
+                ),
+                vacancy_salary_artifact=opportunity.get("vacancy_salary_artifact", {}),
+                settings=settings,
+            )
+
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "vacancy_retrieval_queries_saving",
+                },
+            )
+            await asyncio.sleep(0)
+
+            updated = update_saved_opportunity(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                status=None,
+                notes=None,
+                vacancy_retrieval_queries_artifact=artifact,
+                vacancy_retrieval_queries_status="draft",
+            )
+            if not updated:
+                raise RuntimeError("Could not recompute vacancy retrieval queries")
+
+            yield _serialize_sse(
+                "message_complete",
+                {
+                    "opportunity": updated,
+                },
+            )
+        except VacancyRetrievalQueriesExtractionError as exc:
+            update_saved_opportunity(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                status=None,
+                notes=None,
+                vacancy_retrieval_queries_status="error",
+            )
+            yield _serialize_sse(
+                "error",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "detail": str(exc),
+                },
+            )
+        except Exception as exc:  # pragma: no cover - stream runtime path
+            yield _serialize_sse(
+                "error",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "detail": str(exc),
+                },
+            )
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
 @router.post("/{opportunity_id}/vacancy-dimensions-enriched/recompute/stream")
 async def recompute_vacancy_dimensions_enriched_stream(
     person_id: str,

@@ -97,6 +97,9 @@ export type Opportunity = {
   vacancy_dimensions_enriched_artifact: Record<string, unknown>;
   vacancy_dimensions_enriched_status: "none" | "draft" | "approved" | "error";
   vacancy_dimensions_enriched_generated_at: string;
+  vacancy_retrieval_queries_artifact: Record<string, unknown>;
+  vacancy_retrieval_queries_status: "none" | "draft" | "approved" | "error";
+  vacancy_retrieval_queries_generated_at: string;
   created_at: string;
   updated_at: string;
 };
@@ -373,6 +376,7 @@ export type AIRuntimeConfig = {
   cv_markdown_extraction_mode: "heuristic" | "pymupdf4llm";
   interview_research_mode: "guided" | "adaptive";
   interview_research_max_steps: number;
+  vacancy_retrieval_queries_per_item: number;
   trace_truncation_enabled: boolean;
   updated_by: string;
   created_at: string;
@@ -552,6 +556,7 @@ export async function updateAiRuntimeConfig(payload: {
   cv_markdown_extraction_mode?: "heuristic" | "pymupdf4llm";
   interview_research_mode?: "guided" | "adaptive";
   interview_research_max_steps?: number;
+  vacancy_retrieval_queries_per_item?: number;
   trace_truncation_enabled?: boolean;
 }): Promise<AIRuntimeConfig> {
   const response = await safeFetch(`${API_BASE}/admin/ai-runtime-config`, {
@@ -935,6 +940,8 @@ export async function updateOpportunity(
     vacancy_salary_status?: "none" | "draft" | "approved" | "error";
     vacancy_dimensions_enriched_artifact?: Record<string, unknown>;
     vacancy_dimensions_enriched_status?: "none" | "draft" | "approved" | "error";
+    vacancy_retrieval_queries_artifact?: Record<string, unknown>;
+    vacancy_retrieval_queries_status?: "none" | "draft" | "approved" | "error";
   }
 ): Promise<Opportunity> {
   const response = await safeFetch(
@@ -1011,6 +1018,20 @@ export async function recomputeOpportunityVacancyDimensionsEnriched(
 ): Promise<Opportunity> {
   const response = await safeFetch(
     `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/vacancy-dimensions-enriched/recompute`,
+    {
+      method: "POST",
+      credentials: "include"
+    }
+  );
+  return parseResponse<Opportunity>(response);
+}
+
+export async function recomputeOpportunityVacancyRetrievalQueries(
+  personId: string,
+  opportunityId: string
+): Promise<Opportunity> {
+  const response = await safeFetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/vacancy-retrieval-queries/recompute`,
     {
       method: "POST",
       credentials: "include"

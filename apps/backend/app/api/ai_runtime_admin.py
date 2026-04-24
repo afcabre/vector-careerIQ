@@ -9,6 +9,8 @@ from app.services.ai_runtime_config_store import (
     CV_MARKDOWN_EXTRACTION_MODES,
     INTERVIEW_RESEARCH_MAX_STEPS_MAX,
     INTERVIEW_RESEARCH_MAX_STEPS_MIN,
+    RETRIEVAL_QUERIES_PER_ITEM_MAX,
+    RETRIEVAL_QUERIES_PER_ITEM_MIN,
     get_ai_runtime_config,
     update_ai_runtime_config,
 )
@@ -27,6 +29,7 @@ class AIRuntimeConfigResponse(BaseModel):
     retrieval_evidence_persistence_mode: str
     interview_research_mode: str
     interview_research_max_steps: int
+    vacancy_retrieval_queries_per_item: int
     trace_truncation_enabled: bool
     updated_by: str
     created_at: str
@@ -58,6 +61,11 @@ class UpdateAIRuntimeConfigRequest(BaseModel):
         ge=INTERVIEW_RESEARCH_MAX_STEPS_MIN,
         le=INTERVIEW_RESEARCH_MAX_STEPS_MAX,
     )
+    vacancy_retrieval_queries_per_item: int | None = Field(
+        default=None,
+        ge=RETRIEVAL_QUERIES_PER_ITEM_MIN,
+        le=RETRIEVAL_QUERIES_PER_ITEM_MAX,
+    )
     trace_truncation_enabled: bool | None = None
 
 
@@ -82,6 +90,7 @@ def patch_config(
         and payload.retrieval_evidence_persistence_mode is None
         and payload.interview_research_mode is None
         and payload.interview_research_max_steps is None
+        and payload.vacancy_retrieval_queries_per_item is None
         and payload.trace_truncation_enabled is None
     ):
         raise HTTPException(
@@ -114,6 +123,7 @@ def patch_config(
             retrieval_evidence_persistence_mode=payload.retrieval_evidence_persistence_mode,
             interview_research_mode=payload.interview_research_mode,
             interview_research_max_steps=payload.interview_research_max_steps,
+            vacancy_retrieval_queries_per_item=payload.vacancy_retrieval_queries_per_item,
             trace_truncation_enabled=payload.trace_truncation_enabled,
             updated_by=session.username,
         )
