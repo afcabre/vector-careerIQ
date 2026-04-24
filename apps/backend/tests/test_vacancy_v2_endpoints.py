@@ -18,6 +18,7 @@ from app.services.request_trace_store import reset_request_traces
 from app.services.vacancy_blocks_service import VacancyBlocksExtractionError
 from app.services.vacancy_dimensions_service import VacancyDimensionsExtractionError
 from app.services.vacancy_dimensions_enrichment_service import VacancyDimensionsEnrichmentError
+from app.services.vacancy_retrieval_queries_service import VacancyRetrievalQueriesExtractionError
 from app.services.vacancy_salary_service import VacancySalaryNormalizationError
 
 
@@ -112,6 +113,36 @@ def _sample_vacancy_dimensions_enriched(opportunity_id: str) -> dict[str, Any]:
             "desirable_criteria": [],
             "benefits": [],
             "about_the_company": [],
+        },
+    }
+
+
+def _sample_vacancy_retrieval_queries(opportunity_id: str) -> dict[str, Any]:
+    return {
+        "contract_version": "vacancy_retrieval_queries.v1",
+        "vacancy_id": opportunity_id,
+        "generated_at": "2026-04-24T10:35:00Z",
+        "queries": {
+            "responsibilities": [
+                {
+                    "item_id": "resp_1234567890",
+                    "item_index": 0,
+                    "group_code": "resp",
+                    "raw_text": "Liderar backlog de datos",
+                    "queries": ["liderazgo de backlog, coordinacion de roadmap de datos"],
+                }
+            ],
+            "required_criteria": [],
+            "desirable_criteria": [],
+            "benefits": [],
+            "about_the_company": [],
+            "work_conditions": {
+                "salary": [],
+                "modality": [],
+                "location": [],
+                "contract_type": [],
+                "other_conditions": [],
+            },
         },
     }
 
@@ -266,6 +297,19 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         self.assertEqual(
             invalid_enriched_status.exception.detail,
             "Invalid vacancy_dimensions_enriched_status",
+        )
+
+        with self.assertRaises(HTTPException) as invalid_queries_status:
+            opportunities_api.update_opportunity(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                payload=opportunities_api.UpdateOpportunityRequest(vacancy_retrieval_queries_status="invalid"),
+                _=self.session,
+            )
+        self.assertEqual(invalid_queries_status.exception.status_code, 422)
+        self.assertEqual(
+            invalid_queries_status.exception.detail,
+            "Invalid vacancy_retrieval_queries_status",
         )
 
     def test_recompute_vacancy_dimensions_success_sets_draft_artifact(self) -> None:
@@ -460,6 +504,87 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         stored = opportunity_store.find_opportunity("p-001", opportunity_id)
         assert stored is not None
         self.assertEqual(stored["vacancy_dimensions_enriched_status"], "error")
+
+    def test_recompute_vacancy_retrieval_queries_success_sets_draft_artifact(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Backend Engineer",
+            company="Acme",
+            location="Hybrid",
+            raw_text="Vacante con responsabilidades.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_dimensions_enriched_artifact=_sample_vacancy_dimensions_enriched(opportunity_id),
+            vacancy_dimensions_enriched_status="approved",
+            vacancy_salary_artifact=_sample_vacancy_salary(opportunity_id),
+            vacancy_salary_status="approved",
+        )
+        assert updated is not None
+        queries_artifact = _sample_vacancy_retrieval_queries(opportunity_id)
+
+        with patch.object(
+            opportunities_api,
+            "extract_vacancy_retrieval_queries",
+            return_value=queries_artifact,
+        ):
+            response = opportunities_api.recompute_vacancy_retrieval_queries(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                _=self.session,
+                settings=get_settings(),
+            )
+
+        self.assertEqual(response.vacancy_retrieval_queries_status, "draft")
+        self.assertEqual(
+            response.vacancy_retrieval_queries_artifact["contract_version"],
+            "vacancy_retrieval_queries.v1",
+        )
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_retrieval_queries_status"], "draft")
+
+    def test_recompute_vacancy_retrieval_queries_failure_sets_error_status(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Backend Engineer",
+            company="Acme",
+            location="Hybrid",
+            raw_text="Vacante con responsabilidades.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_dimensions_enriched_artifact=_sample_vacancy_dimensions_enriched(opportunity_id),
+            vacancy_dimensions_enriched_status="approved",
+        )
+        assert updated is not None
+
+        with patch.object(
+            opportunities_api,
+            "extract_vacancy_retrieval_queries",
+            side_effect=VacancyRetrievalQueriesExtractionError("Step 4 requires a valid vacancy_dimensions_enriched.v1 artifact."),
+        ):
+            with self.assertRaises(HTTPException) as ctx:
+                opportunities_api.recompute_vacancy_retrieval_queries(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                    settings=get_settings(),
+                )
+
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertIn("Step 4 requires a valid vacancy_dimensions_enriched.v1 artifact.", str(ctx.exception.detail))
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_retrieval_queries_status"], "error")
 
     def test_recompute_vacancy_dimensions_uses_persisted_vacancy_blocks_input(self) -> None:
         created = opportunity_store.import_text_opportunity(

@@ -22,6 +22,7 @@ FLOW_TASK_VACANCY_PROFILE_EXTRACT = "task_vacancy_profile_extract"
 FLOW_TASK_VACANCY_BLOCKS_EXTRACT = "task_vacancy_blocks_extract"
 FLOW_TASK_VACANCY_DIMENSIONS_EXTRACT = "task_vacancy_dimensions_extract"
 FLOW_TASK_VACANCY_SALARY_NORMALIZE = "task_vacancy_salary_normalize"
+FLOW_TASK_VACANCY_RETRIEVAL_QUERIES_EXTRACT = "task_vacancy_retrieval_queries_extract"
 FLOW_TASK_PREPARE_GUIDANCE = "task_prepare_guidance"
 FLOW_TASK_PREPARE_COVER_LETTER = "task_prepare_cover_letter"
 FLOW_TASK_PREPARE_EXPERIENCE_SUMMARY = "task_prepare_experience_summary"
@@ -119,6 +120,8 @@ def _required_placeholders(flow_key: str) -> set[str]:
         return {"vacancy_blocks_json"}
     if flow_key == FLOW_TASK_VACANCY_SALARY_NORMALIZE:
         return {"salary_raw_text"}
+    if flow_key == FLOW_TASK_VACANCY_RETRIEVAL_QUERIES_EXTRACT:
+        return {"vacancy_dimensions_enriched_json"}
     if flow_key == FLOW_TASK_PREPARE_GUIDANCE:
         return {"person_context", "opportunity_context"}
     if flow_key == FLOW_TASK_PREPARE_COVER_LETTER:
@@ -449,6 +452,32 @@ def _default_configs() -> dict[str, PromptConfigRecord]:
                 "Ubicacion: {opportunity_location}. "
                 "URL: {opportunity_url}. "
                 "Salary raw text: {salary_raw_text}"
+            ),
+            "target_sources": [],
+            "is_active": True,
+            "updated_by": "system",
+            "created_at": now,
+            "updated_at": now,
+        },
+        {
+            "config_id": f"pc-{FLOW_TASK_VACANCY_RETRIEVAL_QUERIES_EXTRACT}",
+            "scope": "global",
+            "flow_key": FLOW_TASK_VACANCY_RETRIEVAL_QUERIES_EXTRACT,
+            "template_text": (
+                "Genera queries de retrieval para la vacante y responde SOLO JSON valido. "
+                "Usa solo estas claves raiz: queries. "
+                "Dentro de queries usa exactamente: responsibilities, required_criteria, desirable_criteria, "
+                "benefits, about_the_company, work_conditions. "
+                "Dentro de work_conditions usa exactamente: salary, modality, location, contract_type, other_conditions. "
+                "Cada item debe incluir exactamente: item_id, item_index, group_code, raw_text, queries. "
+                "No reclasifiques ni resumes la vacante. Formula queries orientadas a buscar evidencia en el CV. "
+                "Si un item no amerita query util, deja queries vacio. "
+                "Vacante titulo: {opportunity_title}. "
+                "Empresa: {opportunity_company}. "
+                "Ubicacion: {opportunity_location}. "
+                "URL: {opportunity_url}. "
+                "Entrada vacancy_dimensions_enriched.v1: {vacancy_dimensions_enriched_json}. "
+                "Entrada vacancy_salary_normalization.v1: {vacancy_salary_json}"
             ),
             "target_sources": [],
             "is_active": True,

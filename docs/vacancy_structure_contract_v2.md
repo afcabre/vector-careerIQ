@@ -515,7 +515,7 @@ Objetivo:
 - generar consultas semanticas por item ya atomizado, sin reclasificar ni reinterpretar la vacante completa
 
 Input:
-- artefacto `vacancy_dimensions.v2`
+- artefacto `vacancy_dimensions_enriched.v1`
 - y resultado de `Paso 3.1` para salario cuando exista
 
 Output esperado:
@@ -555,6 +555,7 @@ Regla:
 - Paso 4 no decide cumplimiento
 - Paso 4 formula consultas orientadas a evidencia de CV por item
 - si un item no amerita query util, puede devolver `queries: []`
+- mientras no exista schema runtime dedicado para `S4`, la implementacion inicial puede reutilizar el `llm_temperature` de `step3`
 
 ## Paso 5 propuesto para retrieval de evidencia
 Objetivo:

@@ -341,8 +341,11 @@ Output esperado:
 Regla:
 - este paso no reclasifica ni reatomiza la vacante
 - toma items estabilizados de `S3` y, si aplica, enriquecidos por `S3.9`
+- input operativo preferido: `vacancy_dimensions_enriched.v1`
+- input complementario opcional: `vacancy_salary_normalization.v1`
 - formula queries orientadas a recuperacion de evidencia
 - este paso puede devolver `queries: []` cuando no exista una formulacion util
+- mientras no exista schema runtime dedicado para `S4`, la implementacion inicial puede reutilizar `step3.llm_temperature`
 
 ### S5. Retrieval de evidencia
 Objetivo:
