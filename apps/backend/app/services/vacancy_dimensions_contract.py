@@ -1,15 +1,29 @@
 from __future__ import annotations
 
+import copy
+import hashlib
 from typing import Any, TypedDict
 
 
-CONTRACT_VERSION_VACANCY_DIMENSIONS = "vacancy_dimensions.v1"
+CONTRACT_VERSION_VACANCY_DIMENSIONS = "vacancy_dimensions.v2"
 
 WORK_CONDITION_KEYS = (
     "salary",
     "modality",
     "location",
     "contract_type",
+    "other_conditions",
+)
+
+ATOMIC_DIMENSION_KEYS = (
+    "responsibilities",
+    "required_criteria",
+    "desirable_criteria",
+    "benefits",
+    "about_the_company",
+)
+
+LEGACY_OTHER_CONDITION_KEYS = (
     "schedule",
     "availability",
     "travel",
@@ -18,106 +32,62 @@ WORK_CONDITION_KEYS = (
     "mobility_requirements",
 )
 
+GROUP_CODE_BY_DIMENSION = {
+    "responsibilities": "resp",
+    "required_criteria": "req",
+    "desirable_criteria": "des",
+    "benefits": "ben",
+    "about_the_company": "comp",
+    "other_conditions": "cond",
+}
 
-class SalaryCondition(TypedDict):
+
+class RawTextItem(TypedDict):
+    raw_text: str
+
+
+class SalarySignal(TypedDict):
+    raw_text: str
+
+
+class SalaryNormalization(TypedDict):
     min: int | None
     max: int | None
     currency: str
     period: str
-    text: str
+    raw_text: str
 
 
 class ModalityCondition(TypedDict):
-    type: str
-    location: str
-    text: str
+    value: str
+    raw_text: str
 
 
 class LocationCondition(TypedDict):
     places: list[str]
-    text: str
-
-
-class ContractTypeCondition(TypedDict):
-    type: str
-    text: str
-
-
-class ScheduleCondition(TypedDict):
-    type: str
-    detail: str
-    text: str
-
-
-class AvailabilityCondition(TypedDict):
-    type: str
-    detail: str
-    text: str
-
-
-class TravelCondition(TypedDict):
-    required: bool | None
-    frequency: str
-    scope: str
-    text: str
-
-
-class LegalRequirementsCondition(TypedDict):
-    documents_required: list[str]
-    text: str
-
-
-class RelocationCondition(TypedDict):
-    required: bool | None
-    destination: str
-    text: str
-
-
-class MobilityRequirementsCondition(TypedDict):
-    vehicle_required: bool | None
-    driving_license: list[str]
-    other: list[str]
-    text: str
-
-
-class VacancyDimensionItem(TypedDict):
-    id: str
-    category: str
-    semantic_queries: list[str]
     raw_text: str
 
 
-class ResponsibilityItem(VacancyDimensionItem):
-    task: str
-
-
-class CompetencyItem(VacancyDimensionItem):
-    requirement: str
-
-
-class BenefitItem(VacancyDimensionItem):
-    benefit: str
+class ContractTypeCondition(TypedDict):
+    value: str
+    raw_text: str
 
 
 class WorkConditionsPayload(TypedDict):
-    salary: SalaryCondition
+    salary: SalarySignal
     modality: ModalityCondition
     location: LocationCondition
     contract_type: ContractTypeCondition
-    schedule: ScheduleCondition
-    availability: AvailabilityCondition
-    travel: TravelCondition
-    legal_requirements: LegalRequirementsCondition
-    relocation: RelocationCondition
-    mobility_requirements: MobilityRequirementsCondition
+    other_conditions: list[RawTextItem]
 
 
 class VacancyDimensionsPayload(TypedDict):
     work_conditions: WorkConditionsPayload
-    responsibilities: list[ResponsibilityItem]
-    required_competencies: list[CompetencyItem]
-    desirable_competencies: list[CompetencyItem]
-    benefits: list[BenefitItem]
+    responsibilities: list[RawTextItem]
+    required_criteria: list[RawTextItem]
+    desirable_criteria: list[RawTextItem]
+    benefits: list[RawTextItem]
+    about_the_company: list[RawTextItem]
 
 
 class VacancyDimensionsContract(TypedDict):
@@ -125,6 +95,37 @@ class VacancyDimensionsContract(TypedDict):
     vacancy_id: str
     generated_at: str
     vacancy_dimensions: VacancyDimensionsPayload
+
+
+class EnrichedVacancyDimensionItem(TypedDict):
+    raw_text: str
+    item_id: str
+    item_index: int
+    group_code: str
+
+
+class EnrichedWorkConditionsPayload(TypedDict):
+    salary: SalarySignal
+    modality: ModalityCondition
+    location: LocationCondition
+    contract_type: ContractTypeCondition
+    other_conditions: list[EnrichedVacancyDimensionItem]
+
+
+class EnrichedVacancyDimensionsPayload(TypedDict):
+    work_conditions: EnrichedWorkConditionsPayload
+    responsibilities: list[EnrichedVacancyDimensionItem]
+    required_criteria: list[EnrichedVacancyDimensionItem]
+    desirable_criteria: list[EnrichedVacancyDimensionItem]
+    benefits: list[EnrichedVacancyDimensionItem]
+    about_the_company: list[EnrichedVacancyDimensionItem]
+
+
+class EnrichedVacancyDimensionsContract(TypedDict):
+    contract_version: str
+    vacancy_id: str
+    generated_at: str
+    vacancy_dimensions: EnrichedVacancyDimensionsPayload
 
 
 def _clean_text(value: Any, *, max_chars: int = 800) -> str:
@@ -171,244 +172,163 @@ def _normalize_number(value: Any) -> int | None:
         return None
 
 
-def _normalize_bool(value: Any) -> bool | None:
-    if value is None or value == "":
-        return None
-    if isinstance(value, bool):
-        return value
-    text = str(value).strip().lower()
-    if text in {"true", "yes", "si", "1"}:
-        return True
-    if text in {"false", "no", "0"}:
-        return False
-    return None
+def empty_salary_normalization() -> SalaryNormalization:
+    return {
+        "min": None,
+        "max": None,
+        "currency": "",
+        "period": "",
+        "raw_text": "",
+    }
+
+
+def normalize_salary_normalization(raw: Any) -> SalaryNormalization:
+    source = raw if isinstance(raw, dict) else {}
+    normalized = empty_salary_normalization()
+    normalized["min"] = _normalize_number(source.get("min"))
+    normalized["max"] = _normalize_number(source.get("max"))
+    normalized["currency"] = _clean_text(source.get("currency"), max_chars=32)
+    normalized["period"] = _clean_text(source.get("period"), max_chars=32)
+    normalized["raw_text"] = _clean_text(
+        source.get("raw_text") or source.get("text"),
+        max_chars=300,
+    )
+    return normalized
 
 
 def _empty_work_conditions() -> WorkConditionsPayload:
     return {
         "salary": {
-            "min": None,
-            "max": None,
-            "currency": "",
-            "period": "",
-            "text": "",
+            "raw_text": "",
         },
         "modality": {
-            "type": "",
-            "location": "",
-            "text": "",
+            "value": "",
+            "raw_text": "",
         },
         "location": {
             "places": [],
-            "text": "",
+            "raw_text": "",
         },
         "contract_type": {
-            "type": "",
-            "text": "",
+            "value": "",
+            "raw_text": "",
         },
-        "schedule": {
-            "type": "",
-            "detail": "",
-            "text": "",
-        },
-        "availability": {
-            "type": "",
-            "detail": "",
-            "text": "",
-        },
-        "travel": {
-            "required": None,
-            "frequency": "",
-            "scope": "",
-            "text": "",
-        },
-        "legal_requirements": {
-            "documents_required": [],
-            "text": "",
-        },
-        "relocation": {
-            "required": None,
-            "destination": "",
-            "text": "",
-        },
-        "mobility_requirements": {
-            "vehicle_required": None,
-            "driving_license": [],
-            "other": [],
-            "text": "",
-        },
+        "other_conditions": [],
     }
+
+
+def _extract_raw_text(value: Any) -> str:
+    if isinstance(value, str):
+        return _clean_text(value, max_chars=500)
+    if not isinstance(value, dict):
+        return ""
+    for key in ("raw_text", "task", "requirement", "benefit", "text"):
+        cleaned = _clean_text(value.get(key), max_chars=500)
+        if cleaned:
+            return cleaned
+    return ""
+
+
+def _normalize_raw_text_item(raw: Any) -> RawTextItem | None:
+    cleaned = _extract_raw_text(raw)
+    if not cleaned:
+        return None
+    return {"raw_text": cleaned}
+
+
+def _normalize_raw_text_list(raw: Any, *, max_items: int = 50) -> list[RawTextItem]:
+    if not isinstance(raw, list):
+        return []
+    items: list[RawTextItem] = []
+    seen: set[str] = set()
+    for value in raw:
+        normalized = _normalize_raw_text_item(value)
+        if not normalized:
+            continue
+        signature = normalized["raw_text"].casefold()
+        if signature in seen:
+            continue
+        seen.add(signature)
+        items.append(normalized)
+        if len(items) >= max_items:
+            break
+    return items
+
+
+def _collect_other_condition_candidates(source: dict[str, Any]) -> list[Any]:
+    candidates: list[Any] = []
+    raw_other_conditions = source.get("other_conditions")
+    if isinstance(raw_other_conditions, list):
+        candidates.extend(raw_other_conditions)
+
+    for key in LEGACY_OTHER_CONDITION_KEYS:
+        value = source.get(key)
+        if isinstance(value, list):
+            candidates.extend(value)
+            continue
+        if isinstance(value, dict):
+            text_value = _clean_text(value.get("raw_text") or value.get("text"), max_chars=500)
+            if text_value:
+                candidates.append(text_value)
+            for list_key in ("documents_required", "driving_license", "other"):
+                candidates.extend(_normalize_text_list(value.get(list_key), max_items=20, max_chars=120))
+            continue
+        if value is not None:
+            candidates.append(value)
+    return candidates
 
 
 def _normalize_work_conditions(raw: Any) -> WorkConditionsPayload:
     source = raw if isinstance(raw, dict) else {}
     normalized = _empty_work_conditions()
 
-    salary = source.get("salary") if isinstance(source.get("salary"), dict) else {}
+    source_salary = source.get("salary")
+    salary = source_salary if isinstance(source_salary, dict) else {}
+    salary_fallback_text = source_salary if not isinstance(source_salary, dict) else ""
     normalized["salary"] = {
-        "min": _normalize_number(salary.get("min")),
-        "max": _normalize_number(salary.get("max")),
-        "currency": _clean_text(salary.get("currency"), max_chars=32),
-        "period": _clean_text(salary.get("period"), max_chars=32),
-        "text": _clean_text(salary.get("text"), max_chars=300),
+        "raw_text": _clean_text(
+            salary.get("raw_text") or salary.get("text") or salary_fallback_text,
+            max_chars=300,
+        )
     }
 
     modality = source.get("modality") if isinstance(source.get("modality"), dict) else {}
     normalized["modality"] = {
-        "type": _clean_text(modality.get("type"), max_chars=80),
-        "location": _clean_text(modality.get("location"), max_chars=120),
-        "text": _clean_text(modality.get("text"), max_chars=300),
+        "value": _clean_text(modality.get("value") or modality.get("type"), max_chars=80),
+        "raw_text": _clean_text(modality.get("raw_text") or modality.get("text"), max_chars=300),
     }
 
     location = source.get("location") if isinstance(source.get("location"), dict) else {}
+    location_places = location.get("places")
+    if not isinstance(location_places, list):
+        location_value = _clean_text(location.get("value"), max_chars=120)
+        location_places = [location_value] if location_value else []
     normalized["location"] = {
-        "places": _normalize_text_list(location.get("places"), max_items=20, max_chars=120),
-        "text": _clean_text(location.get("text"), max_chars=300),
+        "places": _normalize_text_list(location_places, max_items=20, max_chars=120),
+        "raw_text": _clean_text(location.get("raw_text") or location.get("text"), max_chars=300),
     }
 
-    contract_type = (
-        source.get("contract_type") if isinstance(source.get("contract_type"), dict) else {}
-    )
+    contract_type = source.get("contract_type") if isinstance(source.get("contract_type"), dict) else {}
     normalized["contract_type"] = {
-        "type": _clean_text(contract_type.get("type"), max_chars=80),
-        "text": _clean_text(contract_type.get("text"), max_chars=300),
+        "value": _clean_text(contract_type.get("value") or contract_type.get("type"), max_chars=80),
+        "raw_text": _clean_text(contract_type.get("raw_text") or contract_type.get("text"), max_chars=300),
     }
 
-    schedule = source.get("schedule") if isinstance(source.get("schedule"), dict) else {}
-    normalized["schedule"] = {
-        "type": _clean_text(schedule.get("type"), max_chars=80),
-        "detail": _clean_text(schedule.get("detail"), max_chars=160),
-        "text": _clean_text(schedule.get("text"), max_chars=300),
-    }
-
-    availability = (
-        source.get("availability") if isinstance(source.get("availability"), dict) else {}
+    normalized["other_conditions"] = _normalize_raw_text_list(
+        _collect_other_condition_candidates(source),
+        max_items=50,
     )
-    normalized["availability"] = {
-        "type": _clean_text(availability.get("type"), max_chars=80),
-        "detail": _clean_text(availability.get("detail"), max_chars=160),
-        "text": _clean_text(availability.get("text"), max_chars=300),
-    }
-
-    travel = source.get("travel") if isinstance(source.get("travel"), dict) else {}
-    normalized["travel"] = {
-        "required": _normalize_bool(travel.get("required")),
-        "frequency": _clean_text(travel.get("frequency"), max_chars=80),
-        "scope": _clean_text(travel.get("scope"), max_chars=120),
-        "text": _clean_text(travel.get("text"), max_chars=300),
-    }
-
-    legal_requirements = (
-        source.get("legal_requirements")
-        if isinstance(source.get("legal_requirements"), dict)
-        else {}
-    )
-    normalized["legal_requirements"] = {
-        "documents_required": _normalize_text_list(
-            legal_requirements.get("documents_required"),
-            max_items=20,
-            max_chars=120,
-        ),
-        "text": _clean_text(legal_requirements.get("text"), max_chars=300),
-    }
-
-    relocation = source.get("relocation") if isinstance(source.get("relocation"), dict) else {}
-    normalized["relocation"] = {
-        "required": _normalize_bool(relocation.get("required")),
-        "destination": _clean_text(relocation.get("destination"), max_chars=120),
-        "text": _clean_text(relocation.get("text"), max_chars=300),
-    }
-
-    mobility = (
-        source.get("mobility_requirements")
-        if isinstance(source.get("mobility_requirements"), dict)
-        else {}
-    )
-    normalized["mobility_requirements"] = {
-        "vehicle_required": _normalize_bool(mobility.get("vehicle_required")),
-        "driving_license": _normalize_text_list(
-            mobility.get("driving_license"),
-            max_items=10,
-            max_chars=64,
-        ),
-        "other": _normalize_text_list(mobility.get("other"), max_items=20, max_chars=120),
-        "text": _clean_text(mobility.get("text"), max_chars=300),
-    }
-
     return normalized
-
-
-def _empty_item_payload() -> VacancyDimensionItem:
-    return {
-        "id": "",
-        "category": "",
-        "semantic_queries": [],
-        "raw_text": "",
-    }
-
-
-def _normalize_atomic_item(
-    raw: Any,
-    *,
-    item_key: str,
-    prefix: str,
-    position: int,
-) -> dict[str, Any] | None:
-    if not isinstance(raw, dict):
-        return None
-    main_value = _clean_text(raw.get(item_key), max_chars=240)
-    raw_text = _clean_text(raw.get("raw_text"), max_chars=500)
-    if not main_value and not raw_text:
-        return None
-    item_id = _clean_text(raw.get("id"), max_chars=80) or f"{prefix}-{position:02d}"
-    normalized = _empty_item_payload()
-    normalized["id"] = item_id
-    normalized["category"] = _clean_text(raw.get("category"), max_chars=80)
-    normalized["semantic_queries"] = _normalize_text_list(
-        raw.get("semantic_queries"),
-        max_items=5,
-        max_chars=240,
-    )
-    normalized["raw_text"] = raw_text
-    normalized[item_key] = main_value or raw_text
-    return normalized
-
-
-def _normalize_atomic_list(
-    raw: Any,
-    *,
-    item_key: str,
-    prefix: str,
-) -> list[dict[str, Any]]:
-    if not isinstance(raw, list):
-        return []
-    items: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for index, value in enumerate(raw, start=1):
-        normalized = _normalize_atomic_item(value, item_key=item_key, prefix=prefix, position=index)
-        if not normalized:
-            continue
-        signature = "|".join(
-            [
-                str(normalized.get(item_key, "")).casefold(),
-                str(normalized.get("category", "")).casefold(),
-                str(normalized.get("raw_text", "")).casefold(),
-            ]
-        )
-        if signature in seen:
-            continue
-        seen.add(signature)
-        items.append(normalized)
-    return items
 
 
 def _empty_vacancy_dimensions_payload() -> VacancyDimensionsPayload:
     return {
         "work_conditions": _empty_work_conditions(),
         "responsibilities": [],
-        "required_competencies": [],
-        "desirable_competencies": [],
+        "required_criteria": [],
+        "desirable_criteria": [],
         "benefits": [],
+        "about_the_company": [],
     }
 
 
@@ -431,28 +351,103 @@ def normalize_vacancy_dimensions_contract(raw: Any) -> VacancyDimensionsContract
     payload_source = payload if isinstance(payload, dict) else {}
     normalized["vacancy_dimensions"] = {
         "work_conditions": _normalize_work_conditions(payload_source.get("work_conditions")),
-        "responsibilities": _normalize_atomic_list(
-            payload_source.get("responsibilities"),
-            item_key="task",
-            prefix="RES",
+        "responsibilities": _normalize_raw_text_list(payload_source.get("responsibilities")),
+        "required_criteria": _normalize_raw_text_list(
+            payload_source.get("required_criteria")
+            if payload_source.get("required_criteria") is not None
+            else payload_source.get("required_competencies")
         ),
-        "required_competencies": _normalize_atomic_list(
-            payload_source.get("required_competencies"),
-            item_key="requirement",
-            prefix="REQ",
+        "desirable_criteria": _normalize_raw_text_list(
+            payload_source.get("desirable_criteria")
+            if payload_source.get("desirable_criteria") is not None
+            else payload_source.get("desirable_competencies")
         ),
-        "desirable_competencies": _normalize_atomic_list(
-            payload_source.get("desirable_competencies"),
-            item_key="requirement",
-            prefix="DES",
-        ),
-        "benefits": _normalize_atomic_list(
-            payload_source.get("benefits"),
-            item_key="benefit",
-            prefix="BEN",
-        ),
+        "benefits": _normalize_raw_text_list(payload_source.get("benefits")),
+        "about_the_company": _normalize_raw_text_list(payload_source.get("about_the_company")),
     }
     return normalized
+
+
+def normalize_item_fingerprint_text(raw_text: str) -> str:
+    return " ".join(str(raw_text or "").strip().lower().split())
+
+
+def build_item_fingerprint_id(vacancy_id: str, group_code: str, raw_text: str) -> str:
+    normalized_raw_text = normalize_item_fingerprint_text(raw_text)
+    fingerprint_input = "|".join([str(vacancy_id or "").strip(), group_code, normalized_raw_text])
+    digest = hashlib.sha256(fingerprint_input.encode("utf-8")).hexdigest()[:10]
+    return f"{group_code}_{digest}"
+
+
+def _enrich_items(
+    items: list[RawTextItem],
+    *,
+    vacancy_id: str,
+    group_code: str,
+) -> list[EnrichedVacancyDimensionItem]:
+    enriched: list[EnrichedVacancyDimensionItem] = []
+    for index, item in enumerate(items):
+        raw_text = item["raw_text"]
+        enriched.append(
+            {
+                "raw_text": raw_text,
+                "item_id": build_item_fingerprint_id(vacancy_id, group_code, raw_text),
+                "item_index": index,
+                "group_code": group_code,
+            }
+        )
+    return enriched
+
+
+def enrich_vacancy_dimensions_items(raw: Any) -> EnrichedVacancyDimensionsContract:
+    normalized = normalize_vacancy_dimensions_contract(raw)
+    payload = normalized["vacancy_dimensions"]
+    vacancy_id = normalized["vacancy_id"]
+
+    enriched: EnrichedVacancyDimensionsContract = {
+        "contract_version": normalized["contract_version"],
+        "vacancy_id": vacancy_id,
+        "generated_at": normalized["generated_at"],
+        "vacancy_dimensions": {
+            "work_conditions": {
+                "salary": copy.deepcopy(payload["work_conditions"]["salary"]),
+                "modality": copy.deepcopy(payload["work_conditions"]["modality"]),
+                "location": copy.deepcopy(payload["work_conditions"]["location"]),
+                "contract_type": copy.deepcopy(payload["work_conditions"]["contract_type"]),
+                "other_conditions": _enrich_items(
+                    payload["work_conditions"]["other_conditions"],
+                    vacancy_id=vacancy_id,
+                    group_code=GROUP_CODE_BY_DIMENSION["other_conditions"],
+                ),
+            },
+            "responsibilities": _enrich_items(
+                payload["responsibilities"],
+                vacancy_id=vacancy_id,
+                group_code=GROUP_CODE_BY_DIMENSION["responsibilities"],
+            ),
+            "required_criteria": _enrich_items(
+                payload["required_criteria"],
+                vacancy_id=vacancy_id,
+                group_code=GROUP_CODE_BY_DIMENSION["required_criteria"],
+            ),
+            "desirable_criteria": _enrich_items(
+                payload["desirable_criteria"],
+                vacancy_id=vacancy_id,
+                group_code=GROUP_CODE_BY_DIMENSION["desirable_criteria"],
+            ),
+            "benefits": _enrich_items(
+                payload["benefits"],
+                vacancy_id=vacancy_id,
+                group_code=GROUP_CODE_BY_DIMENSION["benefits"],
+            ),
+            "about_the_company": _enrich_items(
+                payload["about_the_company"],
+                vacancy_id=vacancy_id,
+                group_code=GROUP_CODE_BY_DIMENSION["about_the_company"],
+            ),
+        },
+    }
+    return enriched
 
 
 def is_vacancy_dimensions_contract(raw: Any) -> bool:

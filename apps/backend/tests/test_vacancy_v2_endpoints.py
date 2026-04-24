@@ -50,26 +50,22 @@ def _sample_vacancy_blocks(opportunity_id: str) -> dict[str, Any]:
 
 def _sample_vacancy_dimensions(opportunity_id: str) -> dict[str, Any]:
     return {
-        "contract_version": "vacancy_dimensions.v1",
+        "contract_version": "vacancy_dimensions.v2",
         "vacancy_id": opportunity_id,
         "generated_at": "2026-04-21T10:01:00Z",
         "vacancy_dimensions": {
             "work_conditions": {
-                "salary": {},
+                "salary": {"raw_text": ""},
                 "modality": {"value": "Hibrido", "raw_text": "Hibrido en Bogota"},
-                "location": {"value": "Bogota", "raw_text": "Hibrido en Bogota"},
-                "contract_type": {},
-                "schedule": {},
-                "availability": {},
-                "travel": {},
-                "legal_requirements": {},
-                "relocation": {},
-                "mobility_requirements": {},
+                "location": {"places": ["Bogota"], "raw_text": "Hibrido en Bogota"},
+                "contract_type": {"value": "", "raw_text": ""},
+                "other_conditions": [],
             },
             "responsibilities": [],
-            "required_competencies": [],
-            "desirable_competencies": [],
+            "required_criteria": [],
+            "desirable_criteria": [],
             "benefits": [],
+            "about_the_company": [],
         },
     }
 
@@ -233,7 +229,7 @@ class VacancyV2EndpointsTests(unittest.TestCase):
             )
 
         self.assertEqual(response.vacancy_dimensions_status, "draft")
-        self.assertEqual(response.vacancy_dimensions_artifact["contract_version"], "vacancy_dimensions.v1")
+        self.assertEqual(response.vacancy_dimensions_artifact["contract_version"], "vacancy_dimensions.v2")
         stored = opportunity_store.find_opportunity("p-001", opportunity_id)
         assert stored is not None
         self.assertEqual(stored["vacancy_dimensions_status"], "draft")

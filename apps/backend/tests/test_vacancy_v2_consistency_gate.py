@@ -53,23 +53,20 @@ def _blocks_artifact(*, work_conditions: list[str], benefits: list[str]) -> dict
 
 def _dimensions_artifact(*, salary_text: str = "") -> dict:
     return {
-        "contract_version": "vacancy_dimensions.v1",
+        "contract_version": "vacancy_dimensions.v2",
         "vacancy_id": "vacancy-1",
         "generated_at": "2026-04-21T10:01:00Z",
         "vacancy_dimensions": {
             "work_conditions": {
                 "salary": {
-                    "min": None,
-                    "max": None,
-                    "currency": "",
-                    "period": "",
-                    "text": salary_text,
+                    "raw_text": salary_text,
                 }
             },
             "responsibilities": [],
-            "required_competencies": [],
-            "desirable_competencies": [],
+            "required_criteria": [],
+            "desirable_criteria": [],
             "benefits": [],
+            "about_the_company": [],
         },
     }
 

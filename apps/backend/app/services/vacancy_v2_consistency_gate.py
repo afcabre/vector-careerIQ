@@ -64,6 +64,8 @@ def _has_salary_data_in_step3(raw_salary: Any) -> bool:
         return True
     if str(salary.get("period", "")).strip():
         return True
+    if str(salary.get("raw_text", "")).strip():
+        return True
     return bool(str(salary.get("text", "")).strip())
 
 

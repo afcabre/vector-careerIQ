@@ -29,7 +29,7 @@ def _vacancy_blocks() -> dict[str, object]:
         "vacancy_id": "o-step3-001",
         "generated_at": "2026-04-21T19:00:00Z",
         "vacancy_blocks": {
-            "work_conditions": ["Hibrido en Bogota"],
+            "work_conditions": ["Hibrido en Bogota", "Salario COP 12M a 18M"],
             "responsibilities": ["Liderar roadmap del producto"],
             "required_requirements": ["5 anos de experiencia en producto"],
             "desirable_requirements": ["MBA"],
@@ -47,21 +47,17 @@ class VacancyDimensionsServiceTests(unittest.TestCase):
             "{"
             "\"vacancy_dimensions\":{"
             "\"work_conditions\":{"
-            "\"salary\":{\"min\":\"12000000\",\"max\":18000000,\"currency\":\" COP \",\"period\":\" mensual \",\"text\":\"Rango salarial\"},"
-            "\"modality\":{\"type\":\"Hibrido\",\"location\":\"Bogota\",\"text\":\"Hibrido en Bogota\"},"
-            "\"location\":{\"places\":[\"Bogota\"],\"text\":\"Bogota\"},"
-            "\"contract_type\":{\"type\":\"Indefinido\",\"text\":\"Contrato indefinido\"},"
-            "\"schedule\":{\"type\":\"Tiempo completo\",\"detail\":\"L-V\",\"text\":\"Horario oficina\"},"
-            "\"availability\":{\"type\":\"Inmediata\",\"detail\":\"\",\"text\":\"Disponibilidad inmediata\"},"
-            "\"travel\":{\"required\":false,\"frequency\":\"Baja\",\"scope\":\"Nacional\",\"text\":\"Viajes ocasionales\"},"
-            "\"legal_requirements\":{\"documents_required\":[],\"text\":\"\"},"
-            "\"relocation\":{\"required\":false,\"destination\":\"\",\"text\":\"\"},"
-            "\"mobility_requirements\":{\"vehicle_required\":null,\"driving_license\":[],\"other\":[],\"text\":\"\"}"
+            "\"salary\":{\"raw_text\":\"Rango salarial COP 12M a 18M\"},"
+            "\"modality\":{\"value\":\"Hibrido\",\"raw_text\":\"Hibrido en Bogota\"},"
+            "\"location\":{\"places\":[\"Bogota\"],\"raw_text\":\"Bogota\"},"
+            "\"contract_type\":{\"value\":\"Indefinido\",\"raw_text\":\"Contrato indefinido\"},"
+            "\"other_conditions\":[{\"raw_text\":\"Disponibilidad para viajar ocasionalmente\"}]"
             "},"
-            "\"responsibilities\":[{\"task\":\"Liderar roadmap\",\"category\":\"product\",\"semantic_queries\":[\"liderar roadmap producto\"],\"raw_text\":\"Liderar roadmap\"}],"
-            "\"required_competencies\":[{\"requirement\":\"Experiencia en producto\",\"category\":\"experience\",\"semantic_queries\":[\"experiencia producto\"],\"raw_text\":\"5 anos de experiencia\"}],"
-            "\"desirable_competencies\":[{\"requirement\":\"MBA\",\"category\":\"education\",\"semantic_queries\":[],\"raw_text\":\"MBA deseable\"}],"
-            "\"benefits\":[{\"benefit\":\"Seguro medico\",\"category\":\"health\",\"semantic_queries\":[],\"raw_text\":\"Seguro medico\"}]"
+            "\"responsibilities\":[{\"raw_text\":\"Liderar roadmap\"}],"
+            "\"required_criteria\":[{\"raw_text\":\"5 anos de experiencia en producto\"}],"
+            "\"desirable_criteria\":[{\"raw_text\":\"MBA deseable\"}],"
+            "\"benefits\":[{\"raw_text\":\"Seguro medico\"}],"
+            "\"about_the_company\":[{\"raw_text\":\"Empresa lider en tecnologia B2B\"}]"
             "}"
             "}"
         )
@@ -80,11 +76,12 @@ class VacancyDimensionsServiceTests(unittest.TestCase):
         self.assertEqual(contract["vacancy_id"], "o-step3-001")
         self.assertTrue(contract["generated_at"])
         payload = contract["vacancy_dimensions"]
-        self.assertEqual(payload["work_conditions"]["salary"]["min"], 12000000)
-        self.assertEqual(payload["work_conditions"]["salary"]["currency"], "COP")
-        self.assertEqual(payload["responsibilities"][0]["task"], "Liderar roadmap")
-        self.assertEqual(payload["required_competencies"][0]["requirement"], "Experiencia en producto")
-        self.assertEqual(payload["benefits"][0]["benefit"], "Seguro medico")
+        self.assertEqual(payload["work_conditions"]["salary"]["raw_text"], "Rango salarial COP 12M a 18M")
+        self.assertEqual(payload["work_conditions"]["modality"]["value"], "Hibrido")
+        self.assertEqual(payload["responsibilities"][0]["raw_text"], "Liderar roadmap")
+        self.assertEqual(payload["required_criteria"][0]["raw_text"], "5 anos de experiencia en producto")
+        self.assertEqual(payload["benefits"][0]["raw_text"], "Seguro medico")
+        self.assertEqual(payload["about_the_company"][0]["raw_text"], "Empresa lider en tecnologia B2B")
 
     def test_extract_invalid_or_missing_step2_artifact_raises_controlled_error(self) -> None:
         with self.assertRaises(VacancyDimensionsExtractionError):
@@ -100,11 +97,12 @@ class VacancyDimensionsServiceTests(unittest.TestCase):
     def test_extract_normalizes_fixed_shape_and_ignores_unknown_root_keys(self) -> None:
         llm_response = (
             "{"
-            "\"work_conditions\":{\"salary\":{\"min\":null,\"max\":null,\"currency\":\"\",\"period\":\"\",\"text\":\"\"}},"
-            "\"responsibilities\":[{\"task\":\"Coordinar equipo\",\"category\":\"leadership\",\"semantic_queries\":[\"coordinar equipo\"],\"raw_text\":\"Coordinar equipo\"}],"
-            "\"required_competencies\":[],"
-            "\"desirable_competencies\":[],"
+            "\"work_conditions\":{\"salary\":{\"raw_text\":\"\"}},"
+            "\"responsibilities\":[{\"raw_text\":\"Coordinar equipo\"}],"
+            "\"required_criteria\":[],"
+            "\"desirable_criteria\":[],"
             "\"benefits\":[],"
+            "\"about_the_company\":[],"
             "\"unknown_key\":{\"foo\":\"bar\"}"
             "}"
         )
@@ -122,20 +120,22 @@ class VacancyDimensionsServiceTests(unittest.TestCase):
         self.assertEqual(set(contract["vacancy_dimensions"].keys()), {
             "work_conditions",
             "responsibilities",
-            "required_competencies",
-            "desirable_competencies",
+            "required_criteria",
+            "desirable_criteria",
             "benefits",
+            "about_the_company",
         })
 
     def test_extract_uses_dedicated_step3_prompt_flow_not_step2_flow(self) -> None:
         llm_response = (
             "{"
             "\"vacancy_dimensions\":{"
-            "\"work_conditions\":{},"
-            "\"responsibilities\":[{\"task\":\"Liderar roadmap\",\"category\":\"\",\"semantic_queries\":[],\"raw_text\":\"Liderar roadmap\"}],"
-            "\"required_competencies\":[],"
-            "\"desirable_competencies\":[],"
-            "\"benefits\":[]"
+            "\"work_conditions\":{\"salary\":{\"raw_text\":\"COP 12M\"}},"
+            "\"responsibilities\":[{\"raw_text\":\"Liderar roadmap\"}],"
+            "\"required_criteria\":[],"
+            "\"desirable_criteria\":[],"
+            "\"benefits\":[],"
+            "\"about_the_company\":[]"
             "}"
             "}"
         )
@@ -168,9 +168,9 @@ class VacancyDimensionsServiceTests(unittest.TestCase):
         )
         fallback_prompt = str(prompt_builder_mock.call_args.kwargs.get("fallback", ""))
         self.assertIn("salary/compensation", fallback_prompt)
-        self.assertIn("work_conditions.salary", fallback_prompt)
-        self.assertIn("benefits", fallback_prompt)
-        self.assertIn("salary.text must not be empty", fallback_prompt)
+        self.assertIn("salary.raw_text", fallback_prompt)
+        self.assertIn("about_the_company", fallback_prompt)
+        self.assertIn("raw_text only", fallback_prompt)
 
     def test_extract_invalid_json_raises_controlled_error(self) -> None:
         with patch(
@@ -184,11 +184,12 @@ class VacancyDimensionsServiceTests(unittest.TestCase):
         llm_response = (
             "{"
             "\"vacancy_dimensions\":{"
-            "\"work_conditions\":{},"
-            "\"responsibilities\":[{\"task\":\"Liderar roadmap\",\"category\":\"\",\"semantic_queries\":[],\"raw_text\":\"Liderar roadmap\"}],"
-            "\"required_competencies\":[],"
-            "\"desirable_competencies\":[],"
-            "\"benefits\":[]"
+            "\"work_conditions\":{\"salary\":{\"raw_text\":\"COP 12M\"}},"
+            "\"responsibilities\":[{\"raw_text\":\"Liderar roadmap\"}],"
+            "\"required_criteria\":[],"
+            "\"desirable_criteria\":[],"
+            "\"benefits\":[],"
+            "\"about_the_company\":[]"
             "}"
             "}"
         )

@@ -24,9 +24,15 @@ from app.services.vacancy_v2_runtime_config import get_vacancy_v2_runtime_config
 DIMENSIONS_KEYS = (
     "work_conditions",
     "responsibilities",
+    "required_criteria",
+    "desirable_criteria",
+    "benefits",
+    "about_the_company",
+)
+
+LEGACY_DIMENSIONS_KEYS = (
     "required_competencies",
     "desirable_competencies",
-    "benefits",
 )
 
 
@@ -61,10 +67,8 @@ def _extract_json_object(raw_text: str) -> dict[str, object] | None:
 def _contract_candidate_from_llm(parsed: dict[str, object]) -> dict[str, object]:
     if "vacancy_dimensions" in parsed:
         return parsed
-    if any(key in parsed for key in DIMENSIONS_KEYS):
-        return {
-            "vacancy_dimensions": {key: parsed.get(key, [] if key != "work_conditions" else {}) for key in DIMENSIONS_KEYS}
-        }
+    if any(key in parsed for key in DIMENSIONS_KEYS + LEGACY_DIMENSIONS_KEYS):
+        return {"vacancy_dimensions": parsed}
     return parsed
 
 
@@ -86,11 +90,13 @@ def _has_any_dimensions_content(contract: VacancyDimensionsContract) -> bool:
     payload = contract["vacancy_dimensions"]
     if payload["responsibilities"]:
         return True
-    if payload["required_competencies"]:
+    if payload["required_criteria"]:
         return True
-    if payload["desirable_competencies"]:
+    if payload["desirable_criteria"]:
         return True
     if payload["benefits"]:
+        return True
+    if payload["about_the_company"]:
         return True
     return _has_non_default_value(payload["work_conditions"])
 
@@ -117,19 +123,24 @@ def extract_vacancy_dimensions(
     blocks_json = json.dumps(normalized_blocks, ensure_ascii=False)
 
     system_prompt = (
-        "You are a vacancy Step 3 normalizer. Return valid JSON only for vacancy_dimensions.v1. "
-        "Any compensation/salary signal must be mapped to work_conditions.salary. "
+        "You are a vacancy Step 3 normalizer. Return valid JSON only for vacancy_dimensions.v2. "
+        "Any compensation/salary signal must be mapped to work_conditions.salary.raw_text. "
         "Benefits must not contain compensation or salary statements. "
+        "Do not generate ids, category labels, summaries, or semantic_queries. "
         "If vacancy_blocks.work_conditions has salary/compensation signals, "
-        "work_conditions.salary.text must be non-empty, even when min/max are unknown."
+        "work_conditions.salary.raw_text must be non-empty."
     )
     fallback_user_prompt = (
-        "Transform vacancy_blocks.v1 into vacancy_dimensions.v1 and respond with valid JSON only. "
+        "Transform vacancy_blocks.v1 into vacancy_dimensions.v2 and respond with valid JSON only. "
         "Root key allowed: vacancy_dimensions. "
-        "Allowed keys inside vacancy_dimensions: work_conditions, responsibilities, required_competencies, "
-        "desirable_competencies, benefits. "
+        "Allowed keys inside vacancy_dimensions: work_conditions, responsibilities, required_criteria, "
+        "desirable_criteria, benefits, about_the_company. "
+        "Inside work_conditions use only: salary, modality, location, contract_type, other_conditions. "
+        "salary keeps only raw_text in this step. modality and contract_type use value plus raw_text. "
+        "location uses places plus raw_text. other_conditions is a list of objects with raw_text only. "
+        "All array items outside work_conditions must be objects with raw_text only. "
         "Map salary/compensation exclusively to work_conditions.salary and keep benefits for non-compensation perks. "
-        "When input includes salary/compensation in work_conditions, salary.text must not be empty. "
+        "When input includes salary/compensation in work_conditions, salary.raw_text must not be empty. "
         "Do not invent keys and do not embed vacancy_blocks. "
         f"Vacancy title: {opportunity.get('title', '')}. "
         f"Company: {opportunity.get('company', '')}. "

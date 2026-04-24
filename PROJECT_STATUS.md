@@ -4,7 +4,7 @@
 - fase_actual: `Implementacion`
 - checkpoint_actual: `runner CLI de gate v2 agregado para relanzar validacion multi-perfil o por person_id tras nueva carga de vacantes`
 - repo_status: `flujo V1 operativo con analisis, postulacion, chat, CV semantico, admin de prompts y extraccion estructurada de vacantes en forma legacy estable; propuesta v2 desacoplada en branch experimental`
-- ultima_actualizacion: `2026-04-21`
+- ultima_actualizacion: `2026-04-23`
 
 ## Progreso Por Fase
 - `Fase 0`: completada
@@ -72,6 +72,25 @@
 - task de cobertura marcado `Done` en Notion con evidencia de pruebas (`29 tests` en verde)
 - gate reactivado en Notion (`Doing`) y corrida real ejecutada en Firestore para `person_id=p-3fa73182`
 - resultado real del gate con umbrales por defecto operativos: `total_opportunities=18`, `opportunities_with_step2=5`, `opportunities_with_step3=4`, `salary_transfer_eligible=3`, `salary_transfer_ok=1`, `salary_transfer_missing=2`, `salary_transfer_rate=0.3333`, `salary_signal_in_step2_benefits_rate=0.0`, `gate_passed=false`
+- corrida real adicional del gate ejecutada en Firestore para `person_id=p-002`
+- resultado real del gate para `p-002` con umbrales por defecto: `total_opportunities=9`, `opportunities_with_step2=8`, `opportunities_with_step3=7`, `salary_transfer_eligible=6`, `salary_transfer_ok=1`, `salary_transfer_missing=5`, `salary_transfer_rate=0.1667`, `salary_signal_in_step2_benefits_rate=0.25`, `gate_passed=false`
+- `failed_checks` para `p-002`: `salary_transfer_rate_below_threshold`, `salary_signal_in_step2_benefits_rate_above_threshold`
+- `issue_samples` principales en `p-002`: `o-c5cc94ed6b`, `o-68c9140731`, `o-f1b71713ce`, `o-4c02fd26b4`, `o-fa545b9316`
+- corrida consolidada del gate en Firestore para todos los perfiles (`selected_persons=4`) ejecutada para establecer linea base global
+- resumen gate global actual: `p-3fa73182` FAIL (`salary_transfer_rate=0.3333`), `p-002` FAIL (`salary_transfer_rate=0.1667`, `salary_signal_in_step2_benefits_rate=0.25`), `p-001` FAIL (`insufficient_salary_transfer_eligible`), `p-47aaa3e6` FAIL (`insufficient_salary_transfer_eligible`)
+- decision operativa vigente: no abrir ahora slice de hardening salary; mantener seguimiento de calidad por gate y continuar con otros frentes no bloqueados
+- backlog de diseno documentado localmente: propuesta pendiente para alinear naming de Paso 2 con Paso 3 sin renombrar la raiz `vacancy_blocks`, incorporando `about_the_company` en S2 y revisando la simplificacion de contrato/comportamiento de Paso 3
+- shape objetivo documentado para Paso 2 siguiente: `vacancy_blocks.v2` con `required_criteria`, `desirable_criteria`, `about_the_company`, `warnings` y `coverage_notes`
+- plan explicito documentado para siguiente iteracion: `S2` segmentacion contextual, `S3` atomizacion minima sin `id/category/resumen/semantic_queries`, `S3.1` normalizacion de salario, `S4` generacion de queries, `S5` retrieval de evidencia y `S6` analisis/presentacion
+- interfaces documentadas para `S4` (`vacancy_retrieval_queries.v1`) y `S5` (`vacancy_retrieval_evidence.v1`), con criterio operativo inicial para lectura de scores
+- correccion documental aplicada: en `S3` el salario queda solo como `raw_text`; `min/max/currency/period` pasan a ser responsabilidad exclusiva de `S3.1`
+- decision documental cerrada: `S3.9` se reserva como paso programatico de enriquecimiento deterministico para asignar `item_id`, `item_index` y `group_code` antes de `S4`
+- regla documental cerrada para `S3.9`: `item_id` usa `sha256` truncado a `10` hex sobre `vacancy_id|group_code|normalized_raw_text`; `item_index` queda separado; `group_code` inicial aprobado: `resp`, `req`, `des`, `ben`, `comp`, `cond`
+- slice backend ejecutado sobre `vacancy_dimensions`: contrato ejecutable migrado a `vacancy_dimensions.v2`, helper explicito para `S3.1` (`salary normalization`) y helper programatico para `S3.9` (`item_id`, `item_index`, `group_code`)
+- servicio `vacancy_dimensions` y prompt default actualizados al shape minimo nuevo (`required_criteria`, `desirable_criteria`, `about_the_company`, `salary.raw_text`, `other_conditions`)
+- validacion tecnica del slice `S3 v2 + S3.1 + S3.9`: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_dimensions_contract tests.test_vacancy_dimensions_service tests.test_vacancy_v2_consistency_gate tests.test_vacancy_v2_endpoints` en verde (`26 tests`)
+- artefacto y servicio separados agregados para `S3.1`: `vacancy_salary_normalization.v1` con flow dedicado `task_vacancy_salary_normalize`, validacion de input sobre `vacancy_dimensions.v2.work_conditions.salary.raw_text` y salida normalizada `min/max/currency/period/raw_text`
+- validacion tecnica del slice `S3.1` aislado: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_salary_contract tests.test_vacancy_salary_service tests.test_vacancy_dimensions_service` en verde (`15 tests`)
 - `failed_checks` actual: `salary_transfer_rate_below_threshold`
 - `issue_samples` actuales de salario faltante en Step 3: `o-bd4de0f24c`, `o-e2b0ad6661`
 - herramienta operativa agregada: script `apps/backend/scripts/vacancy_v2_gate_report.py` para ejecutar gate por `person_id` o en todos los perfiles desde CLI
@@ -124,6 +143,6 @@
 - el experimento de nueva estructura de vacante no debe reintroducirse sobre este baseline ni conectarse al extractor estable antes de acuerdo
 
 ## Siguiente Actividad
-- esperar carga adicional de vacantes con salario en otro perfil para ampliar muestra real
-- relanzar gate real con `scripts/vacancy_v2_gate_report.py` y, solo si persiste falla estructural, retomar micro-slice de hardening salary Step 2 -> Step 3
-- mantener analisis legacy sin integracion v2 hasta habilitar nuevamente validacion de calidad de Step 2/Step 3
+- mantener ejecucion periodica del gate con `scripts/vacancy_v2_gate_report.py` como monitoreo de calidad sin abrir hardening por ahora
+- cerrar por documento el contrato minimo de `S3`, fijar `S3.1` para salario y definir interfaces de `S4` y `S5` antes de tocar codigo
+- continuar frentes no bloqueados por el gate y mantener analisis legacy sin integracion v2 de Step 3
