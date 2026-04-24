@@ -106,6 +106,9 @@ export type Opportunity = {
   vacancy_evidence_analysis_artifact: Record<string, unknown>;
   vacancy_evidence_analysis_status: "none" | "draft" | "approved" | "error";
   vacancy_evidence_analysis_generated_at: string;
+  vacancy_alignment_summary_artifact: Record<string, unknown>;
+  vacancy_alignment_summary_status: "none" | "draft" | "approved" | "error";
+  vacancy_alignment_summary_generated_at: string;
   created_at: string;
   updated_at: string;
 };
@@ -958,6 +961,8 @@ export async function updateOpportunity(
     vacancy_retrieval_evidence_status?: "none" | "draft" | "approved" | "error";
     vacancy_evidence_analysis_artifact?: Record<string, unknown>;
     vacancy_evidence_analysis_status?: "none" | "draft" | "approved" | "error";
+    vacancy_alignment_summary_artifact?: Record<string, unknown>;
+    vacancy_alignment_summary_status?: "none" | "draft" | "approved" | "error";
   }
 ): Promise<Opportunity> {
   const response = await safeFetch(
@@ -1076,6 +1081,20 @@ export async function recomputeOpportunityVacancyEvidenceAnalysis(
 ): Promise<Opportunity> {
   const response = await safeFetch(
     `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/vacancy-evidence-analysis/recompute`,
+    {
+      method: "POST",
+      credentials: "include"
+    }
+  );
+  return parseResponse<Opportunity>(response);
+}
+
+export async function recomputeOpportunityVacancyAlignmentSummary(
+  personId: string,
+  opportunityId: string
+): Promise<Opportunity> {
+  const response = await safeFetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/vacancy-alignment-summary/recompute`,
     {
       method: "POST",
       credentials: "include"

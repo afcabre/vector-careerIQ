@@ -415,15 +415,21 @@ Regla:
 
 ### S7. Analisis y presentacion
 Objetivo:
-- construir tablas de alineacion, resumen narrativo y recomendaciones accionables para el candidato
+- derivar desde `S6` un resumen estructurado complementario para facilitar el consumo posterior de `S8`
 
 Output esperado:
-- tablas criterio -> evidencia
-- resumen perfil-vacante
-- recomendaciones de fortalecimiento y de enfasis en CV/postulacion
+- conteos globales por bucket
+- conteos por grupo primario
+- listas compactas de `strengths`, `gaps` y `review_items`
 
 Regla:
-- si luego reaparece una `category`, debe justificarse aqui por valor analitico o de presentacion, no como carga temprana de extraccion
+- `S7` no reemplaza `S6`
+- `S7` debe resumir solo `responsibilities`, `required_criteria` y `desirable_criteria`
+- `S8` consumira `S7` como resumen y `S6` como respaldo detallado
+- implementacion actual:
+  - artefacto separado `vacancy_alignment_summary.v1`
+  - input: `vacancy_evidence_analysis.v1`
+  - output: `overall`, `groups`, `strengths`, `gaps`, `review_items`
 
 ## Orden recomendado de ejecucion inmediata
 1. cerrar por documento el contrato minimo de S3

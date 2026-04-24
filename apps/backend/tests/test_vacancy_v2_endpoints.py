@@ -18,6 +18,7 @@ from app.services.request_trace_store import reset_request_traces
 from app.services.vacancy_blocks_service import VacancyBlocksExtractionError
 from app.services.vacancy_dimensions_service import VacancyDimensionsExtractionError
 from app.services.vacancy_dimensions_enrichment_service import VacancyDimensionsEnrichmentError
+from app.services.vacancy_alignment_summary_service import VacancyAlignmentSummaryBuildError
 from app.services.vacancy_evidence_analysis_service import VacancyEvidenceAnalysisBuildError
 from app.services.vacancy_retrieval_evidence_service import VacancyRetrievalEvidenceBuildError
 from app.services.vacancy_retrieval_queries_service import VacancyRetrievalQueriesExtractionError
@@ -244,6 +245,64 @@ def _sample_vacancy_evidence_analysis(opportunity_id: str) -> dict[str, Any]:
     }
 
 
+def _sample_vacancy_alignment_summary(opportunity_id: str) -> dict[str, Any]:
+    return {
+        "contract_version": "vacancy_alignment_summary.v1",
+        "vacancy_id": opportunity_id,
+        "generated_at": "2026-04-24T10:38:00Z",
+        "source_artifact_version": "vacancy_evidence_analysis.v1",
+        "thresholds": {
+            "strong_min": 0.75,
+            "useful_min": 0.45,
+            "review_min": 0.30,
+        },
+        "summary": {
+            "overall": {
+                "total_items": 1,
+                "strong_evidence_count": 1,
+                "useful_evidence_count": 0,
+                "review_count": 0,
+                "no_evidence_count": 0,
+            },
+            "groups": {
+                "responsibilities": {
+                    "total_items": 1,
+                    "strong_evidence_count": 1,
+                    "useful_evidence_count": 0,
+                    "review_count": 0,
+                    "no_evidence_count": 0,
+                },
+                "required_criteria": {
+                    "total_items": 0,
+                    "strong_evidence_count": 0,
+                    "useful_evidence_count": 0,
+                    "review_count": 0,
+                    "no_evidence_count": 0,
+                },
+                "desirable_criteria": {
+                    "total_items": 0,
+                    "strong_evidence_count": 0,
+                    "useful_evidence_count": 0,
+                    "review_count": 0,
+                    "no_evidence_count": 0,
+                },
+            },
+            "strengths": [
+                {
+                    "group": "responsibilities",
+                    "item_id": "resp_1234567890",
+                    "item_index": 0,
+                    "raw_text": "Liderar backlog de datos",
+                    "item_status": "strong_evidence",
+                    "best_score": 0.84,
+                }
+            ],
+            "gaps": [],
+            "review_items": [],
+        },
+    }
+
+
 async def _collect_sse_text(streaming_response: Any) -> str:
     chunks: list[str] = []
     async for chunk in streaming_response.body_iterator:
@@ -433,6 +492,19 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         self.assertEqual(
             invalid_analysis_status.exception.detail,
             "Invalid vacancy_evidence_analysis_status",
+        )
+
+        with self.assertRaises(HTTPException) as invalid_summary_status:
+            opportunities_api.update_opportunity(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                payload=opportunities_api.UpdateOpportunityRequest(vacancy_alignment_summary_status="invalid"),
+                _=self.session,
+            )
+        self.assertEqual(invalid_summary_status.exception.status_code, 422)
+        self.assertEqual(
+            invalid_summary_status.exception.detail,
+            "Invalid vacancy_alignment_summary_status",
         )
 
     def test_recompute_vacancy_dimensions_success_sets_draft_artifact(self) -> None:
@@ -864,6 +936,83 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         stored = opportunity_store.find_opportunity("p-001", opportunity_id)
         assert stored is not None
         self.assertEqual(stored["vacancy_evidence_analysis_status"], "error")
+
+    def test_recompute_vacancy_alignment_summary_success_sets_draft_artifact(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Backend Engineer",
+            company="Acme",
+            location="Hybrid",
+            raw_text="Vacante con resumen de alineacion.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_evidence_analysis_artifact=_sample_vacancy_evidence_analysis(opportunity_id),
+            vacancy_evidence_analysis_status="approved",
+        )
+        assert updated is not None
+        summary_artifact = _sample_vacancy_alignment_summary(opportunity_id)
+
+        with patch.object(
+            opportunities_api,
+            "build_vacancy_alignment_summary",
+            return_value=summary_artifact,
+        ):
+            response = opportunities_api.recompute_vacancy_alignment_summary(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                _=self.session,
+            )
+
+        self.assertEqual(response.vacancy_alignment_summary_status, "draft")
+        self.assertEqual(
+            response.vacancy_alignment_summary_artifact["contract_version"],
+            "vacancy_alignment_summary.v1",
+        )
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_alignment_summary_status"], "draft")
+
+    def test_recompute_vacancy_alignment_summary_failure_sets_error_status(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Backend Engineer",
+            company="Acme",
+            location="Hybrid",
+            raw_text="Vacante con resumen de alineacion.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_evidence_analysis_artifact=_sample_vacancy_evidence_analysis(opportunity_id),
+            vacancy_evidence_analysis_status="approved",
+        )
+        assert updated is not None
+
+        with patch.object(
+            opportunities_api,
+            "build_vacancy_alignment_summary",
+            side_effect=VacancyAlignmentSummaryBuildError("Step 7 requires a valid vacancy_evidence_analysis.v1 artifact."),
+        ):
+            with self.assertRaises(HTTPException) as ctx:
+                opportunities_api.recompute_vacancy_alignment_summary(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                )
+
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertIn("Step 7 requires a valid vacancy_evidence_analysis.v1 artifact.", str(ctx.exception.detail))
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_alignment_summary_status"], "error")
 
     def test_recompute_vacancy_dimensions_uses_persisted_vacancy_blocks_input(self) -> None:
         created = opportunity_store.import_text_opportunity(
@@ -1564,6 +1713,98 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         stored = opportunity_store.find_opportunity("p-001", opportunity_id)
         assert stored is not None
         self.assertEqual(stored["vacancy_evidence_analysis_status"], "error")
+
+    def test_vacancy_alignment_summary_stream_emits_stages_and_message_complete(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Platform Engineer",
+            company="Acme",
+            location="Remote",
+            raw_text="Rol con resumen de alineacion.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_evidence_analysis_artifact=_sample_vacancy_evidence_analysis(opportunity_id),
+            vacancy_evidence_analysis_status="approved",
+        )
+        assert updated is not None
+        summary_artifact = _sample_vacancy_alignment_summary(opportunity_id)
+
+        with patch.object(
+            opportunities_api,
+            "build_vacancy_alignment_summary",
+            return_value=summary_artifact,
+        ):
+            response = asyncio.run(
+                opportunities_api.recompute_vacancy_alignment_summary_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        stages = [payload.get("stage", "") for name, payload in events if name == "tool_status"]
+        self.assertIn("vacancy_alignment_summary_recompute_started", stages)
+        self.assertIn("vacancy_alignment_summary_building", stages)
+        self.assertIn("vacancy_alignment_summary_saving", stages)
+        complete_payload = next(payload for name, payload in events if name == "message_complete")
+        self.assertEqual(
+            complete_payload["opportunity"]["vacancy_alignment_summary_status"],
+            "draft",
+        )
+
+    def test_vacancy_alignment_summary_stream_emits_error_and_marks_status(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Platform Engineer",
+            company="Acme",
+            location="Remote",
+            raw_text="Rol con resumen de alineacion.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_evidence_analysis_artifact=_sample_vacancy_evidence_analysis(opportunity_id),
+            vacancy_evidence_analysis_status="approved",
+        )
+        assert updated is not None
+
+        with patch.object(
+            opportunities_api,
+            "build_vacancy_alignment_summary",
+            side_effect=VacancyAlignmentSummaryBuildError("Step 7 requires a valid vacancy_evidence_analysis.v1 artifact."),
+        ):
+            response = asyncio.run(
+                opportunities_api.recompute_vacancy_alignment_summary_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        names = [name for name, _ in events]
+        self.assertIn("tool_status", names)
+        self.assertIn("error", names)
+        error_payload = next(payload for name, payload in events if name == "error")
+        self.assertIn(
+            "Step 7 requires a valid vacancy_evidence_analysis.v1 artifact.",
+            str(error_payload.get("detail", "")),
+        )
+
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_alignment_summary_status"], "error")
 
 
 if __name__ == "__main__":

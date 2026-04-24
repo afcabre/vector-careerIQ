@@ -56,6 +56,7 @@ import {
   recomputeOpportunityVacancyRetrievalQueries,
   recomputeOpportunityVacancyRetrievalEvidence,
   recomputeOpportunityVacancyEvidenceAnalysis,
+  recomputeOpportunityVacancyAlignmentSummary,
   recomputeOpportunityVacancySalary,
   saveOpportunityFromSearch,
   searchOpportunities,
@@ -1610,6 +1611,8 @@ export default function App() {
   const [recomputingVacancyRetrievalEvidenceId, setRecomputingVacancyRetrievalEvidenceId] =
     useState<string | null>(null);
   const [recomputingVacancyEvidenceAnalysisId, setRecomputingVacancyEvidenceAnalysisId] =
+    useState<string | null>(null);
+  const [recomputingVacancyAlignmentSummaryId, setRecomputingVacancyAlignmentSummaryId] =
     useState<string | null>(null);
   const [updatingVacancyV2StatusKey, setUpdatingVacancyV2StatusKey] = useState<string | null>(null);
   const [opportunityProfileDrafts, setOpportunityProfileDrafts] = useState<
@@ -3491,6 +3494,35 @@ export default function App() {
     }
   }
 
+  async function handleRecomputeVacancyAlignmentSummary(item: Opportunity) {
+    if (!selectedPersonId || recomputingVacancyAlignmentSummaryId) {
+      return;
+    }
+    setRecomputingVacancyAlignmentSummaryId(item.opportunity_id);
+    setErrorMessage(null);
+    try {
+      await recomputeOpportunityVacancyAlignmentSummary(selectedPersonId, item.opportunity_id);
+      const items = await listOpportunities(selectedPersonId);
+      setSavedOpportunities(items);
+      if (selectedOpportunityId === item.opportunity_id) {
+        const refreshed = items.find((entry) => entry.opportunity_id === item.opportunity_id);
+        if (refreshed) {
+          setOpportunityStatus(refreshed.status);
+          setOpportunityNotes(refreshed.notes);
+        }
+      }
+      setToastMessage("Vacancy Alignment Summary recalculado");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "No se pudo recalcular Vacancy Alignment Summary";
+      setErrorMessage(message);
+    } finally {
+      setRecomputingVacancyAlignmentSummaryId(null);
+    }
+  }
+
   async function handleRunVacancyV2Gate() {
     if (!selectedPersonId || isLoadingVacancyV2Gate) {
       return;
@@ -3543,7 +3575,8 @@ export default function App() {
       | "vacancy_dimensions_enriched"
       | "vacancy_retrieval_queries"
       | "vacancy_retrieval_evidence"
-      | "vacancy_evidence_analysis",
+      | "vacancy_evidence_analysis"
+      | "vacancy_alignment_summary",
     status: "none" | "draft" | "approved" | "error"
   ) {
     if (!selectedPersonId || updatingVacancyV2StatusKey) {
@@ -3577,9 +3610,13 @@ export default function App() {
         await updateOpportunity(selectedPersonId, item.opportunity_id, {
           vacancy_retrieval_evidence_status: status,
         });
-      } else {
+      } else if (artifact === "vacancy_evidence_analysis") {
         await updateOpportunity(selectedPersonId, item.opportunity_id, {
           vacancy_evidence_analysis_status: status,
+        });
+      } else {
+        await updateOpportunity(selectedPersonId, item.opportunity_id, {
+          vacancy_alignment_summary_status: status,
         });
       }
       const items = await listOpportunities(selectedPersonId);
@@ -6295,6 +6332,8 @@ export default function App() {
                 Object.keys(item.vacancy_retrieval_evidence_artifact ?? {}).length > 0;
               const hasVacancyEvidenceAnalysisArtifact =
                 Object.keys(item.vacancy_evidence_analysis_artifact ?? {}).length > 0;
+              const hasVacancyAlignmentSummaryArtifact =
+                Object.keys(item.vacancy_alignment_summary_artifact ?? {}).length > 0;
               const vacancyBlocksStatusLabel = getVacancyV2StatusLabel(item.vacancy_blocks_status);
               const vacancyDimensionsStatusLabel = getVacancyV2StatusLabel(
                 item.vacancy_dimensions_status
@@ -6311,6 +6350,9 @@ export default function App() {
               );
               const vacancyEvidenceAnalysisStatusLabel = getVacancyV2StatusLabel(
                 item.vacancy_evidence_analysis_status
+              );
+              const vacancyAlignmentSummaryStatusLabel = getVacancyV2StatusLabel(
+                item.vacancy_alignment_summary_status
               );
               const vacancyBlocksGeneratedAt = item.vacancy_blocks_generated_at
                 ? formatAiRunTimestamp(item.vacancy_blocks_generated_at)
@@ -6333,6 +6375,9 @@ export default function App() {
               const vacancyEvidenceAnalysisGeneratedAt = item.vacancy_evidence_analysis_generated_at
                 ? formatAiRunTimestamp(item.vacancy_evidence_analysis_generated_at)
                 : "Sin generar";
+              const vacancyAlignmentSummaryGeneratedAt = item.vacancy_alignment_summary_generated_at
+                ? formatAiRunTimestamp(item.vacancy_alignment_summary_generated_at)
+                : "Sin generar";
               const isUpdatingVacancyBlocksStatus =
                 updatingVacancyV2StatusKey === `vacancy_blocks:${item.opportunity_id}`;
               const isUpdatingVacancyDimensionsStatus =
@@ -6347,6 +6392,8 @@ export default function App() {
                 updatingVacancyV2StatusKey === `vacancy_retrieval_evidence:${item.opportunity_id}`;
               const isUpdatingVacancyEvidenceAnalysisStatus =
                 updatingVacancyV2StatusKey === `vacancy_evidence_analysis:${item.opportunity_id}`;
+              const isUpdatingVacancyAlignmentSummaryStatus =
+                updatingVacancyV2StatusKey === `vacancy_alignment_summary:${item.opportunity_id}`;
               const isSelectedSavedOpportunity = selectedOpportunityId === item.opportunity_id;
               return (
                 <article
@@ -7228,6 +7275,75 @@ export default function App() {
                       ) : (
                         <p className="metaText">
                           Sin artefacto S6. Requiere S5 valido para consolidar y clasificar evidencia.
+                        </p>
+                      )}
+                    </section>
+
+                    <section className="vacancyV2Section">
+                      <div className="vacancyV2SectionHeader">
+                        <div>
+                          <p className="metaText vacancyV2SectionTitle">
+                            S7 · Vacancy Alignment Summary
+                          </p>
+                          <p className="metaText">Generado: {vacancyAlignmentSummaryGeneratedAt}</p>
+                        </div>
+                        <div className="metaChips vacancyV2HeaderChips">
+                          <span
+                            className={`metaChip ${getVacancyV2StatusClassName(item.vacancy_alignment_summary_status)}`}
+                          >
+                            {vacancyAlignmentSummaryStatusLabel}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="cardActions">
+                        <button
+                          className="vacancyProfileQuickActionButton"
+                          disabled={
+                            !hasVacancyEvidenceAnalysisArtifact
+                            || recomputingVacancyAlignmentSummaryId === item.opportunity_id
+                          }
+                          onClick={() => void handleRecomputeVacancyAlignmentSummary(item)}
+                          type="button"
+                        >
+                          {recomputingVacancyAlignmentSummaryId === item.opportunity_id
+                            ? "Recalculando..."
+                            : "Recalcular S7"}
+                        </button>
+                        {hasVacancyAlignmentSummaryArtifact ? (
+                          <button
+                            className="vacancyProfileQuickActionButton"
+                            disabled={isUpdatingVacancyAlignmentSummaryStatus}
+                            onClick={() =>
+                              void handleSetVacancyV2Status(
+                                item,
+                                "vacancy_alignment_summary",
+                                item.vacancy_alignment_summary_status === "approved"
+                                  ? "draft"
+                                  : "approved"
+                              )}
+                            type="button"
+                          >
+                            {isUpdatingVacancyAlignmentSummaryStatus
+                              ? "Actualizando..."
+                              : item.vacancy_alignment_summary_status === "approved"
+                                ? "Marcar borrador"
+                                : "Aprobar S7"}
+                          </button>
+                        ) : null}
+                      </div>
+                      {hasVacancyAlignmentSummaryArtifact ? (
+                        <label className="field">
+                          JSON S7
+                          <textarea
+                            className="vacancyV2JsonTextarea"
+                            readOnly
+                            rows={12}
+                            value={safePrettyJson(item.vacancy_alignment_summary_artifact)}
+                          />
+                        </label>
+                      ) : (
+                        <p className="metaText">
+                          Sin artefacto S7. Requiere S6 valido para resumir fortalezas, gaps y revisiones.
                         </p>
                       )}
                     </section>

@@ -67,6 +67,9 @@ class OpportunityRecord(TypedDict):
     vacancy_evidence_analysis_artifact: dict[str, Any]
     vacancy_evidence_analysis_status: str
     vacancy_evidence_analysis_generated_at: str
+    vacancy_alignment_summary_artifact: dict[str, Any]
+    vacancy_alignment_summary_status: str
+    vacancy_alignment_summary_generated_at: str
     created_at: str
     updated_at: str
 
@@ -127,6 +130,9 @@ def _normalize(payload: dict | None) -> OpportunityRecord:
         "vacancy_evidence_analysis_artifact": dict(source.get("vacancy_evidence_analysis_artifact", {})),
         "vacancy_evidence_analysis_status": str(source.get("vacancy_evidence_analysis_status", "none")),
         "vacancy_evidence_analysis_generated_at": str(source.get("vacancy_evidence_analysis_generated_at", "")),
+        "vacancy_alignment_summary_artifact": dict(source.get("vacancy_alignment_summary_artifact", {})),
+        "vacancy_alignment_summary_status": str(source.get("vacancy_alignment_summary_status", "none")),
+        "vacancy_alignment_summary_generated_at": str(source.get("vacancy_alignment_summary_generated_at", "")),
         "created_at": str(source.get("created_at", "")),
         "updated_at": str(source.get("updated_at", "")),
     }
@@ -240,6 +246,9 @@ def create_opportunity(
         "vacancy_evidence_analysis_artifact": {},
         "vacancy_evidence_analysis_status": "none",
         "vacancy_evidence_analysis_generated_at": "",
+        "vacancy_alignment_summary_artifact": {},
+        "vacancy_alignment_summary_status": "none",
+        "vacancy_alignment_summary_generated_at": "",
         "created_at": now,
         "updated_at": now,
     }
@@ -345,6 +354,8 @@ def update_opportunity(
     vacancy_retrieval_evidence_status: str | None = None,
     vacancy_evidence_analysis_artifact: dict[str, Any] | None = None,
     vacancy_evidence_analysis_status: str | None = None,
+    vacancy_alignment_summary_artifact: dict[str, Any] | None = None,
+    vacancy_alignment_summary_status: str | None = None,
 ) -> OpportunityRecord | None:
     existing = find_opportunity(person_id, opportunity_id)
     if not existing:
@@ -445,6 +456,17 @@ def update_opportunity(
         existing["vacancy_evidence_analysis_status"] = vacancy_evidence_analysis_status
         if vacancy_evidence_analysis_artifact is None:
             existing["vacancy_evidence_analysis_generated_at"] = _now_iso()
+
+    if vacancy_alignment_summary_artifact is not None:
+        existing["vacancy_alignment_summary_artifact"] = dict(vacancy_alignment_summary_artifact)
+        existing["vacancy_alignment_summary_generated_at"] = _now_iso()
+
+    if vacancy_alignment_summary_status is not None:
+        if vacancy_alignment_summary_status not in VACANCY_V2_ARTIFACT_STATUSES:
+            return None
+        existing["vacancy_alignment_summary_status"] = vacancy_alignment_summary_status
+        if vacancy_alignment_summary_artifact is None:
+            existing["vacancy_alignment_summary_generated_at"] = _now_iso()
 
     existing["updated_at"] = _now_iso()
     return _save(existing)

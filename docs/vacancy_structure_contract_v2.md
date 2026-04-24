@@ -730,6 +730,72 @@ Reglas:
 - `S6` no borra evidencia cruda de `S5`; `S5` sigue siendo la fuente detallada
 - `S7` debe consumir principalmente `S6` y apoyarse en `S5` solo si necesita inspeccion mas profunda
 
+## Paso 7 implementado como resumen estructurado complementario
+Objetivo:
+- derivar desde `S6` un resumen compacto y operacional que simplifique el consumo de `S8` sin reemplazar el detalle de `S6`
+
+Artefacto:
+- `vacancy_alignment_summary.v1`
+
+Input:
+- `vacancy_evidence_analysis.v1`
+
+Output esperado:
+```json
+{
+  "contract_version": "vacancy_alignment_summary.v1",
+  "vacancy_id": "VAL-123",
+  "generated_at": "2026-04-24T16:00:00Z",
+  "source_artifact_version": "vacancy_evidence_analysis.v1",
+  "thresholds": {
+    "strong_min": 0.75,
+    "useful_min": 0.45,
+    "review_min": 0.30
+  },
+  "summary": {
+    "overall": {
+      "total_items": 12,
+      "strong_evidence_count": 4,
+      "useful_evidence_count": 3,
+      "review_count": 2,
+      "no_evidence_count": 3
+    },
+    "groups": {
+      "responsibilities": {
+        "total_items": 4,
+        "strong_evidence_count": 2,
+        "useful_evidence_count": 1,
+        "review_count": 0,
+        "no_evidence_count": 1
+      },
+      "required_criteria": {
+        "total_items": 5,
+        "strong_evidence_count": 1,
+        "useful_evidence_count": 2,
+        "review_count": 1,
+        "no_evidence_count": 1
+      },
+      "desirable_criteria": {
+        "total_items": 3,
+        "strong_evidence_count": 1,
+        "useful_evidence_count": 0,
+        "review_count": 1,
+        "no_evidence_count": 1
+      }
+    },
+    "strengths": [],
+    "gaps": [],
+    "review_items": []
+  }
+}
+```
+
+Reglas:
+- `S7` complementa a `S6`; no lo reemplaza
+- `S7` resume solo grupos primarios: `responsibilities`, `required_criteria`, `desirable_criteria`
+- `S7` no copia `accepted_matches` ni `discarded_matches` completos
+- `S8` debe consumir `S7` como mapa resumido y `S6` como respaldo detallado
+
 ## Ambiguedades abiertas de Paso 3
 - falta confirmar si `vacancy_dimensions.v2` debe generarse en un solo paso logico con `Paso 3 + Paso 3.1` o si ambos artefactos deben persistirse por separado
 - falta cerrar si `benefits` necesitara en el futuro normalizacion adicional mas fuerte para participar mejor en el analisis de fit
