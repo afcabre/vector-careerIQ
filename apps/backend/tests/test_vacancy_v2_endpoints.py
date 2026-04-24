@@ -18,6 +18,7 @@ from app.services.request_trace_store import reset_request_traces
 from app.services.vacancy_blocks_service import VacancyBlocksExtractionError
 from app.services.vacancy_dimensions_service import VacancyDimensionsExtractionError
 from app.services.vacancy_dimensions_enrichment_service import VacancyDimensionsEnrichmentError
+from app.services.vacancy_retrieval_evidence_service import VacancyRetrievalEvidenceBuildError
 from app.services.vacancy_retrieval_queries_service import VacancyRetrievalQueriesExtractionError
 from app.services.vacancy_salary_service import VacancySalaryNormalizationError
 
@@ -130,6 +131,44 @@ def _sample_vacancy_retrieval_queries(opportunity_id: str) -> dict[str, Any]:
                     "group_code": "resp",
                     "raw_text": "Liderar backlog de datos",
                     "queries": ["liderazgo de backlog, coordinacion de roadmap de datos"],
+                }
+            ],
+            "required_criteria": [],
+            "desirable_criteria": [],
+            "benefits": [],
+            "about_the_company": [],
+            "work_conditions": {
+                "salary": [],
+                "modality": [],
+                "location": [],
+                "contract_type": [],
+                "other_conditions": [],
+            },
+        },
+    }
+
+
+def _sample_vacancy_retrieval_evidence(opportunity_id: str) -> dict[str, Any]:
+    return {
+        "contract_version": "vacancy_retrieval_evidence.v1",
+        "vacancy_id": opportunity_id,
+        "generated_at": "2026-04-24T10:36:00Z",
+        "evidence": {
+            "responsibilities": [
+                {
+                    "item_id": "resp_1234567890",
+                    "item_index": 0,
+                    "group_code": "resp",
+                    "raw_text": "Liderar backlog de datos",
+                    "matches": [
+                        {
+                            "query_index": 0,
+                            "query_text": "liderazgo de backlog, coordinacion de roadmap de datos",
+                            "score": 0.84,
+                            "snippet": "Lidere backlog y priorizacion trimestral",
+                            "source_ref": "cv-chunk-1",
+                        }
+                    ],
                 }
             ],
             "required_criteria": [],
@@ -310,6 +349,19 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         self.assertEqual(
             invalid_queries_status.exception.detail,
             "Invalid vacancy_retrieval_queries_status",
+        )
+
+        with self.assertRaises(HTTPException) as invalid_evidence_status:
+            opportunities_api.update_opportunity(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                payload=opportunities_api.UpdateOpportunityRequest(vacancy_retrieval_evidence_status="invalid"),
+                _=self.session,
+            )
+        self.assertEqual(invalid_evidence_status.exception.status_code, 422)
+        self.assertEqual(
+            invalid_evidence_status.exception.detail,
+            "Invalid vacancy_retrieval_evidence_status",
         )
 
     def test_recompute_vacancy_dimensions_success_sets_draft_artifact(self) -> None:
@@ -585,6 +637,85 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         stored = opportunity_store.find_opportunity("p-001", opportunity_id)
         assert stored is not None
         self.assertEqual(stored["vacancy_retrieval_queries_status"], "error")
+
+    def test_recompute_vacancy_retrieval_evidence_success_sets_draft_artifact(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Backend Engineer",
+            company="Acme",
+            location="Hybrid",
+            raw_text="Vacante con responsabilidades.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_retrieval_queries_artifact=_sample_vacancy_retrieval_queries(opportunity_id),
+            vacancy_retrieval_queries_status="approved",
+        )
+        assert updated is not None
+        evidence_artifact = _sample_vacancy_retrieval_evidence(opportunity_id)
+
+        with patch.object(
+            opportunities_api,
+            "build_vacancy_retrieval_evidence",
+            return_value=evidence_artifact,
+        ):
+            response = opportunities_api.recompute_vacancy_retrieval_evidence(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                _=self.session,
+                settings=get_settings(),
+            )
+
+        self.assertEqual(response.vacancy_retrieval_evidence_status, "draft")
+        self.assertEqual(
+            response.vacancy_retrieval_evidence_artifact["contract_version"],
+            "vacancy_retrieval_evidence.v1",
+        )
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_retrieval_evidence_status"], "draft")
+
+    def test_recompute_vacancy_retrieval_evidence_failure_sets_error_status(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Backend Engineer",
+            company="Acme",
+            location="Hybrid",
+            raw_text="Vacante con responsabilidades.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_retrieval_queries_artifact=_sample_vacancy_retrieval_queries(opportunity_id),
+            vacancy_retrieval_queries_status="approved",
+        )
+        assert updated is not None
+
+        with patch.object(
+            opportunities_api,
+            "build_vacancy_retrieval_evidence",
+            side_effect=VacancyRetrievalEvidenceBuildError("Step 5 requires an indexed active CV before retrieval can run."),
+        ):
+            with self.assertRaises(HTTPException) as ctx:
+                opportunities_api.recompute_vacancy_retrieval_evidence(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                    settings=get_settings(),
+                )
+
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertIn("Step 5 requires an indexed active CV before retrieval can run.", str(ctx.exception.detail))
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_retrieval_evidence_status"], "error")
 
     def test_recompute_vacancy_dimensions_uses_persisted_vacancy_blocks_input(self) -> None:
         created = opportunity_store.import_text_opportunity(
@@ -1099,6 +1230,100 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         stored = opportunity_store.find_opportunity("p-001", opportunity_id)
         assert stored is not None
         self.assertEqual(stored["vacancy_retrieval_queries_status"], "error")
+
+    def test_vacancy_retrieval_evidence_stream_emits_stages_and_message_complete(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Platform Engineer",
+            company="Acme",
+            location="Remote",
+            raw_text="Rol con responsabilidades.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_retrieval_queries_artifact=_sample_vacancy_retrieval_queries(opportunity_id),
+            vacancy_retrieval_queries_status="approved",
+        )
+        assert updated is not None
+        evidence_artifact = _sample_vacancy_retrieval_evidence(opportunity_id)
+
+        with patch.object(
+            opportunities_api,
+            "build_vacancy_retrieval_evidence",
+            return_value=evidence_artifact,
+        ):
+            response = asyncio.run(
+                opportunities_api.recompute_vacancy_retrieval_evidence_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                    settings=get_settings(),
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        stages = [payload.get("stage", "") for name, payload in events if name == "tool_status"]
+        self.assertIn("vacancy_retrieval_evidence_recompute_started", stages)
+        self.assertIn("vacancy_retrieval_evidence_building", stages)
+        self.assertIn("vacancy_retrieval_evidence_saving", stages)
+        complete_payload = next(payload for name, payload in events if name == "message_complete")
+        self.assertEqual(
+            complete_payload["opportunity"]["vacancy_retrieval_evidence_status"],
+            "draft",
+        )
+
+    def test_vacancy_retrieval_evidence_stream_emits_error_and_marks_status(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Platform Engineer",
+            company="Acme",
+            location="Remote",
+            raw_text="Rol con responsabilidades.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_retrieval_queries_artifact=_sample_vacancy_retrieval_queries(opportunity_id),
+            vacancy_retrieval_queries_status="approved",
+        )
+        assert updated is not None
+
+        with patch.object(
+            opportunities_api,
+            "build_vacancy_retrieval_evidence",
+            side_effect=VacancyRetrievalEvidenceBuildError("Step 5 requires an active CV before retrieval can run."),
+        ):
+            response = asyncio.run(
+                opportunities_api.recompute_vacancy_retrieval_evidence_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                    settings=get_settings(),
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        names = [name for name, _ in events]
+        self.assertIn("tool_status", names)
+        self.assertIn("error", names)
+        error_payload = next(payload for name, payload in events if name == "error")
+        self.assertIn(
+            "Step 5 requires an active CV before retrieval can run.",
+            str(error_payload.get("detail", "")),
+        )
+
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_retrieval_evidence_status"], "error")
 
 
 if __name__ == "__main__":

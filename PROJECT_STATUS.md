@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `S4 expuesto en Prompt Admin y Runtime IA; parametro administrable para queries por item ya se inyecta al prompt efectivo`
+- checkpoint_actual: `S5 backend ya corre como paso programatico con persistencia y endpoints propios; pendiente definir si se expone de inmediato en UI`
 - repo_status: `flujo V1 operativo con analisis, postulacion, chat, CV semantico, admin de prompts y extraccion estructurada de vacantes en forma legacy estable; propuesta v2 desacoplada en branch experimental`
 - ultima_actualizacion: `2026-04-24`
 
@@ -109,6 +109,9 @@
 - Prompt Admin ya incluye tambien plantilla recomendada para `task_vacancy_retrieval_queries_extract`, habilitando el boton `Restaurar recomendado` en UI
 - validacion tecnica del slice admin `S4`: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_ai_runtime_config_admin tests.test_vacancy_retrieval_queries_service tests.test_vacancy_v2_endpoints` en verde (`32 tests`) y `npm run build` en `apps/frontend` en verde
 - mejora futura documentada para `S4`: posible control administrable de tipologias de query solo en prompt, pero por decision vigente se observara primero el comportamiento real sin introducir mas control
+- `S5` iniciado en backend: contrato `vacancy_retrieval_evidence.v1`, servicio programatico sin LLM, persistencia propia y endpoints `recompute` / `recompute/stream`
+- `S5` reutiliza `query_cv_matches`, exige CV activo indexado y toma `top_k_semantic_per_criterion` desde Runtime IA
+- validacion tecnica del slice inicial `S5`: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_retrieval_evidence_contract tests.test_vacancy_retrieval_evidence_service tests.test_vacancy_v2_endpoints` en verde (`33 tests`)
 - validacion funcional nueva: el gate actual `Vacancy V2` mide solo consistencia parcial `S2 -> S3` (`vacancy_blocks` -> `vacancy_dimensions`) y no incorpora aun artefactos `S3.1` ni `S3.9`
 - slice frontend nuevo: la UI experimental de `Vacancy V2` ahora expone `S3.1` (`Vacancy Salary`) y `S3.9` (`Vacancy Dimensions Enriched`) con recompute, visualizacion de `status`/`generated_at`, inspeccion JSON read-only y cambio manual de estado `draft/approved`
 - validacion tecnica del slice frontend `S3.1 + S3.9`: `npm run build` en `apps/frontend` en verde
@@ -165,8 +168,8 @@
 - el experimento de nueva estructura de vacante no debe reintroducirse sobre este baseline ni conectarse al extractor estable antes de acuerdo
 
 ## Siguiente Actividad
-- probar operativamente `S4` (`vacancy_retrieval_queries`) desde la UI experimental junto con `S3.1` y `S3.9`, para evaluar calidad de queries y utilidad real del artifact previo a retrieval
-- revisar en administracion el prompt de `S4` y calibrar `vacancy_retrieval_queries_per_item` antes de abrir `S5`
+- probar operativamente `S4` (`vacancy_retrieval_queries`) y `S5` (`vacancy_retrieval_evidence`) sobre una oportunidad con CV activo indexado
+- decidir si `S5` se expone ya en la UI experimental o si se deja primero como endpoint/backend para validar artefacto
 - observar si `S4` aporta valor real para `work_conditions`, `benefits` y `about_the_company` antes de abrir control adicional por tipologia
 - mantener el gate actual solo como chequeo parcial `S2 -> S3`, sin abrir por ahora trabajo dedicado de hardening ni expansion de cobertura
-- despues de la prueba operativa de `S4`, abrir `S5` (`vacancy_retrieval_evidence.v1`) sobre Pinecone/evidencia semantica si el artifact de queries demuestra valor
+- despues de validar `S5`, abrir `S6` para analisis/presentacion sobre evidencia por item

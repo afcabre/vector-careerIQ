@@ -370,6 +370,12 @@ Regla:
 - este paso no concluye alineacion final
 - solo recupera y ordena evidencia
 - la interpretacion de scores queda separada del retrieval mismo
+- implementacion actual recomendada:
+  - paso programatico, sin LLM
+  - reutilizar `query_cv_matches`
+  - exigir CV activo e indexado antes de correr
+  - tomar `top_k_semantic_per_criterion` desde Runtime IA
+  - permitir evidencia vacia por item sin tratarlo como error del paso
 
 ### Criterio operativo inicial de lectura de scores
 - `score > 0.85`: evidencia casi textual

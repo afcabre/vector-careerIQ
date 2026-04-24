@@ -625,6 +625,12 @@ Regla:
 - Paso 5 no modifica queries
 - Paso 5 solo recupera, ordena y persiste evidencia
 - la interpretacion de scores queda para el paso de analisis posterior
+- implementacion backend actual:
+  - `S5` ya corre como paso programatico sin LLM
+  - reutiliza `query_cv_matches` sobre el CV activo indexado
+  - toma `top_k_semantic_per_criterion` desde Runtime IA
+  - falla de forma controlada si no existe `vacancy_retrieval_queries.v1` valido o si no hay CV activo/indexado
+  - no falla por ausencia de matches; en ese caso persiste evidencia vacia por item
 
 ## Criterio propuesto de lectura de scores
 - `score > 0.85`: evidencia casi textual

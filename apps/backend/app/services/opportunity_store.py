@@ -61,6 +61,9 @@ class OpportunityRecord(TypedDict):
     vacancy_retrieval_queries_artifact: dict[str, Any]
     vacancy_retrieval_queries_status: str
     vacancy_retrieval_queries_generated_at: str
+    vacancy_retrieval_evidence_artifact: dict[str, Any]
+    vacancy_retrieval_evidence_status: str
+    vacancy_retrieval_evidence_generated_at: str
     created_at: str
     updated_at: str
 
@@ -115,6 +118,9 @@ def _normalize(payload: dict | None) -> OpportunityRecord:
         "vacancy_retrieval_queries_artifact": dict(source.get("vacancy_retrieval_queries_artifact", {})),
         "vacancy_retrieval_queries_status": str(source.get("vacancy_retrieval_queries_status", "none")),
         "vacancy_retrieval_queries_generated_at": str(source.get("vacancy_retrieval_queries_generated_at", "")),
+        "vacancy_retrieval_evidence_artifact": dict(source.get("vacancy_retrieval_evidence_artifact", {})),
+        "vacancy_retrieval_evidence_status": str(source.get("vacancy_retrieval_evidence_status", "none")),
+        "vacancy_retrieval_evidence_generated_at": str(source.get("vacancy_retrieval_evidence_generated_at", "")),
         "created_at": str(source.get("created_at", "")),
         "updated_at": str(source.get("updated_at", "")),
     }
@@ -222,6 +228,9 @@ def create_opportunity(
         "vacancy_retrieval_queries_artifact": {},
         "vacancy_retrieval_queries_status": "none",
         "vacancy_retrieval_queries_generated_at": "",
+        "vacancy_retrieval_evidence_artifact": {},
+        "vacancy_retrieval_evidence_status": "none",
+        "vacancy_retrieval_evidence_generated_at": "",
         "created_at": now,
         "updated_at": now,
     }
@@ -323,6 +332,8 @@ def update_opportunity(
     vacancy_dimensions_enriched_status: str | None = None,
     vacancy_retrieval_queries_artifact: dict[str, Any] | None = None,
     vacancy_retrieval_queries_status: str | None = None,
+    vacancy_retrieval_evidence_artifact: dict[str, Any] | None = None,
+    vacancy_retrieval_evidence_status: str | None = None,
 ) -> OpportunityRecord | None:
     existing = find_opportunity(person_id, opportunity_id)
     if not existing:
@@ -401,6 +412,17 @@ def update_opportunity(
         existing["vacancy_retrieval_queries_status"] = vacancy_retrieval_queries_status
         if vacancy_retrieval_queries_artifact is None:
             existing["vacancy_retrieval_queries_generated_at"] = _now_iso()
+
+    if vacancy_retrieval_evidence_artifact is not None:
+        existing["vacancy_retrieval_evidence_artifact"] = dict(vacancy_retrieval_evidence_artifact)
+        existing["vacancy_retrieval_evidence_generated_at"] = _now_iso()
+
+    if vacancy_retrieval_evidence_status is not None:
+        if vacancy_retrieval_evidence_status not in VACANCY_V2_ARTIFACT_STATUSES:
+            return None
+        existing["vacancy_retrieval_evidence_status"] = vacancy_retrieval_evidence_status
+        if vacancy_retrieval_evidence_artifact is None:
+            existing["vacancy_retrieval_evidence_generated_at"] = _now_iso()
 
     existing["updated_at"] = _now_iso()
     return _save(existing)
