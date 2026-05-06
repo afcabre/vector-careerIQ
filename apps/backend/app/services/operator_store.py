@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from app.core.settings import Settings, get_settings
+from app.core.settings import DEFAULT_TUTOR_PASSWORD_HASH, Settings, get_settings
 from app.services.firestore_client import get_firestore_client
 
 
@@ -20,6 +20,19 @@ def _is_firestore_backend(settings: Settings) -> bool:
     return settings.persistence_backend.lower() == "firestore"
 
 
+def _is_production_app(settings: Settings) -> bool:
+    return settings.app_env.strip().lower() == "production"
+
+
+def _has_non_empty_password_hash(payload: dict[str, object]) -> bool:
+    password_hash = payload.get("password_hash")
+    return isinstance(password_hash, str) and bool(password_hash.strip())
+
+
+def _uses_default_demo_password_hash(settings: Settings) -> bool:
+    return settings.tutor_password_hash == DEFAULT_TUTOR_PASSWORD_HASH
+
+
 def seed_operator() -> None:
     settings = get_settings()
     if not settings.firestore_seed_on_startup:
@@ -34,13 +47,25 @@ def seed_operator() -> None:
         current = snapshot.to_dict() or {}
         current["operator_id"] = settings.tutor_username
         current["username"] = settings.tutor_username
-        current["password_hash"] = settings.tutor_password_hash
+        should_preserve_existing_password = (
+            _is_production_app(settings)
+            and _uses_default_demo_password_hash(settings)
+            and _has_non_empty_password_hash(current)
+        )
+        if not should_preserve_existing_password:
+            current["password_hash"] = settings.tutor_password_hash
         current["active"] = True
         current["updated_at"] = datetime.now(tz=UTC).isoformat()
         if "created_at" not in current:
             current["created_at"] = current["updated_at"]
         ref.set(current)
         return
+
+    if _is_production_app(settings) and _uses_default_demo_password_hash(settings):
+        raise RuntimeError(
+            "Refusing to seed operator in production with the default demo password hash. "
+            "Set TUTOR_PASSWORD_HASH before startup."
+        )
 
     ref.set(_default_operator_payload(settings))
 
