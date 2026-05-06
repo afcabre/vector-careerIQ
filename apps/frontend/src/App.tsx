@@ -36,6 +36,7 @@ import {
   getActiveCVText,
   getSession,
   importOpportunityByUrl,
+  importOpportunityByText,
   listOpportunityAiRuns,
   listOpportunityArtifacts,
   listOpportunities,
@@ -57,6 +58,8 @@ import {
   recomputeOpportunityVacancyRetrievalEvidence,
   recomputeOpportunityVacancyEvidenceAnalysis,
   recomputeOpportunityVacancyAlignmentSummary,
+  recomputeOpportunityVacancyAlignmentReport,
+  recomputeOpportunityVacancyAlignmentReportStream,
   recomputeOpportunityVacancySalary,
   saveOpportunityFromSearch,
   searchOpportunities,
@@ -285,7 +288,10 @@ const PROMPT_FLOW_LABELS: Record<string, string> = {
   task_interview_research_plan: "Prompt de tarea: Plan de investigacion entrevista",
   task_interview_brief: "Prompt de tarea: Brief de entrevista",
   task_vacancy_profile_extract: "Prompt de tarea: Estructurar vacante",
+  task_vacancy_blocks_extract: "Prompt de tarea: Vacancy Blocks S2",
+  task_vacancy_dimensions_extract: "Prompt de tarea: Vacancy Dimensions S3",
   task_vacancy_retrieval_queries_extract: "Prompt de tarea: Queries de retrieval de vacante",
+  task_vacancy_alignment_report: "Prompt de tarea: Reporte final de alineacion",
   task_prepare_guidance: "Prompt de tarea: Preparar guia de perfil",
   task_prepare_cover_letter: "Prompt de tarea: Preparar carta",
   task_prepare_experience_summary: "Prompt de tarea: Preparar resumen"
@@ -303,7 +309,10 @@ const PROMPT_FLOW_ORDER: string[] = [
   "task_interview_research_plan",
   "task_interview_brief",
   "task_vacancy_profile_extract",
+  "task_vacancy_blocks_extract",
+  "task_vacancy_dimensions_extract",
   "task_vacancy_retrieval_queries_extract",
+  "task_vacancy_alignment_report",
   "task_prepare_guidance",
   "task_prepare_cover_letter",
   "task_prepare_experience_summary"
@@ -353,10 +362,43 @@ Empresa: {opportunity_company}
 Ubicacion: {opportunity_location}
 URL: {opportunity_url}
 Descripcion: {opportunity_raw_text}`,
+  task_vacancy_blocks_extract: `Clasifica la vacante en el contrato vacancy_blocks.v2 y responde SOLO JSON valido.
+No resumes. No atomices. No inventes claves nuevas.
+Usa solo estas claves raiz: vacancy_blocks, warnings, coverage_notes.
+No escribas metadata; el backend agregara flow, vacancy_id y generated_at.
+Dentro de vacancy_blocks usa exactamente: about_the_company, work_conditions, responsibilities, required_requirements, desirable_requirements, benefits, unclassified.
+about_the_company contiene solo descripcion de empresa, industria, mision, escala, contexto o senales del empleador.
+Toda senal de salario/compensacion debe ir en work_conditions y nunca en benefits.
+Cada clave debe ser lista de strings limpios sin duplicados.
+Si un fragmento es ambiguo o inseparable, asigna una categoria principal y explica en warnings.
+Si falta cobertura relevante, reporta en coverage_notes.
+Vacante titulo: {opportunity_title}.
+Empresa: {opportunity_company}.
+Ubicacion: {opportunity_location}.
+URL: {opportunity_url}.
+Descripcion: {opportunity_raw_text}`,
+  task_vacancy_dimensions_extract: `Transforma vacancy_blocks.v2 en vacancy_dimensions.v2 y responde SOLO JSON valido.
+No inventes claves nuevas y no mezcles contracts.
+Usa estas claves raiz: vacancy_dimensions, warnings, coverage_notes.
+Dentro de vacancy_dimensions usa exactamente: work_conditions, responsibilities, required_criteria, desirable_criteria, benefits, about_the_company, unclassified.
+warnings y coverage_notes deben permanecer en la raiz, nunca dentro de vacancy_dimensions.
+work_conditions debe ser una lista de objetos con solo raw_text.
+No clasifiques work_conditions en salary, modality, location, contract_type ni otros buckets.
+Toda senal de salario/compensacion se conserva como raw_text dentro de work_conditions; S3.1 normalizara salario despues. benefits es solo para perks no salariales.
+Si alguna informacion no puede transformarse sin perdida, conservala en unclassified y explicalo en coverage_notes.
+Cada item atomico debe incluir solo raw_text.
+No apliques defaults semanticos ni inventes informacion.
+Vacante titulo: {opportunity_title}.
+Empresa: {opportunity_company}.
+Ubicacion: {opportunity_location}.
+URL: {opportunity_url}.
+Entrada vacancy_blocks.v2: {vacancy_blocks_json}`,
   task_vacancy_retrieval_queries_extract: `Genera queries de retrieval para la vacante y responde SOLO JSON valido.
 Usa solo estas claves raiz: queries.
 Dentro de queries usa exactamente: responsibilities, required_criteria, desirable_criteria, benefits, about_the_company, work_conditions.
-Dentro de work_conditions usa exactamente: salary, modality, location, contract_type, other_conditions.
+work_conditions debe ser una lista plana de items, sin subcategorias.
+Genera queries no vacias solo para responsibilities, required_criteria y desirable_criteria.
+Mantén benefits, about_the_company y work_conditions presentes pero vacios.
 Cada item debe incluir exactamente: item_id, item_index, group_code, raw_text, queries.
 No reclasifiques ni resumes la vacante. Formula queries orientadas a buscar evidencia en el CV.
 Para cada item que amerite query, genera exactamente {retrieval_queries_per_item} queries distintas y utiles.
@@ -366,7 +408,43 @@ Empresa: {opportunity_company}.
 Ubicacion: {opportunity_location}.
 URL: {opportunity_url}.
 Entrada vacancy_dimensions_enriched.v1: {vacancy_dimensions_enriched_json}.
-Entrada vacancy_salary_normalization.v1: {vacancy_salary_json}`
+Entrada vacancy_salary_normalization.v1: {vacancy_salary_json}`,
+  task_vacancy_alignment_report: `Actua como analista senior de ajuste candidato-vacante, orientado a ayudar al candidato y/o a su tutor a decidir si conviene priorizar esta vacante.
+Responde SOLO JSON valido para vacancy_alignment_report.v1 y no escribas texto fuera del JSON.
+Debes producir exactamente dos claves raiz: report, rendered_markdown.
+Usa los insumos asi: person_context sirve para analizar rol objetivo, ubicacion, anos de experiencia, skills, expectativa salarial, preferencias culturales, condiciones laborales y notas abiertas del candidato; opportunity_context sirve para leer la vacante completa, incluyendo snapshot_raw_text, y detectar senales transversales del rol que no siempre viven en un criterio atomico, como seniority implicito, peso real del liderazgo, foco en CRM/data/marketing/transformacion y complejidad del rol; vacancy_alignment_summary.v1 es el mapa resumido principal del caso y debes usarlo para identificar todos los criterios evaluados sin omitir ninguno; vacancy_evidence_analysis.v1 es la base de evidencia detallada por criterio y debes usarlo para sustentar cumplimiento, parcialidad, ausencia de evidencia o conflicto.
+No recalcules scores ni buckets. No inventes informacion, no adornes al candidato y no omitas criterios evaluados relevantes.
+No conviertas ausencia de evidencia en contradiccion. No conviertas una senal semantica debil en cumplimiento pleno.
+El publico objetivo del analisis es el candidato o el tutor que lo acompana; no escribas como reclutador, hiring manager ni headhunter.
+La recomendacion final debe responder si conviene al candidato avanzar con esta vacante.
+Usa solo estas recomendaciones finales permitidas: Avanzar, Avanzar con reservas, Avanzar si se valida X, No priorizar, Descartar.
+Debes separar fit objetivo y fit preferencial.
+Usa la taxonomia visual obligatoria: 🟢 Cumple, 🟡 Parcial, ⚪ Sin informacion, 🔴 En conflicto, 🔵 Deseable no evidenciado.
+Distingue explicitamente entre: no parece tenerlo, no esta demostrado, la vacante no lo especifica.
+Si un criterio tiene evidencia parcial o indirecta usa 🟡 Parcial. Si no hay evidencia suficiente usa ⚪ Sin informacion. Usa 🔵 Deseable no evidenciado solo para criterios deseables no demostrados. Usa 🔴 En conflicto solo si existe contradiccion explicita o altamente probable.
+Si la vacante no especifica una condicion y el candidato si tiene una preferencia, usa ⚪ Sin informacion. Si existe comparacion objetiva de salario, ubicacion, modalidad, contrato, intensidad, formalidad, liderazgo deseado u otras preferencias comparables, debes incluirla en candidate_preference_matrix.
+Dentro de report usa exactamente: executive_summary, decision_table, vacancy_fit_matrix, candidate_preference_matrix, fit_answer, strengths, gaps, preference_conflicts, improvement_actions, alerts_and_conflicts, actionable_conclusion.
+decision_table debe usar exactamente: alineacion_general, fit_objetivo, fit_preferencial, requisitos_criticos_cumplidos, bloqueadores, alertas_relevantes, potencial_mejora_fit, recomendacion.
+Cada entrada de decision_table debe incluir exactamente: resultado, descripcion_corta.
+Cada fila de vacancy_fit_matrix debe incluir exactamente: criterio, categoria, origen_del_criterio, estado, lo_que_solicita_la_vacante, evidencia_del_candidato, descripcion_corta.
+vacancy_fit_matrix debe incluir todos los criterios evaluados relevantes de la vacante, no una muestra. categoria debe usar categorias legibles como Experiencia, Herramientas, Conocimientos, Formacion, Certificaciones, Idioma, Responsabilidades, Condiciones laborales o Cultura y entorno. origen_del_criterio debe usar Vacante obligatoria, Vacante deseable o Vacante condicion.
+Cada fila de candidate_preference_matrix debe incluir exactamente: criterio, categoria, origen_del_criterio, estado, lo_que_ofrece_o_define_la_vacante, preferencia_o_condicion_del_candidato, descripcion_corta.
+candidate_preference_matrix solo puede ir vacio si de verdad no existe ninguna preferencia o condicion comparable.
+executive_summary debe ser un texto breve real de 3 a 5 lineas, en un solo parrafo corto, que sintetice el ajuste general, la principal fortaleza, la principal brecha o tension y la recomendacion general. No devuelvas un diccionario serializado como string ni uses formato tipo {'clave': 'valor'}.
+strengths debe ser una lista de fortalezas concretas, cortas y no redundantes. gaps debe ser una lista de brechas, faltantes o criterios no demostrados. preference_conflicts debe listar conflictos, tensiones o incertidumbres frente a preferencias del candidato. alerts_and_conflicts debe listar incompatibilidades, bloqueadores o ambiguedades criticas.
+improvement_actions debe incluir exactamente: reinforce_in_cv_or_profile, validate_with_recruiter, application_narrative.
+Cada lista de improvement_actions debe contener acciones concretas.
+actionable_conclusion debe incluir exactamente: final_decision, main_reason, recommended_next_step.
+No uses frases como Continuar con el proceso de seleccion, Considerar para entrevista o Preparar para la entrevista.
+preference_conflicts y alerts_and_conflicts pueden ir vacios si no aplica.
+rendered_markdown es obligatorio y debe reflejar el mismo contenido del JSON.
+rendered_markdown debe incluir secciones en este orden exacto: ## Resumen ejecutivo, ## Matriz de alineacion, ### Ajuste frente a la vacante, ### Ajuste frente a preferencias y condiciones del candidato, ## 1. ¿Encaja con la vacante?, ## 2. ¿Que tiene a favor?, ## 3. ¿Que le falta o no esta demostrado?, ## 4. ¿Que choca con sus preferencias o condiciones?, ## 5. ¿Que deberia ajustar o mejorar para aumentar su fit?, ## Alertas y conflictos, ## Conclusion accionable.
+En rendered_markdown, la seccion ## Resumen ejecutivo debe incluir primero el executive_summary como un parrafo breve, y despues una tabla markdown compacta con: Alineacion general, Fit objetivo, Fit preferencial, Requisitos criticos cumplidos, Bloqueadores, Alertas relevantes, Potencial de mejora del fit, Recomendacion.
+Luego debes incluir tablas markdown legibles para ambas matrices. No escribas texto fuera de esas secciones.
+Persona: {person_context}.
+Vacante: {opportunity_context}.
+Entrada vacancy_alignment_summary.v1: {alignment_summary_json}.
+Entrada vacancy_evidence_analysis.v1: {evidence_analysis_json}`
 };
 const PROMPT_SOURCE_FLOW_KEYS = new Set([
   "search_jobs_tavily",
@@ -528,6 +606,35 @@ function getOpportunityOriginChipClass(sourceType: string): string {
     return "metaChip metaChipOrigin metaChipOriginSearch";
   }
   return "metaChip metaChipOrigin metaChipOriginManual";
+}
+
+function getOpportunityDisplayTitle(
+  opportunity: Pick<Opportunity, "title" | "source_label" | "company" | "source_url">
+): string {
+  const title = opportunity.title.trim();
+  if (title) {
+    return title;
+  }
+  const sourceLabel = opportunity.source_label.trim();
+  if (sourceLabel) {
+    return `Vacante compartida por ${sourceLabel}`;
+  }
+  const company = opportunity.company.trim();
+  if (company) {
+    return `Vacante en ${company}`;
+  }
+  const normalizedUrl = toExternalUrl(opportunity.source_url);
+  if (normalizedUrl) {
+    try {
+      const hostname = new URL(normalizedUrl).hostname.replace(/^www\./i, "");
+      if (hostname) {
+        return `Vacante en ${hostname}`;
+      }
+    } catch {
+      // If URL parsing fails, fall through to the generic fallback title.
+    }
+  }
+  return "Vacante sin titulo";
 }
 
 type VacancySalaryRange = {
@@ -802,6 +909,23 @@ function getVacancyV2StatusClassName(status: string): string {
     return "vacancyV2StatusChip vacancyV2StatusChipError";
   }
   return "vacancyV2StatusChip vacancyV2StatusChipNone";
+}
+
+function getVacancyAlignmentReportStageLabel(stage: string): string {
+  const normalized = stage.trim().toLowerCase();
+  if (!normalized) {
+    return "";
+  }
+  if (normalized === "vacancy_alignment_report_recompute_started") {
+    return "SSE activo: iniciando recomputo";
+  }
+  if (normalized === "vacancy_alignment_report_extracting") {
+    return "SSE activo: generando reporte";
+  }
+  if (normalized === "vacancy_alignment_report_saved") {
+    return "SSE activo: guardando resultado";
+  }
+  return `SSE activo: ${stage}`;
 }
 
 function getVacancyV2GateChipClassName(gatePassed: boolean): string {
@@ -1587,8 +1711,15 @@ export default function App() {
   const [manualUrlTitle, setManualUrlTitle] = useState("");
   const [manualUrlCompany, setManualUrlCompany] = useState("");
   const [manualUrlLocation, setManualUrlLocation] = useState("");
+  const [manualUrlSourceLabel, setManualUrlSourceLabel] = useState("");
   const [manualUrlRawText, setManualUrlRawText] = useState("");
   const [isImportingUrl, setIsImportingUrl] = useState(false);
+  const [manualTextTitle, setManualTextTitle] = useState("");
+  const [manualTextCompany, setManualTextCompany] = useState("");
+  const [manualTextLocation, setManualTextLocation] = useState("");
+  const [manualTextSourceLabel, setManualTextSourceLabel] = useState("");
+  const [manualTextRawText, setManualTextRawText] = useState("");
+  const [isImportingText, setIsImportingText] = useState(false);
   const [savedOpportunities, setSavedOpportunities] = useState<Opportunity[]>([]);
   const [vacancyV2GateReport, setVacancyV2GateReport] = useState<VacancyV2ConsistencyReport | null>(null);
   const [isLoadingVacancyV2Gate, setIsLoadingVacancyV2Gate] = useState(false);
@@ -1613,6 +1744,8 @@ export default function App() {
   const [recomputingVacancyEvidenceAnalysisId, setRecomputingVacancyEvidenceAnalysisId] =
     useState<string | null>(null);
   const [recomputingVacancyAlignmentSummaryId, setRecomputingVacancyAlignmentSummaryId] =
+    useState<string | null>(null);
+  const [recomputingVacancyAlignmentReportId, setRecomputingVacancyAlignmentReportId] =
     useState<string | null>(null);
   const [updatingVacancyV2StatusKey, setUpdatingVacancyV2StatusKey] = useState<string | null>(null);
   const [opportunityProfileDrafts, setOpportunityProfileDrafts] = useState<
@@ -1655,6 +1788,12 @@ export default function App() {
   const [isLoadingAiRuns, setIsLoadingAiRuns] = useState(false);
   const [requestTraces, setRequestTraces] = useState<RequestTrace[]>([]);
   const [isLoadingRequestTraces, setIsLoadingRequestTraces] = useState(false);
+  const [vacancyAlignmentReportTracesByOpportunityId, setVacancyAlignmentReportTracesByOpportunityId] =
+    useState<Record<string, RequestTrace[]>>({});
+  const [loadingVacancyAlignmentReportTracesId, setLoadingVacancyAlignmentReportTracesId] =
+    useState<string | null>(null);
+  const [vacancyAlignmentReportStageByOpportunityId, setVacancyAlignmentReportStageByOpportunityId] =
+    useState<Record<string, string>>({});
   const [focusedRunId, setFocusedRunId] = useState("");
   const [isAnalyzingProfile, setIsAnalyzingProfile] = useState(false);
   const [isAnalyzingCultural, setIsAnalyzingCultural] = useState(false);
@@ -3523,6 +3662,82 @@ export default function App() {
     }
   }
 
+  async function handleRecomputeVacancyAlignmentReport(item: Opportunity) {
+    if (!selectedPersonId || recomputingVacancyAlignmentReportId) {
+      return;
+    }
+    setRecomputingVacancyAlignmentReportId(item.opportunity_id);
+    setVacancyAlignmentReportStageByOpportunityId((current) => ({
+      ...current,
+      [item.opportunity_id]: "vacancy_alignment_report_recompute_started"
+    }));
+    setErrorMessage(null);
+    try {
+      await recomputeOpportunityVacancyAlignmentReportStream(
+        selectedPersonId,
+        item.opportunity_id,
+        (stage) => {
+          setVacancyAlignmentReportStageByOpportunityId((current) => ({
+            ...current,
+            [item.opportunity_id]: stage
+          }));
+        }
+      );
+      const items = await listOpportunities(selectedPersonId);
+      setSavedOpportunities(items);
+      if (vacancyAlignmentReportTracesByOpportunityId[item.opportunity_id]) {
+        await handleLoadVacancyAlignmentReportTraces(item.opportunity_id);
+      }
+      if (selectedOpportunityId === item.opportunity_id) {
+        const refreshed = items.find((entry) => entry.opportunity_id === item.opportunity_id);
+        if (refreshed) {
+          setOpportunityStatus(refreshed.status);
+          setOpportunityNotes(refreshed.notes);
+        }
+      }
+      setToastMessage("Vacancy Alignment Report recalculado");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "No se pudo recalcular Vacancy Alignment Report";
+      setErrorMessage(message);
+    } finally {
+      setVacancyAlignmentReportStageByOpportunityId((current) => {
+        const next = { ...current };
+        delete next[item.opportunity_id];
+        return next;
+      });
+      setRecomputingVacancyAlignmentReportId(null);
+    }
+  }
+
+  async function handleLoadVacancyAlignmentReportTraces(opportunityId: string) {
+    if (!selectedPersonId || loadingVacancyAlignmentReportTracesId) {
+      return;
+    }
+    setLoadingVacancyAlignmentReportTracesId(opportunityId);
+    setErrorMessage(null);
+    try {
+      const items = await listRequestTraces(selectedPersonId, {
+        opportunityId,
+        destination: "openai",
+        flowKey: "task_vacancy_alignment_report",
+        limit: 20
+      });
+      setVacancyAlignmentReportTracesByOpportunityId((current) => ({
+        ...current,
+        [opportunityId]: items
+      }));
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudieron cargar las trazas de S8";
+      setErrorMessage(message);
+    } finally {
+      setLoadingVacancyAlignmentReportTracesId(null);
+    }
+  }
+
   async function handleRunVacancyV2Gate() {
     if (!selectedPersonId || isLoadingVacancyV2Gate) {
       return;
@@ -3576,7 +3791,8 @@ export default function App() {
       | "vacancy_retrieval_queries"
       | "vacancy_retrieval_evidence"
       | "vacancy_evidence_analysis"
-      | "vacancy_alignment_summary",
+      | "vacancy_alignment_summary"
+      | "vacancy_alignment_report",
     status: "none" | "draft" | "approved" | "error"
   ) {
     if (!selectedPersonId || updatingVacancyV2StatusKey) {
@@ -3614,9 +3830,13 @@ export default function App() {
         await updateOpportunity(selectedPersonId, item.opportunity_id, {
           vacancy_evidence_analysis_status: status,
         });
-      } else {
+      } else if (artifact === "vacancy_alignment_summary") {
         await updateOpportunity(selectedPersonId, item.opportunity_id, {
           vacancy_alignment_summary_status: status,
+        });
+      } else {
+        await updateOpportunity(selectedPersonId, item.opportunity_id, {
+          vacancy_alignment_report_status: status,
         });
       }
       const items = await listOpportunities(selectedPersonId);
@@ -3748,18 +3968,28 @@ export default function App() {
     try {
       const payload = await importOpportunityByUrl(selectedPersonId, {
         source_url: sourceUrl,
+        source_label: manualUrlSourceLabel.trim(),
         title: manualUrlTitle.trim(),
         company: manualUrlCompany.trim(),
         location: manualUrlLocation.trim(),
         raw_text: rawText
       });
       const items = await listOpportunities(selectedPersonId);
+      const opportunityLabel = getOpportunityDisplayTitle(payload.item);
       setSavedOpportunities(items);
-      setSelectedOpportunityId(payload.item.opportunity_id);
+      window.setTimeout(() => {
+        focusSavedOpportunityCard(payload.item.opportunity_id);
+      }, 0);
+      setToastMessage(
+        payload.created
+          ? `Oportunidad cargada: ${opportunityLabel}`
+          : `La URL ya existia. Se selecciono la oportunidad guardada: ${opportunityLabel}`
+      );
       setManualUrl("");
       setManualUrlTitle("");
       setManualUrlCompany("");
       setManualUrlLocation("");
+      setManualUrlSourceLabel("");
       setManualUrlRawText("");
     } catch (error) {
       const message =
@@ -3767,6 +3997,52 @@ export default function App() {
       setErrorMessage(message);
     } finally {
       setIsImportingUrl(false);
+    }
+  }
+
+  async function handleImportByText(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const title = manualTextTitle.trim();
+    const rawText = manualTextRawText.trim();
+    if (!selectedPersonId || isImportingText) {
+      return;
+    }
+    if (!title) {
+      setErrorMessage("El titulo es obligatorio para la carga desde WhatsApp/texto.");
+      return;
+    }
+    if (rawText.length < 8) {
+      setErrorMessage("La descripcion de WhatsApp/texto es obligatoria (minimo 8 caracteres).");
+      return;
+    }
+    setIsImportingText(true);
+    setErrorMessage(null);
+    try {
+      const item = await importOpportunityByText(selectedPersonId, {
+        title,
+        company: manualTextCompany.trim(),
+        location: manualTextLocation.trim(),
+        source_label: manualTextSourceLabel.trim(),
+        raw_text: rawText
+      });
+      const items = await listOpportunities(selectedPersonId);
+      const opportunityLabel = getOpportunityDisplayTitle(item);
+      setSavedOpportunities(items);
+      window.setTimeout(() => {
+        focusSavedOpportunityCard(item.opportunity_id);
+      }, 0);
+      setToastMessage(`Oportunidad creada desde WhatsApp/texto: ${opportunityLabel}`);
+      setManualTextTitle("");
+      setManualTextCompany("");
+      setManualTextLocation("");
+      setManualTextSourceLabel("");
+      setManualTextRawText("");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo importar desde WhatsApp/texto";
+      setErrorMessage(message);
+    } finally {
+      setIsImportingText(false);
     }
   }
 
@@ -6095,57 +6371,116 @@ export default function App() {
             ) : null}
           </>
         ) : (
-          <form className="manualCard opportunityManualPanel" onSubmit={handleImportByUrl}>
-            <p className="chatRole">Carga manual de oportunidades</p>
-            <input
-              disabled={!selectedPersonId || isImportingUrl}
-              onChange={(event) => setManualUrl(event.target.value)}
-              placeholder="https://sitio.com/vacante"
-              value={manualUrl}
-            />
-            <input
-              disabled={!selectedPersonId || isImportingUrl}
-              onChange={(event) => setManualUrlTitle(event.target.value)}
-              placeholder="Titulo (opcional)"
-              value={manualUrlTitle}
-            />
-            <div className="manualRow">
+          <>
+            <form className="manualCard opportunityManualPanel" onSubmit={handleImportByUrl}>
+              <p className="chatRole">Carga por URL</p>
               <input
                 disabled={!selectedPersonId || isImportingUrl}
-                onChange={(event) => setManualUrlCompany(event.target.value)}
-                placeholder="Empresa (opcional)"
-                value={manualUrlCompany}
+                onChange={(event) => setManualUrl(event.target.value)}
+                placeholder="https://sitio.com/vacante"
+                value={manualUrl}
               />
               <input
                 disabled={!selectedPersonId || isImportingUrl}
-                onChange={(event) => setManualUrlLocation(event.target.value)}
-                placeholder="Ubicacion (opcional)"
-                value={manualUrlLocation}
+                onChange={(event) => setManualUrlSourceLabel(event.target.value)}
+                placeholder="Fuente / headhunter (opcional)"
+                value={manualUrlSourceLabel}
               />
-            </div>
-            <textarea
-              disabled={!selectedPersonId || isImportingUrl}
-              onChange={(event) => setManualUrlRawText(event.target.value)}
-              placeholder="Descripcion o snapshot textual (obligatorio)"
-              rows={3}
-              value={manualUrlRawText}
-            />
-            <p className="metaText">
-              Requerido: describe la vacante (minimo 8 caracteres).
-            </p>
-            <button
-              className="primaryButton"
-              disabled={
-                !selectedPersonId ||
-                isImportingUrl ||
-                !manualUrl.trim() ||
-                manualUrlRawText.trim().length < 8
-              }
-              type="submit"
-            >
-              {isImportingUrl ? "Importando..." : "Cargar"}
-            </button>
-          </form>
+              <input
+                disabled={!selectedPersonId || isImportingUrl}
+                onChange={(event) => setManualUrlTitle(event.target.value)}
+                placeholder="Titulo (opcional)"
+                value={manualUrlTitle}
+              />
+              <div className="manualRow">
+                <input
+                  disabled={!selectedPersonId || isImportingUrl}
+                  onChange={(event) => setManualUrlCompany(event.target.value)}
+                  placeholder="Empresa (opcional)"
+                  value={manualUrlCompany}
+                />
+                <input
+                  disabled={!selectedPersonId || isImportingUrl}
+                  onChange={(event) => setManualUrlLocation(event.target.value)}
+                  placeholder="Ubicacion (opcional)"
+                  value={manualUrlLocation}
+                />
+              </div>
+              <textarea
+                disabled={!selectedPersonId || isImportingUrl}
+                onChange={(event) => setManualUrlRawText(event.target.value)}
+                placeholder="Descripcion o snapshot textual (obligatorio)"
+                rows={3}
+                value={manualUrlRawText}
+              />
+              <p className="metaText">
+                Si la URL ya existe, se reutiliza la oportunidad guardada.
+              </p>
+              <button
+                className="primaryButton"
+                disabled={
+                  !selectedPersonId ||
+                  isImportingUrl ||
+                  !manualUrl.trim() ||
+                  manualUrlRawText.trim().length < 8
+                }
+                type="submit"
+              >
+                {isImportingUrl ? "Importando..." : "Cargar URL"}
+              </button>
+            </form>
+            <form className="manualCard opportunityManualPanel" onSubmit={handleImportByText}>
+              <p className="chatRole">Carga desde WhatsApp / texto</p>
+              <input
+                disabled={!selectedPersonId || isImportingText}
+                onChange={(event) => setManualTextSourceLabel(event.target.value)}
+                placeholder="Fuente / headhunter (opcional)"
+                value={manualTextSourceLabel}
+              />
+              <input
+                disabled={!selectedPersonId || isImportingText}
+                onChange={(event) => setManualTextTitle(event.target.value)}
+                placeholder="Titulo (obligatorio)"
+                value={manualTextTitle}
+              />
+              <div className="manualRow">
+                <input
+                  disabled={!selectedPersonId || isImportingText}
+                  onChange={(event) => setManualTextCompany(event.target.value)}
+                  placeholder="Empresa (opcional)"
+                  value={manualTextCompany}
+                />
+                <input
+                  disabled={!selectedPersonId || isImportingText}
+                  onChange={(event) => setManualTextLocation(event.target.value)}
+                  placeholder="Ubicacion (opcional)"
+                  value={manualTextLocation}
+                />
+              </div>
+              <textarea
+                disabled={!selectedPersonId || isImportingText}
+                onChange={(event) => setManualTextRawText(event.target.value)}
+                placeholder="Pega aqui la descripcion recibida por WhatsApp o texto"
+                rows={4}
+                value={manualTextRawText}
+              />
+              <p className="metaText">
+                Este flujo siempre crea una oportunidad nueva y no usa URL para deduplicar.
+              </p>
+              <button
+                className="primaryButton"
+                disabled={
+                  !selectedPersonId ||
+                  isImportingText ||
+                  !manualTextTitle.trim() ||
+                  manualTextRawText.trim().length < 8
+                }
+                type="submit"
+              >
+                {isImportingText ? "Importando..." : "Cargar WhatsApp/texto"}
+              </button>
+            </form>
+          </>
         )}
         <h3 className="subheading savedOpportunitiesHeading">Oportunidades guardadas</h3>
         <article className="vacancyV2GatePanel">
@@ -6334,6 +6669,8 @@ export default function App() {
                 Object.keys(item.vacancy_evidence_analysis_artifact ?? {}).length > 0;
               const hasVacancyAlignmentSummaryArtifact =
                 Object.keys(item.vacancy_alignment_summary_artifact ?? {}).length > 0;
+              const hasVacancyAlignmentReportArtifact =
+                Object.keys(item.vacancy_alignment_report_artifact ?? {}).length > 0;
               const vacancyBlocksStatusLabel = getVacancyV2StatusLabel(item.vacancy_blocks_status);
               const vacancyDimensionsStatusLabel = getVacancyV2StatusLabel(
                 item.vacancy_dimensions_status
@@ -6353,6 +6690,9 @@ export default function App() {
               );
               const vacancyAlignmentSummaryStatusLabel = getVacancyV2StatusLabel(
                 item.vacancy_alignment_summary_status
+              );
+              const vacancyAlignmentReportStatusLabel = getVacancyV2StatusLabel(
+                item.vacancy_alignment_report_status
               );
               const vacancyBlocksGeneratedAt = item.vacancy_blocks_generated_at
                 ? formatAiRunTimestamp(item.vacancy_blocks_generated_at)
@@ -6378,6 +6718,9 @@ export default function App() {
               const vacancyAlignmentSummaryGeneratedAt = item.vacancy_alignment_summary_generated_at
                 ? formatAiRunTimestamp(item.vacancy_alignment_summary_generated_at)
                 : "Sin generar";
+              const vacancyAlignmentReportGeneratedAt = item.vacancy_alignment_report_generated_at
+                ? formatAiRunTimestamp(item.vacancy_alignment_report_generated_at)
+                : "Sin generar";
               const isUpdatingVacancyBlocksStatus =
                 updatingVacancyV2StatusKey === `vacancy_blocks:${item.opportunity_id}`;
               const isUpdatingVacancyDimensionsStatus =
@@ -6394,6 +6737,16 @@ export default function App() {
                 updatingVacancyV2StatusKey === `vacancy_evidence_analysis:${item.opportunity_id}`;
               const isUpdatingVacancyAlignmentSummaryStatus =
                 updatingVacancyV2StatusKey === `vacancy_alignment_summary:${item.opportunity_id}`;
+              const isUpdatingVacancyAlignmentReportStatus =
+                updatingVacancyV2StatusKey === `vacancy_alignment_report:${item.opportunity_id}`;
+              const vacancyAlignmentReportTraces =
+                vacancyAlignmentReportTracesByOpportunityId[item.opportunity_id] ?? [];
+              const isLoadingVacancyAlignmentReportTraces =
+                loadingVacancyAlignmentReportTracesId === item.opportunity_id;
+              const vacancyAlignmentReportStage =
+                vacancyAlignmentReportStageByOpportunityId[item.opportunity_id] ?? "";
+              const vacancyAlignmentReportStageLabel =
+                getVacancyAlignmentReportStageLabel(vacancyAlignmentReportStage);
               const isSelectedSavedOpportunity = selectedOpportunityId === item.opportunity_id;
               return (
                 <article
@@ -6407,10 +6760,15 @@ export default function App() {
                   tabIndex={-1}
                 >
                   <p className="chatRole savedOpportunityStatus">{item.status.toUpperCase()}</p>
-                  <p className="chatContent savedOpportunityTitle">{item.title}</p>
+                  <p className="chatContent savedOpportunityTitle">
+                    {getOpportunityDisplayTitle(item)}
+                  </p>
                   <div className="metaChips">
                     <span className="metaChip">{item.company || "Empresa no identificada"}</span>
                     <span className="metaChip">{item.location || "Ubicacion no especificada"}</span>
+                    {item.source_label ? (
+                      <span className="metaChip">{item.source_label}</span>
+                    ) : null}
                     <span className={getOpportunityOriginChipClass(item.source_type)}>
                       {getOpportunityOriginLabel(item.source_type)}
                     </span>
@@ -6418,6 +6776,57 @@ export default function App() {
                   {descriptionPreview.previewText ? (
                     <p className="savedOpportunitySnippet">{descriptionPreview.previewText}</p>
                   ) : null}
+                  <div className="savedOpportunityLinkRow">
+                    <div className="savedOpportunityLinkExpandSlot">
+                      {descriptionPreview.hasOverflow ? (
+                        <button
+                          aria-label={isExpanded ? "Contraer descripcion" : "Expandir descripcion"}
+                          className="iconOnlyButton"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setExpandedSavedOpportunityPreview((current) => ({
+                              ...current,
+                              [item.opportunity_id]: !isExpanded
+                            }));
+                          }}
+                          title={isExpanded ? "Contraer" : "Ver mas"}
+                          type="button"
+                        >
+                          <ExpandCollapseIcon expanded={isExpanded} />
+                        </button>
+                      ) : null}
+                    </div>
+                    <div className="savedOpportunityLinkActions">
+                      {opportunityUrl ? (
+                        <a
+                          className="savedOpportunityLinkButton"
+                          href={opportunityUrl}
+                          onClick={(event) => event.stopPropagation()}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          <span>Ver vacante</span>
+                          <span aria-hidden="true">↗</span>
+                        </a>
+                      ) : (
+                        <span className="savedOpportunityLinkUnavailable">URL no disponible</span>
+                      )}
+                      {opportunityUrl ? (
+                        <button
+                          aria-label="Copiar URL de la vacante"
+                          className="iconOnlyButton savedOpportunityCopyButton"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleCopyOpportunityUrl(item.opportunity_id, item.source_url);
+                          }}
+                          title={copiedOpportunityUrlId === item.opportunity_id ? "Copiada" : "Copiar URL"}
+                          type="button"
+                        >
+                          {copiedOpportunityUrlId === item.opportunity_id ? "✓" : "⧉"}
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
                   <article className="vacancyProfileCard">
                     <div className="vacancyProfileHeader">
                       <p className="chatRole vacancyProfileTitle">Resumen estructurado de la vacante</p>
@@ -7347,58 +7756,163 @@ export default function App() {
                         </p>
                       )}
                     </section>
-                  </article>
-                  <div className="savedOpportunityLinkRow">
-                    <div className="savedOpportunityLinkExpandSlot">
-                      {descriptionPreview.hasOverflow ? (
+
+                    <section className="vacancyV2Section">
+                      <div className="vacancyV2SectionHeader">
+                        <div>
+                          <p className="metaText vacancyV2SectionTitle">
+                            S8 · Vacancy Alignment Report
+                          </p>
+                          <p className="metaText">Generado: {vacancyAlignmentReportGeneratedAt}</p>
+                          {recomputingVacancyAlignmentReportId === item.opportunity_id
+                          && vacancyAlignmentReportStageLabel ? (
+                            <p className="metaText">
+                              {vacancyAlignmentReportStageLabel}
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className="metaChips vacancyV2HeaderChips">
+                          <span
+                            className={`metaChip ${getVacancyV2StatusClassName(item.vacancy_alignment_report_status)}`}
+                          >
+                            {vacancyAlignmentReportStatusLabel}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="cardActions">
                         <button
-                          aria-label={isExpanded ? "Contraer descripcion" : "Expandir descripcion"}
-                          className="iconOnlyButton"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setExpandedSavedOpportunityPreview((current) => ({
-                              ...current,
-                              [item.opportunity_id]: !isExpanded
-                            }));
-                          }}
-                          title={isExpanded ? "Contraer" : "Ver mas"}
+                          className="vacancyProfileQuickActionButton"
+                          disabled={
+                            !hasVacancyAlignmentSummaryArtifact
+                            || !hasVacancyEvidenceAnalysisArtifact
+                            || recomputingVacancyAlignmentReportId === item.opportunity_id
+                          }
+                          onClick={() => void handleRecomputeVacancyAlignmentReport(item)}
                           type="button"
                         >
-                          <ExpandCollapseIcon expanded={isExpanded} />
+                          {recomputingVacancyAlignmentReportId === item.opportunity_id
+                            ? vacancyAlignmentReportStageLabel || "SSE activo..."
+                            : "Recalcular S8"}
                         </button>
-                      ) : null}
-                    </div>
-                    <div className="savedOpportunityLinkActions">
-                      {opportunityUrl ? (
-                        <a
-                          className="savedOpportunityLinkButton"
-                          href={opportunityUrl}
-                          onClick={(event) => event.stopPropagation()}
-                          rel="noreferrer"
-                          target="_blank"
+                        <button
+                          className="vacancyProfileQuickActionButton"
+                          disabled={!selectedPersonId || isLoadingVacancyAlignmentReportTraces}
+                          onClick={() => void handleLoadVacancyAlignmentReportTraces(item.opportunity_id)}
+                          type="button"
                         >
-                          <span>Ver vacante</span>
-                          <span aria-hidden="true">↗</span>
-                        </a>
+                          {isLoadingVacancyAlignmentReportTraces
+                            ? "Cargando trazas..."
+                            : vacancyAlignmentReportTraces.length > 0
+                              ? "Recargar trazas S8"
+                              : "Ver trazas S8"}
+                        </button>
+                        {hasVacancyAlignmentReportArtifact ? (
+                          <button
+                            className="vacancyProfileQuickActionButton"
+                            disabled={isUpdatingVacancyAlignmentReportStatus}
+                            onClick={() =>
+                              void handleSetVacancyV2Status(
+                                item,
+                                "vacancy_alignment_report",
+                                item.vacancy_alignment_report_status === "approved"
+                                  ? "draft"
+                                  : "approved"
+                              )}
+                            type="button"
+                          >
+                            {isUpdatingVacancyAlignmentReportStatus
+                              ? "Actualizando..."
+                              : item.vacancy_alignment_report_status === "approved"
+                                ? "Marcar borrador"
+                                : "Aprobar S8"}
+                          </button>
+                        ) : null}
+                      </div>
+                      {hasVacancyAlignmentReportArtifact ? (
+                        <>
+                          {typeof item.vacancy_alignment_report_artifact?.rendered_markdown === "string"
+                          && item.vacancy_alignment_report_artifact.rendered_markdown.trim() ? (
+                            <div className="field">
+                              <span>Vista Markdown S8</span>
+                              <div className="analysisMarkdownCard">
+                                <MarkdownContent
+                                  className="analysisMarkdown"
+                                  content={item.vacancy_alignment_report_artifact.rendered_markdown}
+                                />
+                              </div>
+                            </div>
+                          ) : null}
+                          <details className="payloadDetails">
+                            <summary>Ver JSON S8</summary>
+                            <label className="field">
+                              <span>JSON S8</span>
+                              <textarea
+                                className="vacancyV2JsonTextarea"
+                                readOnly
+                                rows={14}
+                                value={safePrettyJson(item.vacancy_alignment_report_artifact)}
+                              />
+                            </label>
+                          </details>
+                        </>
                       ) : (
-                        <span className="savedOpportunityLinkUnavailable">URL no disponible</span>
+                        <p className="metaText">
+                          Sin artefacto S8. Requiere S7 y S6 validos para generar el reporte final grounded.
+                        </p>
                       )}
-                      {opportunityUrl ? (
-                        <button
-                          aria-label="Copiar URL de la vacante"
-                          className="iconOnlyButton savedOpportunityCopyButton"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void handleCopyOpportunityUrl(item.opportunity_id, item.source_url);
-                          }}
-                          title={copiedOpportunityUrlId === item.opportunity_id ? "Copiada" : "Copiar URL"}
-                          type="button"
-                        >
-                          {copiedOpportunityUrlId === item.opportunity_id ? "✓" : "⧉"}
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
+                      <div className="field">
+                        <span>Trazas S8</span>
+                        {aiRuntimeTraceTruncationEnabled ? (
+                          <p className="metaText">
+                            La configuracion actual puede truncar payloads. Desactiva el truncamiento
+                            en Runtime IA si quieres inspeccionar prompts completos.
+                          </p>
+                        ) : (
+                          <p className="metaText">
+                            Trazas sin truncamiento activo. Aqui deberias ver el system prompt y
+                            user prompt completos de S8.
+                          </p>
+                        )}
+                        {vacancyAlignmentReportTraces.length === 0 ? (
+                          <p className="metaText">
+                            No hay trazas cargadas de S8 para esta oportunidad.
+                          </p>
+                        ) : (
+                          <div className="chatList">
+                            {vacancyAlignmentReportTraces.map((trace) => (
+                              <article className="chatBubble chatBubbleAssistant" key={trace.trace_id}>
+                                <p className="chatRole">
+                                  {trace.destination.toUpperCase()} · {trace.flow_key}
+                                </p>
+                                <p className="metaText">
+                                  trace_id: {trace.trace_id} · run_id: {trace.run_id || "N/A"} · fecha:{" "}
+                                  {formatRequestTraceTimestamp(trace.created_at)}
+                                </p>
+                                {(trace.tool_name || trace.stage || trace.status) && (
+                                  <p className="metaText">
+                                    tool: {trace.tool_name || "n/a"} · etapa: {trace.stage || "n/a"} ·
+                                    estado: {getTraceStatusLabel(trace.status)}
+                                  </p>
+                                )}
+                                <details className="payloadDetails">
+                                  <summary>Ver request exacto S8</summary>
+                                  <pre className="payloadPre">
+                                    {JSON.stringify(trace.request_payload, null, 2)}
+                                  </pre>
+                                </details>
+                                <details className="payloadDetails">
+                                  <summary>Ver response exacto S8</summary>
+                                  <pre className="payloadPre">
+                                    {JSON.stringify(trace.response_payload ?? {}, null, 2)}
+                                  </pre>
+                                </details>
+                              </article>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </section>
+                  </article>
                 </article>
               );
             })}
@@ -7455,10 +7969,15 @@ export default function App() {
                         tabIndex={0}
                       >
                         <p className="chatRole savedOpportunityStatus">{item.status.toUpperCase()}</p>
-                        <p className="chatContent savedOpportunityTitle">{item.title}</p>
+                        <p className="chatContent savedOpportunityTitle">
+                          {getOpportunityDisplayTitle(item)}
+                        </p>
                         <div className="metaChips">
                           <span className="metaChip">{item.company || "Empresa no identificada"}</span>
                           <span className="metaChip">{item.location || "Ubicacion no especificada"}</span>
+                          {item.source_label ? (
+                            <span className="metaChip">{item.source_label}</span>
+                          ) : null}
                           <span className={getOpportunityOriginChipClass(item.source_type)}>
                             {getOpportunityOriginLabel(item.source_type)}
                           </span>
@@ -7544,7 +8063,7 @@ export default function App() {
                 <div className="analysisCenterHeader">
                   <h3>
                     Oportunidad activa:{" "}
-                    {selectedOpportunity ? selectedOpportunity.title : "sin seleccionar"}
+                    {selectedOpportunity ? getOpportunityDisplayTitle(selectedOpportunity) : "sin seleccionar"}
                   </h3>
                   {selectedOpportunity ? (
                     <p className="metaText analysisOpportunityMeta">

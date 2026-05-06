@@ -2,9 +2,9 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `S7 ya existe como resumen estructurado complementario de S6, con backend y UI experimental; siguiente frente natural es S8`
+- checkpoint_actual: `S8 ya usa composicion global de sistema, prompt reforzado en espanol, trazas filtrables por flow_key y señal visible de etapas SSE en la UI experimental; ademas se agrego hardening de autenticacion y un ajuste UX/contrato en oportunidades manuales para separar carga por URL vs WhatsApp-texto, mantener titulo obligatorio y registrar source_label opcional`
 - repo_status: `flujo V1 operativo con analisis, postulacion, chat, CV semantico, admin de prompts y extraccion estructurada de vacantes en forma legacy estable; propuesta v2 desacoplada en branch experimental`
-- ultima_actualizacion: `2026-04-24`
+- ultima_actualizacion: `2026-05-06`
 
 ## Progreso Por Fase
 - `Fase 0`: completada
@@ -16,6 +16,7 @@
 
 ## Estado Vigente
 - backend y frontend compilan en estado de trabajo actual
+- UX de `Oportunidades > Carga manual` ajustada: la UI ahora separa `Carga por URL` de `Carga desde WhatsApp / texto`, informa si una URL ya existia, enfoca la card resultante y permite registrar `source_label` opcional sin derivarlo del dominio
 - extraccion de vacantes restaurada a la version estable inicial de V1.1
 - prompt recomendado de extraccion restaurado al contrato legacy estable
 - UI de `Vacantes > Editar estructura > JSON avanzado` alineada otra vez con el esquema legacy persistido
@@ -54,7 +55,7 @@
 - pruebas dedicadas del consistency gate en verde: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_v2_consistency_gate` (`2 tests`)
 - prueba de no-regresion de endpoints v2 existente en verde: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_v2_endpoints` (`6 tests`)
 - consumo del consistency gate documentado paso a paso en `README.md` y `guia_uso.md` (login, obtencion de `person_id`, invocacion endpoint e interpretacion de metricas)
-- micro-hardening aplicado en Step 3: si `vacancy_blocks.work_conditions` contiene senal salarial, `vacancy_dimensions.work_conditions.salary.text` no puede quedar vacio (regla reforzada en `system_prompt`, fallback y template default)
+- micro-hardening aplicado en Step 3: si `vacancy_blocks.work_conditions` contiene senal salarial, `vacancy_dimensions.work_conditions` debe conservar esa senal como item `{raw_text}` para que `S3.1` pueda normalizarla despues
 - validacion tecnica del micro-hardening Step 3: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_dimensions_service tests.test_vacancy_v2_consistency_gate tests.test_vacancy_v2_endpoints` en verde (`14 tests`)
 - consistency gate extendido: respuesta ahora incluye `gate_passed`, `failed_checks` y `thresholds`
 - endpoint de consistency gate ahora soporta umbrales por query: `min_salary_transfer_rate`, `max_salary_signal_in_step2_benefits_rate`, `min_salary_transfer_eligible`
@@ -80,16 +81,36 @@
 - resumen gate global actual: `p-3fa73182` FAIL (`salary_transfer_rate=0.3333`), `p-002` FAIL (`salary_transfer_rate=0.1667`, `salary_signal_in_step2_benefits_rate=0.25`), `p-001` FAIL (`insufficient_salary_transfer_eligible`), `p-47aaa3e6` FAIL (`insufficient_salary_transfer_eligible`)
 - decision operativa vigente: no abrir ahora slice de hardening salary; mantener seguimiento de calidad por gate y continuar con otros frentes no bloqueados
 - backlog de diseno documentado localmente: propuesta pendiente para alinear naming de Paso 2 con Paso 3 sin renombrar la raiz `vacancy_blocks`, incorporando `about_the_company` en S2 y revisando la simplificacion de contrato/comportamiento de Paso 3
-- shape objetivo documentado para Paso 2 siguiente: `vacancy_blocks.v2` con `required_criteria`, `desirable_criteria`, `about_the_company`, `warnings` y `coverage_notes`
+- shape vigente de Paso 2: `vacancy_blocks.v2` con `about_the_company`, `work_conditions`, `responsibilities`, `required_requirements`, `desirable_requirements`, `benefits`, `unclassified`, `warnings` y `coverage_notes`
+- ajuste de contrato aplicado en `S2`: `vacancy_blocks` migra a `vacancy_blocks.v2` con metadata `flow.flow_key`, `flow.contract_version`, `flow.prompt_version`, `vacancy_id` y `generated_at`
+- decision tecnica aplicada: `flow.flow_key`, `flow.contract_version`, `flow.prompt_version`, `vacancy_id` y `generated_at` son inyectados/corregidos por backend; el prompt de `task_vacancy_blocks_extract` no debe generarlos
+- decision tecnica aplicada: `flow.prompt_version` usa el `updated_at` efectivo de Prompt Admin para `task_vacancy_blocks_extract`
+- `S2` agrega `about_the_company` dentro de `vacancy_blocks` y conserva `work_conditions`, `responsibilities`, `required_requirements`, `desirable_requirements`, `benefits` y `unclassified`
+- `S3` queda ajustado para consumir `vacancy_blocks.v2` como input de `vacancy_dimensions.v2`
+- `S3` ahora preserva `warnings` y `coverage_notes` desde `S2` como metadata raiz, permite agregar notas propias de transformacion, deduplica por texto normalizado y mantiene ambas llaves presentes aunque esten vacias
+- `vacancy_dimensions.v2` incorpora `unclassified` como lista normalizada dentro de `vacancy_dimensions`; no se agregan `item_id`, `item_index`, `group_code` ni `semantic_queries` en `S3`
+- decision tecnica aplicada: `S3` deja de imponer el shape legacy de `work_conditions` (`salary`, `modality`, `location`, `contract_type`, `other_conditions`) y ahora conserva `work_conditions` como lista plana de objetos `{raw_text}` para mantener visibilidad sobre lo que realmente produjo el LLM
+- `S3.1` se adapta al nuevo contrato de `S3`: detecta senales de salario leyendo los `raw_text` de `vacancy_dimensions.work_conditions` sin modificar el artefacto `S3`
+- `S3.9` se mantiene como paso programatico separado: enriquece la lista plana de `work_conditions` con `item_id`, `item_index` y `group_code=cond`, sin reintroducir normalizacion semantica dentro de `S3`
+- decision tecnica aplicada: se elimina `other_conditions` del shape nuevo de `S3.9 -> S4 -> S5 -> S6`; `work_conditions` queda como lista plana en todos esos artefactos y la posible clasificacion semantica posterior de condiciones laborales queda registrada como deuda/backlog
+- decision tecnica aplicada: `S4` limita programaticamente retrieval semantico a `responsibilities`, `required_criteria` y `desirable_criteria`; `benefits`, `about_the_company` y `work_conditions` permanecen en el contrato pero se vacian por defecto antes de persistir
+- Prompt Admin/frontend expone `task_vacancy_blocks_extract` con boton `Restaurar recomendado` para el contrato `vacancy_blocks.v2`
+- Prompt Admin/frontend expone `task_vacancy_dimensions_extract` con boton `Restaurar recomendado` para el contrato `vacancy_dimensions.v2`
+- validacion tecnica del ajuste `S2 vacancy_blocks.v2`: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_blocks_contract tests.test_vacancy_blocks_service tests.test_vacancy_dimensions_service tests.test_vacancy_v2_consistency_gate tests.test_vacancy_v2_endpoints` en verde (`57 tests`), `tests.test_prompt_config_admin` en verde (`9 tests`) y `npm run build` en `apps/frontend` en verde
+- validacion tecnica del ajuste metadata `S2 -> S3`: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_dimensions_contract tests.test_vacancy_dimensions_service tests.test_vacancy_salary_service tests.test_vacancy_dimensions_enrichment_service tests.test_vacancy_v2_endpoints` en verde (`60 tests`) y `npm run build` en `apps/frontend` en verde
+- validacion tecnica del ajuste `S3 work_conditions` plano: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_dimensions_contract tests.test_vacancy_dimensions_service tests.test_vacancy_salary_service tests.test_vacancy_dimensions_enrichment_service tests.test_vacancy_dimensions_enriched_contract tests.test_vacancy_v2_consistency_gate tests.test_vacancy_v2_endpoints` en verde (`66 tests`), consumidores `S4-S8` y Prompt Admin en verde (`29 tests`) y `npm run build` en `apps/frontend` en verde
+- validacion tecnica del ajuste `work_conditions` plano en cadena `S3.9 -> S6`: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_dimensions_contract tests.test_vacancy_dimensions_enrichment_service tests.test_vacancy_dimensions_enriched_contract tests.test_vacancy_retrieval_queries_contract tests.test_vacancy_retrieval_queries_service tests.test_vacancy_retrieval_evidence_contract tests.test_vacancy_retrieval_evidence_service tests.test_vacancy_evidence_analysis_contract tests.test_vacancy_evidence_analysis_service tests.test_vacancy_alignment_summary_service tests.test_vacancy_alignment_report_service tests.test_vacancy_v2_endpoints` en verde (`75 tests`), Prompt Admin/consumidores en verde (`26 tests`) y `npm run build` en `apps/frontend` en verde
+- validacion tecnica del filtro `S4` de tipologias para busqueda semantica: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_retrieval_queries_contract tests.test_vacancy_retrieval_queries_service tests.test_vacancy_retrieval_evidence_contract tests.test_vacancy_retrieval_evidence_service tests.test_vacancy_evidence_analysis_contract tests.test_vacancy_evidence_analysis_service tests.test_vacancy_alignment_summary_service tests.test_vacancy_alignment_report_service tests.test_vacancy_v2_endpoints tests.test_prompt_config_admin` en verde (`72 tests`) y `npm run build` en `apps/frontend` en verde
+- ajuste UX aplicado en `Vacantes`: la fila de expansion/enlace de la vacante ahora aparece encima de `Resumen estructurado de la vacante` y del panel de steps `Vacancy V2`; validado con `npm run build` en `apps/frontend`
 - plan explicito documentado para siguiente iteracion: `S2` segmentacion contextual, `S3` atomizacion minima sin `id/category/resumen/semantic_queries`, `S3.1` normalizacion de salario, `S4` generacion de queries, `S5` retrieval de evidencia y `S6` analisis/presentacion
 - interfaces documentadas para `S4` (`vacancy_retrieval_queries.v1`) y `S5` (`vacancy_retrieval_evidence.v1`), con criterio operativo inicial para lectura de scores
 - correccion documental aplicada: en `S3` el salario queda solo como `raw_text`; `min/max/currency/period` pasan a ser responsabilidad exclusiva de `S3.1`
 - decision documental cerrada: `S3.9` se reserva como paso programatico de enriquecimiento deterministico para asignar `item_id`, `item_index` y `group_code` antes de `S4`
 - regla documental cerrada para `S3.9`: `item_id` usa `sha256` truncado a `10` hex sobre `vacancy_id|group_code|normalized_raw_text`; `item_index` queda separado; `group_code` inicial aprobado: `resp`, `req`, `des`, `ben`, `comp`, `cond`
 - slice backend ejecutado sobre `vacancy_dimensions`: contrato ejecutable migrado a `vacancy_dimensions.v2`, helper explicito para `S3.1` (`salary normalization`) y helper programatico para `S3.9` (`item_id`, `item_index`, `group_code`)
-- servicio `vacancy_dimensions` y prompt default actualizados al shape minimo nuevo (`required_criteria`, `desirable_criteria`, `about_the_company`, `salary.raw_text`, `other_conditions`)
+- servicio `vacancy_dimensions` y prompt default actualizados al shape minimo nuevo con listas de items `{raw_text}` (`work_conditions`, `required_criteria`, `desirable_criteria`, `about_the_company`, `benefits`, `unclassified`)
 - validacion tecnica del slice `S3 v2 + S3.1 + S3.9`: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_dimensions_contract tests.test_vacancy_dimensions_service tests.test_vacancy_v2_consistency_gate tests.test_vacancy_v2_endpoints` en verde (`26 tests`)
-- artefacto y servicio separados agregados para `S3.1`: `vacancy_salary_normalization.v1` con flow dedicado `task_vacancy_salary_normalize`, validacion de input sobre `vacancy_dimensions.v2.work_conditions.salary.raw_text` y salida normalizada `min/max/currency/period/raw_text`
+- artefacto y servicio separados agregados para `S3.1`: `vacancy_salary_normalization.v1` con flow dedicado `task_vacancy_salary_normalize`, validacion de input sobre senales salariales en `vacancy_dimensions.v2.work_conditions[].raw_text` y salida normalizada `min/max/currency/period/raw_text`
 - validacion tecnica del slice `S3.1` aislado: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_salary_contract tests.test_vacancy_salary_service tests.test_vacancy_dimensions_service` en verde (`15 tests`)
 - `S3.1` ya quedó cableado a oportunidad con persistencia propia y endpoint `POST /persons/{person_id}/opportunities/{opportunity_id}/vacancy-salary/recompute`
 - validacion tecnica del runtime `S3.1`: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_salary_contract tests.test_vacancy_salary_service tests.test_vacancy_v2_endpoints` en verde (`22 tests`)
@@ -108,7 +129,7 @@
 - prompt efectivo de `S4` ahora recibe `retrieval_queries_per_item` como placeholder obligatorio y lo inyecta tanto en template parametrizado como en fallback/system prompt del servicio
 - Prompt Admin ya incluye tambien plantilla recomendada para `task_vacancy_retrieval_queries_extract`, habilitando el boton `Restaurar recomendado` en UI
 - validacion tecnica del slice admin `S4`: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_ai_runtime_config_admin tests.test_vacancy_retrieval_queries_service tests.test_vacancy_v2_endpoints` en verde (`32 tests`) y `npm run build` en `apps/frontend` en verde
-- mejora futura documentada para `S4`: posible control administrable de tipologias de query solo en prompt, pero por decision vigente se observara primero el comportamiento real sin introducir mas control
+- mejora aplicada para `S4`: retrieval semantico queda enfocado por defecto en responsabilidades y criterios requeridos/deseables; queda como mejora futura parametrizar tipologias desde administracion si hace falta
 - `S5` iniciado en backend: contrato `vacancy_retrieval_evidence.v1`, servicio programatico sin LLM, persistencia propia y endpoints `recompute` / `recompute/stream`
 - `S5` reutiliza `query_cv_matches`, exige CV activo indexado y toma `top_k_semantic_per_criterion` desde Runtime IA
 - validacion tecnica del slice inicial `S5`: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_retrieval_evidence_contract tests.test_vacancy_retrieval_evidence_service tests.test_vacancy_v2_endpoints` en verde (`33 tests`)
@@ -125,6 +146,23 @@
 - `S7` complementa a `S6`: resume `responsibilities`, `required_criteria` y `desirable_criteria` en `overall`, `groups`, `strengths`, `gaps` y `review_items`
 - slice frontend nuevo: la UI experimental de `Vacancy V2` ahora expone `S7` (`Vacancy Alignment Summary`) con recompute, visualizacion de `status`/`generated_at`, inspeccion JSON read-only y cambio manual de estado `draft/approved`
 - validacion tecnica del slice `S7`: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_alignment_summary_contract tests.test_vacancy_alignment_summary_service tests.test_vacancy_v2_endpoints` en verde (`39 tests`) y `npm run build` en `apps/frontend` en verde
+- contrato de `S8` documentado: `vacancy_alignment_report.v1` como paso LLM-grounded que consume `person_context`, `opportunity_context`, `vacancy_alignment_summary.v1` y `vacancy_evidence_analysis.v1`
+- regla documental cerrada para `S8`: debe mirar `S6` para citar evidencia y producir salida dual `JSON + rendered_markdown`
+- `S8` implementado en backend: contrato `vacancy_alignment_report.v1`, servicio `LLM-first`, persistencia propia y endpoints `recompute` / `recompute/stream`
+- `S8` consume `S7` como mapa resumido y `S6` como respaldo detallado, ademas de `person_context` y `opportunity_context`
+- slice frontend nuevo: la UI experimental de `Vacancy V2` ahora expone `S8` (`Vacancy Alignment Report`) con recompute, visualizacion de `status`/`generated_at`, inspeccion JSON read-only, preview de `rendered_markdown` y cambio manual de estado `draft/approved`
+- Prompt Admin ya expone `task_vacancy_alignment_report` con plantilla recomendada restaurable para `S8`
+- validacion tecnica del slice `S8`: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_alignment_report_contract tests.test_vacancy_alignment_report_service tests.test_vacancy_v2_endpoints` en verde (`44 tests`) y `npm run build` en `apps/frontend` en verde
+- ajuste de calidad aplicado en `S8`: el servicio ahora compone `system_prompt` usando `guardrails_core + system_identity`, alineado con la composicion global definida para OpenAI
+- prompt recomendado de `S8` reforzado en espanol: ahora describe el uso de `person_context`, `opportunity_context`, `S7`, `S6`, la estructura exacta de tablas/objetos y las secciones obligatorias de `rendered_markdown`
+- ajuste puntual del prompt recomendado de `S8`: `executive_summary` ahora queda definido como un parrafo breve real que antecede y complementa la tabla inicial del resumen ejecutivo
+- trazas tecnicas mejoradas para `S8`: `request_traces` ahora soporta filtro por `flow_key` y la UI experimental de `Vacancy V2` puede cargar y mostrar request/response exactos de `task_vacancy_alignment_report`
+- validacion tecnica del ajuste de `S8` y trazas: `PERSISTENCE_BACKEND=memory .venv/bin/python -m unittest tests.test_vacancy_alignment_report_service tests.test_request_traces tests.test_vacancy_v2_endpoints` en verde (`49 tests`) y `npm run build` en `apps/frontend` en verde
+- observabilidad de `S8` refinada en frontend: mientras corre `recompute/stream`, la UI muestra etapa SSE amigable en espanol tanto en la cabecera como en el boton de accion
+- hardening operativo aplicado a autenticacion: `seed_operator()` ahora preserva el `password_hash` existente del tutor en `production + firestore` si el deploy arranca accidentalmente con el hash demo por defecto
+- proteccion adicional de autenticacion: si en `production + firestore` no existe operador y el backend intenta sembrarlo con el hash demo por defecto, el arranque falla explicitamente para evitar credenciales silenciosamente incorrectas
+- validacion tecnica del hardening de autenticacion en verde: `cd apps/backend && .venv/bin/python -m unittest tests.test_operator_store tests.test_auth_rate_limit`
+- backlog prioritario documentado para `S4`: parametrizar tipologias de retrieval desde administracion; el default programatico actual ya excluye `work_conditions`, `benefits` y `about_the_company`
 - validacion funcional nueva: el gate actual `Vacancy V2` mide solo consistencia parcial `S2 -> S3` (`vacancy_blocks` -> `vacancy_dimensions`) y no incorpora aun artefactos `S3.1` ni `S3.9`
 - slice frontend nuevo: la UI experimental de `Vacancy V2` ahora expone `S3.1` (`Vacancy Salary`) y `S3.9` (`Vacancy Dimensions Enriched`) con recompute, visualizacion de `status`/`generated_at`, inspeccion JSON read-only y cambio manual de estado `draft/approved`
 - validacion tecnica del slice frontend `S3.1 + S3.9`: `npm run build` en `apps/frontend` en verde
@@ -145,7 +183,7 @@
 - decision de rediseño registrada: los items de `vacancy_blocks` son `string`; `warnings` y `coverage_notes` son globales al artefacto, opcionales en semantica y persistidos como arrays presentes en el contrato canonico
 - decision de rediseño registrada: Paso 3 genera un artefacto atomizado separado; `vacancy_blocks` queda consultable solo como artefacto de Paso 2
 - decision de rediseño registrada: Paso 3 se orienta por `vacancy_dimensions`; se descarta la idea de `searchable_requirements`
-- borrador vigente de Paso 3: `work_conditions` como objeto normalizado y listas atomicas para `responsibilities`, `required_competencies`, `desirable_competencies` y `benefits`
+- shape vigente de Paso 3: `work_conditions` como lista plana de items `{raw_text}` y listas atomicas para `responsibilities`, `required_criteria`, `desirable_criteria`, `benefits`, `about_the_company` y `unclassified`
 - decision de rediseño registrada: Paso 3 incluye `contract_version` explicito en la raiz del artefacto
 - decision de rediseño registrada: Paso 3 incluye `vacancy_id` explicito en la raiz del artefacto
 - decision de rediseño registrada: Paso 3 incluye `generated_at` en la raiz del artefacto
@@ -153,7 +191,7 @@
 - decision de rediseño registrada: `semantic_queries` se formaliza como `string[]`; criterio inicial de generacion: una sola query principal por item
 - decision de rediseño registrada: `benefits` puede participar luego en analisis de fit, condicionado por la evolucion del modelo de preferencias del candidato
 - decision de rediseño registrada: `benefits` queda alineado con las otras listas atomicas, con `category` como texto libre controlado y `semantic_queries` presentes pero no obligatorias en esta fase
-- decision de rediseño registrada: set fijo aprobado para `work_conditions`: `salary`, `modality`, `location`, `contract_type`, `schedule`, `availability`, `travel`, `legal_requirements`, `relocation`, `mobility_requirements`
+- decision vigente refinada: no se usa por ahora un set fijo de subcategorias para `work_conditions`; la clasificacion semantica posterior de condiciones laborales queda como deuda/backlog
 - decision de rediseño registrada: los items atomicos de Paso 3 quedan con campos minimos solamente (`id`, campo principal, `category`, `semantic_queries`, `raw_text`)
 - decision de rediseño registrada: todos los campos `category` de Paso 3 quedan como texto libre controlado; no se usan por ahora como eje fuerte de logica ni de presentacion
 - decision de rediseño registrada: `artifact_id` queda fuera del contrato canonico por ahora y se resuelve en persistencia mientras no exista requerimiento formal de historial
@@ -183,8 +221,8 @@
 ## Siguiente Actividad
 - probar operativamente `S4` (`vacancy_retrieval_queries`) y `S5` (`vacancy_retrieval_evidence`) sobre una oportunidad con CV activo indexado
 - validar en Admin si los umbrales iniciales de `S6` (`0.75 / 0.45 / 0.30`) reflejan mejor la lectura real de evidencia
-- observar si `S4` aporta valor real para `work_conditions`, `benefits` y `about_the_company` antes de abrir control adicional por tipologia
+- observar si el filtro actual de `S4` reduce ruido suficiente antes de abrir control administrable por tipologia
 - mantener el gate actual solo como chequeo parcial `S2 -> S3`, sin abrir por ahora trabajo dedicado de hardening ni expansion de cobertura
-- probar operativamente `S6` y `S7` sobre una oportunidad con CV activo indexado y revisar si el par `S7 + S6` ya le da grounding suficiente a `S8`
-- dejar documentado como backlog el filtrado por tipologia de retrieval en `S4`, excluyendo por defecto `work_conditions`
-- despues de validar `S7`, abrir `S8` para narrativa LLM, resumen ejecutivo y recomendaciones accionables
+- probar operativamente `S8` sobre una oportunidad real con CV activo indexado y revisar calidad de `rendered_markdown`, tablas, dictamen y trazas exactas del prompt
+- mantener documentado como backlog la parametrizacion administrable de tipologias de retrieval en `S4`
+- ajustar el prompt de `S8` con base en salidas reales antes de abrir trabajo adicional de refinamiento o nuevas capas

@@ -75,6 +75,7 @@ export type Opportunity = {
   source_type: string;
   source_provider: string;
   source_url: string;
+  source_label: string;
   title: string;
   company: string;
   location: string;
@@ -109,6 +110,9 @@ export type Opportunity = {
   vacancy_alignment_summary_artifact: Record<string, unknown>;
   vacancy_alignment_summary_status: "none" | "draft" | "approved" | "error";
   vacancy_alignment_summary_generated_at: string;
+  vacancy_alignment_report_artifact: Record<string, unknown>;
+  vacancy_alignment_report_status: "none" | "draft" | "approved" | "error";
+  vacancy_alignment_report_generated_at: string;
   created_at: string;
   updated_at: string;
 };
@@ -506,7 +510,13 @@ export async function listPersons(): Promise<Person[]> {
 
 export async function listRequestTraces(
   personId: string,
-  params?: { opportunityId?: string; destination?: string; runId?: string; limit?: number }
+  params?: {
+    opportunityId?: string;
+    destination?: string;
+    flowKey?: string;
+    runId?: string;
+    limit?: number;
+  }
 ): Promise<RequestTrace[]> {
   const query = new URLSearchParams();
   if (params?.opportunityId?.trim()) {
@@ -514,6 +524,9 @@ export async function listRequestTraces(
   }
   if (params?.destination?.trim()) {
     query.set("destination", params.destination.trim().toLowerCase());
+  }
+  if (params?.flowKey?.trim()) {
+    query.set("flow_key", params.flowKey.trim());
   }
   if (params?.runId?.trim()) {
     query.set("run_id", params.runId.trim());
@@ -963,6 +976,8 @@ export async function updateOpportunity(
     vacancy_evidence_analysis_status?: "none" | "draft" | "approved" | "error";
     vacancy_alignment_summary_artifact?: Record<string, unknown>;
     vacancy_alignment_summary_status?: "none" | "draft" | "approved" | "error";
+    vacancy_alignment_report_artifact?: Record<string, unknown>;
+    vacancy_alignment_report_status?: "none" | "draft" | "approved" | "error";
   }
 ): Promise<Opportunity> {
   const response = await safeFetch(
@@ -1101,6 +1116,96 @@ export async function recomputeOpportunityVacancyAlignmentSummary(
     }
   );
   return parseResponse<Opportunity>(response);
+}
+
+export async function recomputeOpportunityVacancyAlignmentReport(
+  personId: string,
+  opportunityId: string
+): Promise<Opportunity> {
+  const response = await safeFetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/vacancy-alignment-report/recompute`,
+    {
+      method: "POST",
+      credentials: "include"
+    }
+  );
+  return parseResponse<Opportunity>(response);
+}
+
+export async function recomputeOpportunityVacancyAlignmentReportStream(
+  personId: string,
+  opportunityId: string,
+  onStatus: (stage: string) => void
+): Promise<Opportunity> {
+  const response = await safeFetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/vacancy-alignment-report/recompute/stream`,
+    {
+      method: "POST",
+      credentials: "include"
+    }
+  );
+  if (!response.ok) {
+    let messageText = `Request failed: ${response.status}`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) {
+        messageText = payload.detail;
+      }
+    } catch {
+      // Ignore parsing errors for stream setup failures.
+    }
+    throw new Error(messageText);
+  }
+  if (!response.body) {
+    throw new Error("Streaming response body is empty");
+  }
+
+  const decoder = new TextDecoder();
+  const reader = response.body.getReader();
+  let pending = "";
+  let completedOpportunity: Opportunity | null = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+    pending += decoder.decode(value, { stream: true });
+    const consumed = consumeSseBuffer(pending, (eventName, payload) => {
+      if (eventName === "tool_status") {
+        const stage = payload.stage;
+        if (typeof stage === "string" && stage.trim()) {
+          onStatus(stage.trim());
+        }
+      } else if (eventName === "message_complete") {
+        const opportunity = payload.opportunity;
+        if (opportunity && typeof opportunity === "object") {
+          completedOpportunity = opportunity as unknown as Opportunity;
+        }
+      }
+    });
+    pending = consumed.remainder;
+  }
+  if (pending.trim()) {
+    consumeSseBuffer(`${pending}\n\n`, (eventName, payload) => {
+      if (eventName === "tool_status") {
+        const stage = payload.stage;
+        if (typeof stage === "string" && stage.trim()) {
+          onStatus(stage.trim());
+        }
+      } else if (eventName === "message_complete") {
+        const opportunity = payload.opportunity;
+        if (opportunity && typeof opportunity === "object") {
+          completedOpportunity = opportunity as unknown as Opportunity;
+        }
+      }
+    });
+  }
+
+  if (!completedOpportunity) {
+    throw new Error("Vacancy alignment report stream ended without completion payload");
+  }
+  return completedOpportunity;
 }
 
 export async function recomputeOpportunityVacancyProfileStream(
@@ -1683,6 +1788,7 @@ export async function importOpportunityByUrl(
   personId: string,
   payload: {
     source_url: string;
+    source_label?: string;
     title?: string;
     company?: string;
     location?: string;
@@ -1707,6 +1813,7 @@ export async function importOpportunityByText(
     title: string;
     company?: string;
     location?: string;
+    source_label?: string;
     raw_text: string;
   }
 ): Promise<Opportunity> {

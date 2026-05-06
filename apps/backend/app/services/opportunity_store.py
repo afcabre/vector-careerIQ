@@ -36,6 +36,7 @@ class OpportunityRecord(TypedDict):
     source_type: str
     source_provider: str
     source_url: str
+    source_label: str
     title: str
     company: str
     location: str
@@ -70,6 +71,9 @@ class OpportunityRecord(TypedDict):
     vacancy_alignment_summary_artifact: dict[str, Any]
     vacancy_alignment_summary_status: str
     vacancy_alignment_summary_generated_at: str
+    vacancy_alignment_report_artifact: dict[str, Any]
+    vacancy_alignment_report_status: str
+    vacancy_alignment_report_generated_at: str
     created_at: str
     updated_at: str
 
@@ -99,6 +103,7 @@ def _normalize(payload: dict | None) -> OpportunityRecord:
         "source_type": str(source.get("source_type", "manual_text")),
         "source_provider": str(source.get("source_provider", "")),
         "source_url": str(source.get("source_url", "")),
+        "source_label": str(source.get("source_label", "")),
         "title": str(source.get("title", "")),
         "company": str(source.get("company", "")),
         "location": str(source.get("location", "")),
@@ -133,6 +138,9 @@ def _normalize(payload: dict | None) -> OpportunityRecord:
         "vacancy_alignment_summary_artifact": dict(source.get("vacancy_alignment_summary_artifact", {})),
         "vacancy_alignment_summary_status": str(source.get("vacancy_alignment_summary_status", "none")),
         "vacancy_alignment_summary_generated_at": str(source.get("vacancy_alignment_summary_generated_at", "")),
+        "vacancy_alignment_report_artifact": dict(source.get("vacancy_alignment_report_artifact", {})),
+        "vacancy_alignment_report_status": str(source.get("vacancy_alignment_report_status", "none")),
+        "vacancy_alignment_report_generated_at": str(source.get("vacancy_alignment_report_generated_at", "")),
         "created_at": str(source.get("created_at", "")),
         "updated_at": str(source.get("updated_at", "")),
     }
@@ -202,6 +210,7 @@ def create_opportunity(
     source_type: str,
     source_provider: str,
     source_url: str,
+    source_label: str,
     title: str,
     company: str,
     location: str,
@@ -215,6 +224,7 @@ def create_opportunity(
         "source_type": source_type,
         "source_provider": source_provider,
         "source_url": source_url.strip(),
+        "source_label": source_label.strip(),
         "title": title.strip(),
         "company": company.strip(),
         "location": location.strip(),
@@ -249,6 +259,9 @@ def create_opportunity(
         "vacancy_alignment_summary_artifact": {},
         "vacancy_alignment_summary_status": "none",
         "vacancy_alignment_summary_generated_at": "",
+        "vacancy_alignment_report_artifact": {},
+        "vacancy_alignment_report_status": "none",
+        "vacancy_alignment_report_generated_at": "",
         "created_at": now,
         "updated_at": now,
     }
@@ -274,6 +287,7 @@ def save_from_search(
         source_type="search",
         source_provider=source_provider,
         source_url=source_url,
+        source_label="",
         title=title,
         company=company,
         location=location,
@@ -290,9 +304,15 @@ def import_url_opportunity(
     company: str,
     location: str,
     raw_text: str,
+    source_label: str = "",
 ) -> tuple[OpportunityRecord, bool]:
     existing = _find_by_url(person_id, source_url)
     if existing:
+        normalized_source_label = source_label.strip()
+        if normalized_source_label and not existing["source_label"].strip():
+            existing["source_label"] = normalized_source_label
+            existing["updated_at"] = _now_iso()
+            return _save(existing), False
         return existing, False
 
     created = create_opportunity(
@@ -300,6 +320,7 @@ def import_url_opportunity(
         source_type="manual_url",
         source_provider="manual",
         source_url=source_url,
+        source_label=source_label,
         title=title,
         company=company,
         location=location,
@@ -315,12 +336,14 @@ def import_text_opportunity(
     company: str,
     location: str,
     raw_text: str,
+    source_label: str = "",
 ) -> OpportunityRecord:
     return create_opportunity(
         person_id=person_id,
         source_type="manual_text",
         source_provider="manual",
         source_url="",
+        source_label=source_label,
         title=title,
         company=company,
         location=location,
@@ -356,6 +379,8 @@ def update_opportunity(
     vacancy_evidence_analysis_status: str | None = None,
     vacancy_alignment_summary_artifact: dict[str, Any] | None = None,
     vacancy_alignment_summary_status: str | None = None,
+    vacancy_alignment_report_artifact: dict[str, Any] | None = None,
+    vacancy_alignment_report_status: str | None = None,
 ) -> OpportunityRecord | None:
     existing = find_opportunity(person_id, opportunity_id)
     if not existing:
@@ -467,6 +492,17 @@ def update_opportunity(
         existing["vacancy_alignment_summary_status"] = vacancy_alignment_summary_status
         if vacancy_alignment_summary_artifact is None:
             existing["vacancy_alignment_summary_generated_at"] = _now_iso()
+
+    if vacancy_alignment_report_artifact is not None:
+        existing["vacancy_alignment_report_artifact"] = dict(vacancy_alignment_report_artifact)
+        existing["vacancy_alignment_report_generated_at"] = _now_iso()
+
+    if vacancy_alignment_report_status is not None:
+        if vacancy_alignment_report_status not in VACANCY_V2_ARTIFACT_STATUSES:
+            return None
+        existing["vacancy_alignment_report_status"] = vacancy_alignment_report_status
+        if vacancy_alignment_report_artifact is None:
+            existing["vacancy_alignment_report_generated_at"] = _now_iso()
 
     existing["updated_at"] = _now_iso()
     return _save(existing)

@@ -50,7 +50,11 @@ class RequestValidationContractsTests(unittest.TestCase):
         )
         self.assertTrue(ok_url.source_url.startswith("https://"))
 
-        ok_text = ImportTextRequest(title="Backend Engineer", raw_text="texto suficientemente largo")
+        ok_text = ImportTextRequest(
+            title="Backend Engineer",
+            source_label="Headhunter Ana",
+            raw_text="texto suficientemente largo",
+        )
         self.assertEqual(ok_text.title, "Backend Engineer")
 
     def test_create_person_request_validates_minimum_profile(self) -> None:
