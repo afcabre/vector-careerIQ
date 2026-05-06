@@ -1,19 +1,10 @@
 from __future__ import annotations
 
-import copy
 import hashlib
 from typing import Any, TypedDict
 
 
 CONTRACT_VERSION_VACANCY_DIMENSIONS = "vacancy_dimensions.v2"
-
-WORK_CONDITION_KEYS = (
-    "salary",
-    "modality",
-    "location",
-    "contract_type",
-    "other_conditions",
-)
 
 ATOMIC_DIMENSION_KEYS = (
     "responsibilities",
@@ -21,6 +12,7 @@ ATOMIC_DIMENSION_KEYS = (
     "desirable_criteria",
     "benefits",
     "about_the_company",
+    "unclassified",
 )
 
 LEGACY_OTHER_CONDITION_KEYS = (
@@ -38,15 +30,11 @@ GROUP_CODE_BY_DIMENSION = {
     "desirable_criteria": "des",
     "benefits": "ben",
     "about_the_company": "comp",
-    "other_conditions": "cond",
+    "work_conditions": "cond",
 }
 
 
 class RawTextItem(TypedDict):
-    raw_text: str
-
-
-class SalarySignal(TypedDict):
     raw_text: str
 
 
@@ -58,36 +46,14 @@ class SalaryNormalization(TypedDict):
     raw_text: str
 
 
-class ModalityCondition(TypedDict):
-    value: str
-    raw_text: str
-
-
-class LocationCondition(TypedDict):
-    places: list[str]
-    raw_text: str
-
-
-class ContractTypeCondition(TypedDict):
-    value: str
-    raw_text: str
-
-
-class WorkConditionsPayload(TypedDict):
-    salary: SalarySignal
-    modality: ModalityCondition
-    location: LocationCondition
-    contract_type: ContractTypeCondition
-    other_conditions: list[RawTextItem]
-
-
 class VacancyDimensionsPayload(TypedDict):
-    work_conditions: WorkConditionsPayload
+    work_conditions: list[RawTextItem]
     responsibilities: list[RawTextItem]
     required_criteria: list[RawTextItem]
     desirable_criteria: list[RawTextItem]
     benefits: list[RawTextItem]
     about_the_company: list[RawTextItem]
+    unclassified: list[RawTextItem]
 
 
 class VacancyDimensionsContract(TypedDict):
@@ -95,6 +61,8 @@ class VacancyDimensionsContract(TypedDict):
     vacancy_id: str
     generated_at: str
     vacancy_dimensions: VacancyDimensionsPayload
+    warnings: list[str]
+    coverage_notes: list[str]
 
 
 class EnrichedVacancyDimensionItem(TypedDict):
@@ -104,16 +72,8 @@ class EnrichedVacancyDimensionItem(TypedDict):
     group_code: str
 
 
-class EnrichedWorkConditionsPayload(TypedDict):
-    salary: SalarySignal
-    modality: ModalityCondition
-    location: LocationCondition
-    contract_type: ContractTypeCondition
-    other_conditions: list[EnrichedVacancyDimensionItem]
-
-
 class EnrichedVacancyDimensionsPayload(TypedDict):
-    work_conditions: EnrichedWorkConditionsPayload
+    work_conditions: list[EnrichedVacancyDimensionItem]
     responsibilities: list[EnrichedVacancyDimensionItem]
     required_criteria: list[EnrichedVacancyDimensionItem]
     desirable_criteria: list[EnrichedVacancyDimensionItem]
@@ -196,27 +156,6 @@ def normalize_salary_normalization(raw: Any) -> SalaryNormalization:
     return normalized
 
 
-def _empty_work_conditions() -> WorkConditionsPayload:
-    return {
-        "salary": {
-            "raw_text": "",
-        },
-        "modality": {
-            "value": "",
-            "raw_text": "",
-        },
-        "location": {
-            "places": [],
-            "raw_text": "",
-        },
-        "contract_type": {
-            "value": "",
-            "raw_text": "",
-        },
-        "other_conditions": [],
-    }
-
-
 def _extract_raw_text(value: Any) -> str:
     if isinstance(value, str):
         return _clean_text(value, max_chars=500)
@@ -255,6 +194,23 @@ def _normalize_raw_text_list(raw: Any, *, max_items: int = 50) -> list[RawTextIt
     return items
 
 
+def normalize_quality_notes(raw: Any, *, max_items: int = 100, max_chars: int = 300) -> list[str]:
+    return _normalize_text_list(raw, max_items=max_items, max_chars=max_chars)
+
+
+def merge_quality_notes(*groups: Any) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for group in groups:
+        for note in normalize_quality_notes(group):
+            signature = note.casefold()
+            if signature in seen:
+                continue
+            seen.add(signature)
+            merged.append(note)
+    return merged
+
+
 def _collect_other_condition_candidates(source: dict[str, Any]) -> list[Any]:
     candidates: list[Any] = []
     raw_other_conditions = source.get("other_conditions")
@@ -278,57 +234,49 @@ def _collect_other_condition_candidates(source: dict[str, Any]) -> list[Any]:
     return candidates
 
 
-def _normalize_work_conditions(raw: Any) -> WorkConditionsPayload:
-    source = raw if isinstance(raw, dict) else {}
-    normalized = _empty_work_conditions()
+def _append_legacy_work_condition_text(candidates: list[Any], value: Any) -> None:
+    if isinstance(value, list):
+        candidates.extend(value)
+        return
+    if isinstance(value, dict):
+        raw_text = _clean_text(value.get("raw_text") or value.get("text"), max_chars=500)
+        if raw_text:
+            candidates.append(raw_text)
+            return
+        value_text = _clean_text(value.get("value") or value.get("type"), max_chars=500)
+        if value_text:
+            candidates.append(value_text)
+        places = value.get("places")
+        if isinstance(places, list):
+            candidates.extend(places)
+        return
+    if value is not None:
+        candidates.append(value)
 
-    source_salary = source.get("salary")
-    salary = source_salary if isinstance(source_salary, dict) else {}
-    salary_fallback_text = source_salary if not isinstance(source_salary, dict) else ""
-    normalized["salary"] = {
-        "raw_text": _clean_text(
-            salary.get("raw_text") or salary.get("text") or salary_fallback_text,
-            max_chars=300,
-        )
-    }
 
-    modality = source.get("modality") if isinstance(source.get("modality"), dict) else {}
-    normalized["modality"] = {
-        "value": _clean_text(modality.get("value") or modality.get("type"), max_chars=80),
-        "raw_text": _clean_text(modality.get("raw_text") or modality.get("text"), max_chars=300),
-    }
+def _normalize_work_conditions(raw: Any) -> list[RawTextItem]:
+    if isinstance(raw, list):
+        return _normalize_raw_text_list(raw, max_items=50)
+    if not isinstance(raw, dict):
+        item = _normalize_raw_text_item(raw)
+        return [item] if item else []
 
-    location = source.get("location") if isinstance(source.get("location"), dict) else {}
-    location_places = location.get("places")
-    if not isinstance(location_places, list):
-        location_value = _clean_text(location.get("value"), max_chars=120)
-        location_places = [location_value] if location_value else []
-    normalized["location"] = {
-        "places": _normalize_text_list(location_places, max_items=20, max_chars=120),
-        "raw_text": _clean_text(location.get("raw_text") or location.get("text"), max_chars=300),
-    }
-
-    contract_type = source.get("contract_type") if isinstance(source.get("contract_type"), dict) else {}
-    normalized["contract_type"] = {
-        "value": _clean_text(contract_type.get("value") or contract_type.get("type"), max_chars=80),
-        "raw_text": _clean_text(contract_type.get("raw_text") or contract_type.get("text"), max_chars=300),
-    }
-
-    normalized["other_conditions"] = _normalize_raw_text_list(
-        _collect_other_condition_candidates(source),
-        max_items=50,
-    )
-    return normalized
+    candidates: list[Any] = []
+    for key in ("salary", "modality", "location", "contract_type"):
+        _append_legacy_work_condition_text(candidates, raw.get(key))
+    candidates.extend(_collect_other_condition_candidates(raw))
+    return _normalize_raw_text_list(candidates, max_items=50)
 
 
 def _empty_vacancy_dimensions_payload() -> VacancyDimensionsPayload:
     return {
-        "work_conditions": _empty_work_conditions(),
+        "work_conditions": [],
         "responsibilities": [],
         "required_criteria": [],
         "desirable_criteria": [],
         "benefits": [],
         "about_the_company": [],
+        "unclassified": [],
     }
 
 
@@ -338,6 +286,8 @@ def empty_vacancy_dimensions_contract() -> VacancyDimensionsContract:
         "vacancy_id": "",
         "generated_at": "",
         "vacancy_dimensions": _empty_vacancy_dimensions_payload(),
+        "warnings": [],
+        "coverage_notes": [],
     }
 
 
@@ -364,7 +314,10 @@ def normalize_vacancy_dimensions_contract(raw: Any) -> VacancyDimensionsContract
         ),
         "benefits": _normalize_raw_text_list(payload_source.get("benefits")),
         "about_the_company": _normalize_raw_text_list(payload_source.get("about_the_company")),
+        "unclassified": _normalize_raw_text_list(payload_source.get("unclassified")),
     }
+    normalized["warnings"] = normalize_quality_notes(source.get("warnings"))
+    normalized["coverage_notes"] = normalize_quality_notes(source.get("coverage_notes"))
     return normalized
 
 
@@ -409,17 +362,11 @@ def enrich_vacancy_dimensions_items(raw: Any) -> EnrichedVacancyDimensionsContra
         "vacancy_id": vacancy_id,
         "generated_at": normalized["generated_at"],
         "vacancy_dimensions": {
-            "work_conditions": {
-                "salary": copy.deepcopy(payload["work_conditions"]["salary"]),
-                "modality": copy.deepcopy(payload["work_conditions"]["modality"]),
-                "location": copy.deepcopy(payload["work_conditions"]["location"]),
-                "contract_type": copy.deepcopy(payload["work_conditions"]["contract_type"]),
-                "other_conditions": _enrich_items(
-                    payload["work_conditions"]["other_conditions"],
-                    vacancy_id=vacancy_id,
-                    group_code=GROUP_CODE_BY_DIMENSION["other_conditions"],
-                ),
-            },
+            "work_conditions": _enrich_items(
+                payload["work_conditions"],
+                vacancy_id=vacancy_id,
+                group_code=GROUP_CODE_BY_DIMENSION["work_conditions"],
+            ),
             "responsibilities": _enrich_items(
                 payload["responsibilities"],
                 vacancy_id=vacancy_id,

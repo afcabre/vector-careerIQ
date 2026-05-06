@@ -3,9 +3,11 @@ from __future__ import annotations
 from typing import Any, TypedDict
 
 
-CONTRACT_VERSION_VACANCY_BLOCKS = "vacancy_blocks.v1"
+FLOW_KEY_VACANCY_BLOCKS_EXTRACT = "task_vacancy_blocks_extract"
+CONTRACT_VERSION_VACANCY_BLOCKS = "vacancy_blocks.v2"
 
 VACANCY_BLOCK_KEYS = (
+    "about_the_company",
     "work_conditions",
     "responsibilities",
     "required_requirements",
@@ -15,7 +17,14 @@ VACANCY_BLOCK_KEYS = (
 )
 
 
+class VacancyBlocksFlow(TypedDict):
+    flow_key: str
+    contract_version: str
+    prompt_version: str
+
+
 class VacancyBlocksPayload(TypedDict):
+    about_the_company: list[str]
     work_conditions: list[str]
     responsibilities: list[str]
     required_requirements: list[str]
@@ -25,7 +34,7 @@ class VacancyBlocksPayload(TypedDict):
 
 
 class VacancyBlocksContract(TypedDict):
-    contract_version: str
+    flow: VacancyBlocksFlow
     vacancy_id: str
     generated_at: str
     vacancy_blocks: VacancyBlocksPayload
@@ -61,6 +70,7 @@ def _normalize_text_list(raw: Any, *, max_items: int = 200, max_chars: int = 800
 
 def _empty_vacancy_blocks_payload() -> VacancyBlocksPayload:
     return {
+        "about_the_company": [],
         "work_conditions": [],
         "responsibilities": [],
         "required_requirements": [],
@@ -72,7 +82,11 @@ def _empty_vacancy_blocks_payload() -> VacancyBlocksPayload:
 
 def empty_vacancy_blocks_contract() -> VacancyBlocksContract:
     return {
-        "contract_version": CONTRACT_VERSION_VACANCY_BLOCKS,
+        "flow": {
+            "flow_key": FLOW_KEY_VACANCY_BLOCKS_EXTRACT,
+            "contract_version": CONTRACT_VERSION_VACANCY_BLOCKS,
+            "prompt_version": "",
+        },
         "vacancy_id": "",
         "generated_at": "",
         "vacancy_blocks": _empty_vacancy_blocks_payload(),
@@ -84,6 +98,12 @@ def empty_vacancy_blocks_contract() -> VacancyBlocksContract:
 def normalize_vacancy_blocks_contract(raw: Any) -> VacancyBlocksContract:
     source = raw if isinstance(raw, dict) else {}
     normalized = empty_vacancy_blocks_contract()
+    flow_source = source.get("flow") if isinstance(source.get("flow"), dict) else {}
+    normalized["flow"] = {
+        "flow_key": FLOW_KEY_VACANCY_BLOCKS_EXTRACT,
+        "contract_version": CONTRACT_VERSION_VACANCY_BLOCKS,
+        "prompt_version": _clean_text(flow_source.get("prompt_version"), max_chars=120),
+    }
     normalized["vacancy_id"] = _clean_text(source.get("vacancy_id"), max_chars=120)
     normalized["generated_at"] = _clean_text(source.get("generated_at"), max_chars=64)
 
@@ -105,4 +125,7 @@ def normalize_vacancy_blocks_contract(raw: Any) -> VacancyBlocksContract:
 def is_vacancy_blocks_contract(raw: Any) -> bool:
     if not isinstance(raw, dict):
         return False
-    return str(raw.get("contract_version", "")).strip() == CONTRACT_VERSION_VACANCY_BLOCKS
+    flow = raw.get("flow")
+    if not isinstance(flow, dict):
+        return False
+    return str(flow.get("contract_version", "")).strip() == CONTRACT_VERSION_VACANCY_BLOCKS

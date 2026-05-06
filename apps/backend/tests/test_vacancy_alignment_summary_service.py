@@ -80,13 +80,7 @@ def _vacancy_evidence_analysis() -> dict[str, object]:
             ],
             "benefits": [],
             "about_the_company": [],
-            "work_conditions": {
-                "salary": [],
-                "modality": [],
-                "location": [],
-                "contract_type": [],
-                "other_conditions": [],
-            },
+            "work_conditions": [],
         },
     }
 

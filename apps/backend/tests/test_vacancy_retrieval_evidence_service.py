@@ -39,13 +39,7 @@ def _vacancy_retrieval_queries() -> dict[str, object]:
             "desirable_criteria": [],
             "benefits": [],
             "about_the_company": [],
-            "work_conditions": {
-                "salary": [],
-                "modality": [],
-                "location": [],
-                "contract_type": [],
-                "other_conditions": [],
-            },
+            "work_conditions": [],
         },
     }
 

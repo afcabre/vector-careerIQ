@@ -27,7 +27,7 @@ def _has_any_enriched_items(contract: VacancyDimensionsEnrichedContract) -> bool
         return True
     if payload["about_the_company"]:
         return True
-    return bool(payload["work_conditions"]["other_conditions"])
+    return bool(payload["work_conditions"])
 
 
 def enrich_vacancy_dimensions_artifact(
@@ -48,13 +48,7 @@ def enrich_vacancy_dimensions_artifact(
         "vacancy_id": vacancy_id,
         "generated_at": generated_at,
         "vacancy_dimensions": {
-            "work_conditions": {
-                "salary": normalized["vacancy_dimensions"]["work_conditions"]["salary"],
-                "modality": normalized["vacancy_dimensions"]["work_conditions"]["modality"],
-                "location": normalized["vacancy_dimensions"]["work_conditions"]["location"],
-                "contract_type": normalized["vacancy_dimensions"]["work_conditions"]["contract_type"],
-                "other_conditions": [],
-            },
+            "work_conditions": [],
             "responsibilities": [],
             "required_criteria": [],
             "desirable_criteria": [],

@@ -54,19 +54,15 @@ def _has_salary_signal(text: str) -> bool:
     return bool(_SALARY_SIGNAL_PATTERN.search(cleaned))
 
 
-def _has_salary_data_in_step3(raw_salary: Any) -> bool:
-    salary = raw_salary if isinstance(raw_salary, dict) else {}
-    if salary.get("min") is not None:
-        return True
-    if salary.get("max") is not None:
-        return True
-    if str(salary.get("currency", "")).strip():
-        return True
-    if str(salary.get("period", "")).strip():
-        return True
-    if str(salary.get("raw_text", "")).strip():
-        return True
-    return bool(str(salary.get("text", "")).strip())
+def _has_salary_data_in_step3(raw_work_conditions: Any) -> bool:
+    if not isinstance(raw_work_conditions, list):
+        return False
+    for item in raw_work_conditions:
+        if not isinstance(item, dict):
+            continue
+        if _has_salary_signal(str(item.get("raw_text", ""))):
+            return True
+    return False
 
 
 def _ratio(numerator: int, denominator: int) -> float:
@@ -112,7 +108,7 @@ def build_vacancy_v2_consistency_report(
         if has_step3:
             normalized_dimensions = normalize_vacancy_dimensions_contract(raw_dimensions_artifact)
             step3_has_salary_data = _has_salary_data_in_step3(
-                normalized_dimensions["vacancy_dimensions"]["work_conditions"]["salary"]
+                normalized_dimensions["vacancy_dimensions"]["work_conditions"]
             )
 
         issues: list[str] = []

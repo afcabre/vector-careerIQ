@@ -164,11 +164,7 @@ def _has_any_matches(contract: VacancyRetrievalEvidenceContract) -> bool:
         payload["desirable_criteria"],
         payload["benefits"],
         payload["about_the_company"],
-        payload["work_conditions"]["salary"],
-        payload["work_conditions"]["modality"],
-        payload["work_conditions"]["location"],
-        payload["work_conditions"]["contract_type"],
-        payload["work_conditions"]["other_conditions"],
+        payload["work_conditions"],
     ]
     return any(bool(item.get("matches")) for group in groups for item in group)
 
@@ -211,18 +207,6 @@ def build_vacancy_evidence_analysis(
         "about_the_company": [
             _analyze_item(item, thresholds=thresholds) for item in payload["about_the_company"]
         ],
-        "work_conditions": {
-            "salary": [_analyze_item(item, thresholds=thresholds) for item in payload["work_conditions"]["salary"]],
-            "modality": [_analyze_item(item, thresholds=thresholds) for item in payload["work_conditions"]["modality"]],
-            "location": [_analyze_item(item, thresholds=thresholds) for item in payload["work_conditions"]["location"]],
-            "contract_type": [
-                _analyze_item(item, thresholds=thresholds)
-                for item in payload["work_conditions"]["contract_type"]
-            ],
-            "other_conditions": [
-                _analyze_item(item, thresholds=thresholds)
-                for item in payload["work_conditions"]["other_conditions"]
-            ],
-        },
+        "work_conditions": [_analyze_item(item, thresholds=thresholds) for item in payload["work_conditions"]],
     }
     return normalize_vacancy_evidence_analysis_contract(analysis)

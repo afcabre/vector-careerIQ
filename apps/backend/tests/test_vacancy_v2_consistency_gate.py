@@ -35,10 +35,15 @@ def _clear_in_memory_state() -> None:
 
 def _blocks_artifact(*, work_conditions: list[str], benefits: list[str]) -> dict:
     return {
-        "contract_version": "vacancy_blocks.v1",
+        "flow": {
+            "flow_key": "task_vacancy_blocks_extract",
+            "contract_version": "vacancy_blocks.v2",
+            "prompt_version": "2026-04-21T18:00:00Z",
+        },
         "vacancy_id": "vacancy-1",
         "generated_at": "2026-04-21T10:00:00Z",
         "vacancy_blocks": {
+            "about_the_company": [],
             "work_conditions": work_conditions,
             "responsibilities": [],
             "required_requirements": [],
@@ -57,17 +62,16 @@ def _dimensions_artifact(*, salary_text: str = "") -> dict:
         "vacancy_id": "vacancy-1",
         "generated_at": "2026-04-21T10:01:00Z",
         "vacancy_dimensions": {
-            "work_conditions": {
-                "salary": {
-                    "raw_text": salary_text,
-                }
-            },
+            "work_conditions": ([{"raw_text": salary_text}] if salary_text else []),
             "responsibilities": [],
             "required_criteria": [],
             "desirable_criteria": [],
             "benefits": [],
             "about_the_company": [],
+            "unclassified": [],
         },
+        "warnings": [],
+        "coverage_notes": [],
     }
 
 

@@ -26,20 +26,14 @@ def _vacancy_dimensions_enriched() -> dict[str, object]:
         "vacancy_id": "o-q-001",
         "generated_at": "2026-04-24T10:31:05Z",
         "vacancy_dimensions": {
-            "work_conditions": {
-                "salary": {"raw_text": "Salario COP 12M a 18M mensual"},
-                "modality": {"value": "Hibrido", "raw_text": "Hibrido en Bogota"},
-                "location": {"places": ["Bogota"], "raw_text": "Bogota"},
-                "contract_type": {"value": "Indefinido", "raw_text": "Contrato indefinido"},
-                "other_conditions": [
-                    {
-                        "raw_text": "Disponibilidad para viajar",
-                        "item_id": "cond_123",
-                        "item_index": 0,
-                        "group_code": "cond",
-                    }
-                ],
-            },
+            "work_conditions": [
+                {
+                    "raw_text": "Disponibilidad para viajar",
+                    "item_id": "cond_123",
+                    "item_index": 0,
+                    "group_code": "cond",
+                }
+            ],
             "responsibilities": [
                 {
                     "raw_text": "Liderar roadmap",
@@ -86,15 +80,9 @@ class VacancyRetrievalQueriesServiceTests(unittest.TestCase):
             "\"responsibilities\":[{\"item_id\":\"resp_123\",\"item_index\":0,\"group_code\":\"resp\",\"raw_text\":\"Liderar roadmap\",\"queries\":[\"liderazgo de producto, gestion de roadmap, direccion de backlog\"]}],"
             "\"required_criteria\":[{\"item_id\":\"req_123\",\"item_index\":0,\"group_code\":\"req\",\"raw_text\":\"5 anos de experiencia en producto\",\"queries\":[\"experiencia gestionando producto digital, product management senior\"]}],"
             "\"desirable_criteria\":[],"
-            "\"benefits\":[],"
-            "\"about_the_company\":[],"
-            "\"work_conditions\":{"
-            "\"salary\":[{\"item_id\":\"salary_1\",\"item_index\":0,\"group_code\":\"salary\",\"raw_text\":\"Salario COP 12M a 18M mensual\",\"queries\":[\"salario mensual cop 12 a 18 millones\"]}],"
-            "\"modality\":[],"
-            "\"location\":[],"
-            "\"contract_type\":[],"
-            "\"other_conditions\":[]"
-            "}"
+            "\"benefits\":[{\"item_id\":\"ben_123\",\"item_index\":0,\"group_code\":\"ben\",\"raw_text\":\"Seguro medico\",\"queries\":[\"seguro medico beneficios laborales\"]}],"
+            "\"about_the_company\":[{\"item_id\":\"comp_123\",\"item_index\":0,\"group_code\":\"comp\",\"raw_text\":\"Empresa B2B\",\"queries\":[\"empresa b2b tecnologia\"]}],"
+            "\"work_conditions\":[{\"item_id\":\"cond_123\",\"item_index\":0,\"group_code\":\"cond\",\"raw_text\":\"Disponibilidad para viajar\",\"queries\":[\"disponibilidad para viajar experiencia profesional\"]}]"
             "}"
             "}"
         )
@@ -114,7 +102,10 @@ class VacancyRetrievalQueriesServiceTests(unittest.TestCase):
         self.assertEqual(contract["vacancy_id"], "o-q-001")
         self.assertTrue(contract["generated_at"])
         self.assertEqual(contract["queries"]["responsibilities"][0]["group_code"], "resp")
-        self.assertEqual(contract["queries"]["work_conditions"]["salary"][0]["group_code"], "salary")
+        self.assertEqual(contract["queries"]["required_criteria"][0]["group_code"], "req")
+        self.assertEqual(contract["queries"]["benefits"], [])
+        self.assertEqual(contract["queries"]["about_the_company"], [])
+        self.assertEqual(contract["queries"]["work_conditions"], [])
 
     def test_extract_requires_valid_enriched_artifact(self) -> None:
         with self.assertRaises(VacancyRetrievalQueriesExtractionError):
@@ -129,7 +120,7 @@ class VacancyRetrievalQueriesServiceTests(unittest.TestCase):
             "\"desirable_criteria\":[],"
             "\"benefits\":[],"
             "\"about_the_company\":[],"
-            "\"work_conditions\":{\"salary\":[],\"modality\":[],\"location\":[],\"contract_type\":[],\"other_conditions\":[]}"
+            "\"work_conditions\":[]"
             "}"
             "}"
         )
@@ -165,6 +156,9 @@ class VacancyRetrievalQueriesServiceTests(unittest.TestCase):
             complete_prompt_mock.call_args.kwargs["flow_key"],
             FLOW_TASK_VACANCY_RETRIEVAL_QUERIES_EXTRACT,
         )
+        fallback_prompt = str(prompt_builder_mock.call_args.kwargs.get("fallback", ""))
+        self.assertIn("responsibilities, required_criteria, and desirable_criteria", fallback_prompt)
+        self.assertIn("benefits, about_the_company, and work_conditions", fallback_prompt)
 
     def test_extract_invalid_json_raises_controlled_error(self) -> None:
         with patch(

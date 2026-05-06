@@ -50,7 +50,9 @@ class VacancyBlocksServiceTests(unittest.TestCase):
         ):
             contract = extract_vacancy_blocks(opportunity, settings=object())  # type: ignore[arg-type]
 
-        self.assertEqual(contract["contract_version"], CONTRACT_VERSION_VACANCY_BLOCKS)
+        self.assertEqual(contract["flow"]["flow_key"], FLOW_TASK_VACANCY_BLOCKS_EXTRACT)
+        self.assertEqual(contract["flow"]["contract_version"], CONTRACT_VERSION_VACANCY_BLOCKS)
+        self.assertTrue(contract["flow"]["prompt_version"])
         self.assertEqual(contract["vacancy_id"], "o-test-001")
         self.assertTrue(contract["generated_at"])
         self.assertEqual(contract["vacancy_blocks"]["work_conditions"], ["Hibrido en Bogota"])
@@ -91,6 +93,7 @@ class VacancyBlocksServiceTests(unittest.TestCase):
 
         payload = contract["vacancy_blocks"]
         self.assertEqual(set(payload.keys()), {
+            "about_the_company",
             "work_conditions",
             "responsibilities",
             "required_requirements",
@@ -113,14 +116,14 @@ class VacancyBlocksServiceTests(unittest.TestCase):
         )
 
         with patch(
-            "app.services.vacancy_blocks_service.build_prompt_text",
-            return_value="prompt listo",
+            "app.services.vacancy_blocks_service.build_prompt_text_with_meta",
+            return_value=("prompt listo", {"updated_at": "2026-04-21T10:00:00Z"}),
         ) as prompt_builder_mock:
             with patch(
                 "app.services.vacancy_blocks_service.complete_prompt",
                 return_value=minimal_response,
             ) as complete_prompt_mock:
-                extract_vacancy_blocks(opportunity, settings=object())  # type: ignore[arg-type]
+                contract = extract_vacancy_blocks(opportunity, settings=object())  # type: ignore[arg-type]
 
         self.assertEqual(
             prompt_builder_mock.call_args.kwargs["flow_key"],
@@ -142,6 +145,7 @@ class VacancyBlocksServiceTests(unittest.TestCase):
         self.assertIn("Salary/compensation", fallback_prompt)
         self.assertIn("work_conditions", fallback_prompt)
         self.assertIn("never in benefits", fallback_prompt)
+        self.assertEqual(contract["flow"]["prompt_version"], "2026-04-21T10:00:00Z")
 
     def test_extract_invalid_json_raises_controlled_error(self) -> None:
         opportunity = _opportunity(raw_text="Texto de vacante")

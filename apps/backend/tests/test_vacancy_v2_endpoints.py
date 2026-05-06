@@ -19,6 +19,7 @@ from app.services.vacancy_blocks_service import VacancyBlocksExtractionError
 from app.services.vacancy_dimensions_service import VacancyDimensionsExtractionError
 from app.services.vacancy_dimensions_enrichment_service import VacancyDimensionsEnrichmentError
 from app.services.vacancy_alignment_summary_service import VacancyAlignmentSummaryBuildError
+from app.services.vacancy_alignment_report_service import VacancyAlignmentReportBuildError
 from app.services.vacancy_evidence_analysis_service import VacancyEvidenceAnalysisBuildError
 from app.services.vacancy_retrieval_evidence_service import VacancyRetrievalEvidenceBuildError
 from app.services.vacancy_retrieval_queries_service import VacancyRetrievalQueriesExtractionError
@@ -38,10 +39,15 @@ def _clear_in_memory_state() -> None:
 
 def _sample_vacancy_blocks(opportunity_id: str) -> dict[str, Any]:
     return {
-        "contract_version": "vacancy_blocks.v1",
+        "flow": {
+            "flow_key": "task_vacancy_blocks_extract",
+            "contract_version": "vacancy_blocks.v2",
+            "prompt_version": "2026-04-21T18:00:00Z",
+        },
         "vacancy_id": opportunity_id,
         "generated_at": "2026-04-21T10:00:00Z",
         "vacancy_blocks": {
+            "about_the_company": [],
             "work_conditions": ["Hibrido en Bogota"],
             "responsibilities": ["Liderar backlog de datos"],
             "required_requirements": [],
@@ -60,19 +66,16 @@ def _sample_vacancy_dimensions(opportunity_id: str) -> dict[str, Any]:
         "vacancy_id": opportunity_id,
         "generated_at": "2026-04-21T10:01:00Z",
         "vacancy_dimensions": {
-            "work_conditions": {
-                "salary": {"raw_text": ""},
-                "modality": {"value": "Hibrido", "raw_text": "Hibrido en Bogota"},
-                "location": {"places": ["Bogota"], "raw_text": "Hibrido en Bogota"},
-                "contract_type": {"value": "", "raw_text": ""},
-                "other_conditions": [],
-            },
+            "work_conditions": [{"raw_text": "Hibrido en Bogota"}],
             "responsibilities": [],
             "required_criteria": [],
             "desirable_criteria": [],
             "benefits": [],
             "about_the_company": [],
+            "unclassified": [],
         },
+        "warnings": [],
+        "coverage_notes": [],
     }
 
 
@@ -97,13 +100,7 @@ def _sample_vacancy_dimensions_enriched(opportunity_id: str) -> dict[str, Any]:
         "vacancy_id": opportunity_id,
         "generated_at": "2026-04-21T10:03:00Z",
         "vacancy_dimensions": {
-            "work_conditions": {
-                "salary": {"raw_text": "Salario COP 12M a 18M mensual"},
-                "modality": {"value": "Hibrido", "raw_text": "Hibrido en Bogota"},
-                "location": {"places": ["Bogota"], "raw_text": "Bogota"},
-                "contract_type": {"value": "", "raw_text": ""},
-                "other_conditions": [],
-            },
+            "work_conditions": [],
             "responsibilities": [
                 {
                     "raw_text": "Liderar backlog de datos",
@@ -139,13 +136,7 @@ def _sample_vacancy_retrieval_queries(opportunity_id: str) -> dict[str, Any]:
             "desirable_criteria": [],
             "benefits": [],
             "about_the_company": [],
-            "work_conditions": {
-                "salary": [],
-                "modality": [],
-                "location": [],
-                "contract_type": [],
-                "other_conditions": [],
-            },
+            "work_conditions": [],
         },
     }
 
@@ -177,13 +168,7 @@ def _sample_vacancy_retrieval_evidence(opportunity_id: str) -> dict[str, Any]:
             "desirable_criteria": [],
             "benefits": [],
             "about_the_company": [],
-            "work_conditions": {
-                "salary": [],
-                "modality": [],
-                "location": [],
-                "contract_type": [],
-                "other_conditions": [],
-            },
+            "work_conditions": [],
         },
     }
 
@@ -234,13 +219,7 @@ def _sample_vacancy_evidence_analysis(opportunity_id: str) -> dict[str, Any]:
             "desirable_criteria": [],
             "benefits": [],
             "about_the_company": [],
-            "work_conditions": {
-                "salary": [],
-                "modality": [],
-                "location": [],
-                "contract_type": [],
-                "other_conditions": [],
-            },
+            "work_conditions": [],
         },
     }
 
@@ -300,6 +279,56 @@ def _sample_vacancy_alignment_summary(opportunity_id: str) -> dict[str, Any]:
             "gaps": [],
             "review_items": [],
         },
+    }
+
+
+def _sample_vacancy_alignment_report(opportunity_id: str) -> dict[str, Any]:
+    return {
+        "contract_version": "vacancy_alignment_report.v1",
+        "vacancy_id": opportunity_id,
+        "person_id": "p-001",
+        "generated_at": "2026-04-24T10:39:00Z",
+        "source_artifacts": {
+            "alignment_summary_version": "vacancy_alignment_summary.v1",
+            "evidence_analysis_version": "vacancy_evidence_analysis.v1",
+        },
+        "report": {
+            "executive_summary": "Buen encaje general con una validacion pendiente.",
+            "decision_table": {
+                "alineacion_general": {
+                    "resultado": "Avanzar con reservas",
+                    "descripcion_corta": "Buen fit con una brecha abierta.",
+                }
+            },
+            "vacancy_fit_matrix": [
+                {
+                    "criterio": "Liderar backlog de datos",
+                    "categoria": "Responsabilidades",
+                    "origen_del_criterio": "Vacante obligatoria",
+                    "estado": "🟢 Cumple",
+                    "lo_que_solicita_la_vacante": "Liderar backlog de datos",
+                    "evidencia_del_candidato": "Lidere backlog y priorizacion trimestral",
+                    "descripcion_corta": "Evidencia directa en experiencia previa.",
+                }
+            ],
+            "candidate_preference_matrix": [],
+            "fit_answer": "Encaja con la vacante y conviene avanzar con validaciones puntuales.",
+            "strengths": ["Experiencia demostrada en backlog."],
+            "gaps": ["Cloud no esta demostrado."],
+            "preference_conflicts": [],
+            "improvement_actions": {
+                "reinforce_in_cv_or_profile": ["Resaltar impacto en backlog."],
+                "validate_with_recruiter": ["Confirmar stack cloud."],
+                "application_narrative": ["Conectar backlog con resultados."],
+            },
+            "alerts_and_conflicts": ["La vacante no aclara modalidad."],
+            "actionable_conclusion": {
+                "final_decision": "Avanzar con reservas",
+                "main_reason": "El core tecnico encaja y la brecha es validable.",
+                "recommended_next_step": "Validar stack cloud con reclutador.",
+            },
+        },
+        "rendered_markdown": "## Resumen ejecutivo\n\nBuen encaje general.",
     }
 
 
@@ -368,7 +397,10 @@ class VacancyV2EndpointsTests(unittest.TestCase):
             )
 
         self.assertEqual(response.vacancy_blocks_status, "draft")
-        self.assertEqual(response.vacancy_blocks_artifact["contract_version"], "vacancy_blocks.v1")
+        self.assertEqual(
+            response.vacancy_blocks_artifact["flow"]["contract_version"],
+            "vacancy_blocks.v2",
+        )
         stored = opportunity_store.find_opportunity("p-001", opportunity_id)
         assert stored is not None
         self.assertEqual(stored["vacancy_blocks_status"], "draft")
@@ -507,6 +539,19 @@ class VacancyV2EndpointsTests(unittest.TestCase):
             "Invalid vacancy_alignment_summary_status",
         )
 
+        with self.assertRaises(HTTPException) as invalid_report_status:
+            opportunities_api.update_opportunity(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                payload=opportunities_api.UpdateOpportunityRequest(vacancy_alignment_report_status="invalid"),
+                _=self.session,
+            )
+        self.assertEqual(invalid_report_status.exception.status_code, 422)
+        self.assertEqual(
+            invalid_report_status.exception.detail,
+            "Invalid vacancy_alignment_report_status",
+        )
+
     def test_recompute_vacancy_dimensions_success_sets_draft_artifact(self) -> None:
         created = opportunity_store.import_text_opportunity(
             person_id="p-001",
@@ -552,7 +597,9 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         )
         opportunity_id = created["opportunity_id"]
         dimensions = _sample_vacancy_dimensions(opportunity_id)
-        dimensions["vacancy_dimensions"]["work_conditions"]["salary"]["raw_text"] = "Salario COP 12M a 18M mensual"
+        dimensions["vacancy_dimensions"]["work_conditions"] = [
+            {"raw_text": "Salario COP 12M a 18M mensual"}
+        ]
         updated = opportunity_store.update_opportunity(
             person_id="p-001",
             opportunity_id=opportunity_id,
@@ -1014,6 +1061,96 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         assert stored is not None
         self.assertEqual(stored["vacancy_alignment_summary_status"], "error")
 
+    def test_recompute_vacancy_alignment_report_success_sets_draft_artifact(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Backend Engineer",
+            company="Acme",
+            location="Hybrid",
+            raw_text="Vacante con reporte final.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_evidence_analysis_artifact=_sample_vacancy_evidence_analysis(opportunity_id),
+            vacancy_evidence_analysis_status="approved",
+            vacancy_alignment_summary_artifact=_sample_vacancy_alignment_summary(opportunity_id),
+            vacancy_alignment_summary_status="approved",
+        )
+        assert updated is not None
+        report_artifact = _sample_vacancy_alignment_report(opportunity_id)
+
+        with patch.object(
+            opportunities_api,
+            "extract_vacancy_alignment_report",
+            return_value=report_artifact,
+        ) as extract_report_mock:
+            response = opportunities_api.recompute_vacancy_alignment_report(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                _=self.session,
+            )
+
+        self.assertEqual(response.vacancy_alignment_report_status, "draft")
+        self.assertEqual(
+            response.vacancy_alignment_report_artifact["contract_version"],
+            "vacancy_alignment_report.v1",
+        )
+        self.assertEqual(
+            extract_report_mock.call_args.kwargs["person"]["person_id"],
+            "p-001",
+        )
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_alignment_report_status"], "draft")
+
+    def test_recompute_vacancy_alignment_report_failure_sets_error_status(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Backend Engineer",
+            company="Acme",
+            location="Hybrid",
+            raw_text="Vacante con reporte final.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_evidence_analysis_artifact=_sample_vacancy_evidence_analysis(opportunity_id),
+            vacancy_evidence_analysis_status="approved",
+            vacancy_alignment_summary_artifact=_sample_vacancy_alignment_summary(opportunity_id),
+            vacancy_alignment_summary_status="approved",
+        )
+        assert updated is not None
+
+        with patch.object(
+            opportunities_api,
+            "extract_vacancy_alignment_report",
+            side_effect=VacancyAlignmentReportBuildError(
+                "Step 8 requires a valid vacancy_alignment_summary.v1 artifact."
+            ),
+        ):
+            with self.assertRaises(HTTPException) as ctx:
+                opportunities_api.recompute_vacancy_alignment_report(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                )
+
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertIn(
+            "Step 8 requires a valid vacancy_alignment_summary.v1 artifact.",
+            str(ctx.exception.detail),
+        )
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_alignment_report_status"], "error")
+
     def test_recompute_vacancy_dimensions_uses_persisted_vacancy_blocks_input(self) -> None:
         created = opportunity_store.import_text_opportunity(
             person_id="p-001",
@@ -1048,7 +1185,10 @@ class VacancyV2EndpointsTests(unittest.TestCase):
             )
 
         kwargs = extract_mock.call_args.kwargs
-        self.assertEqual(kwargs["vacancy_blocks_artifact"]["contract_version"], "vacancy_blocks.v1")
+        self.assertEqual(
+            kwargs["vacancy_blocks_artifact"]["flow"]["contract_version"],
+            "vacancy_blocks.v2",
+        )
         self.assertEqual(kwargs["vacancy_blocks_artifact"]["vacancy_id"], opportunity_id)
 
     def test_recompute_vacancy_dimensions_failure_sets_error_status(self) -> None:
@@ -1274,7 +1414,9 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         )
         opportunity_id = created["opportunity_id"]
         dimensions = _sample_vacancy_dimensions(opportunity_id)
-        dimensions["vacancy_dimensions"]["work_conditions"]["salary"]["raw_text"] = "Salario COP 12M a 18M mensual"
+        dimensions["vacancy_dimensions"]["work_conditions"] = [
+            {"raw_text": "Salario COP 12M a 18M mensual"}
+        ]
         updated = opportunity_store.update_opportunity(
             person_id="p-001",
             opportunity_id=opportunity_id,
@@ -1805,6 +1947,104 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         stored = opportunity_store.find_opportunity("p-001", opportunity_id)
         assert stored is not None
         self.assertEqual(stored["vacancy_alignment_summary_status"], "error")
+
+    def test_vacancy_alignment_report_stream_emits_stages_and_message_complete(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Platform Engineer",
+            company="Acme",
+            location="Remote",
+            raw_text="Rol con reporte final de alineacion.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_evidence_analysis_artifact=_sample_vacancy_evidence_analysis(opportunity_id),
+            vacancy_evidence_analysis_status="approved",
+            vacancy_alignment_summary_artifact=_sample_vacancy_alignment_summary(opportunity_id),
+            vacancy_alignment_summary_status="approved",
+        )
+        assert updated is not None
+        report_artifact = _sample_vacancy_alignment_report(opportunity_id)
+
+        with patch.object(
+            opportunities_api,
+            "extract_vacancy_alignment_report",
+            return_value=report_artifact,
+        ):
+            response = asyncio.run(
+                opportunities_api.recompute_vacancy_alignment_report_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        stages = [payload.get("stage", "") for name, payload in events if name == "tool_status"]
+        self.assertIn("vacancy_alignment_report_recompute_started", stages)
+        self.assertIn("vacancy_alignment_report_extracting", stages)
+        self.assertIn("vacancy_alignment_report_saving", stages)
+        complete_payload = next(payload for name, payload in events if name == "message_complete")
+        self.assertEqual(
+            complete_payload["opportunity"]["vacancy_alignment_report_status"],
+            "draft",
+        )
+
+    def test_vacancy_alignment_report_stream_emits_error_and_marks_status(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Platform Engineer",
+            company="Acme",
+            location="Remote",
+            raw_text="Rol con reporte final de alineacion.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_evidence_analysis_artifact=_sample_vacancy_evidence_analysis(opportunity_id),
+            vacancy_evidence_analysis_status="approved",
+            vacancy_alignment_summary_artifact=_sample_vacancy_alignment_summary(opportunity_id),
+            vacancy_alignment_summary_status="approved",
+        )
+        assert updated is not None
+
+        with patch.object(
+            opportunities_api,
+            "extract_vacancy_alignment_report",
+            side_effect=VacancyAlignmentReportBuildError(
+                "Step 8 requires a valid vacancy_alignment_summary.v1 artifact."
+            ),
+        ):
+            response = asyncio.run(
+                opportunities_api.recompute_vacancy_alignment_report_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        names = [name for name, _ in events]
+        self.assertIn("tool_status", names)
+        self.assertIn("error", names)
+        error_payload = next(payload for name, payload in events if name == "error")
+        self.assertIn(
+            "Step 8 requires a valid vacancy_alignment_summary.v1 artifact.",
+            str(error_payload.get("detail", "")),
+        )
+
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_alignment_report_status"], "error")
 
 
 if __name__ == "__main__":

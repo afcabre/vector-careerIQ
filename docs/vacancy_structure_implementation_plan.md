@@ -17,16 +17,20 @@ Traducir el contrato acordado para Paso 2 y Paso 3 a un plan de implementacion e
 ### Paso 2
 ```json
 {
-  "contract_version": "vacancy_blocks.v2",
+  "flow": {
+    "flow_key": "task_vacancy_blocks_extract",
+    "contract_version": "vacancy_blocks.v2",
+    "prompt_version": "2026-04-21T10:00:00-05:00"
+  },
   "vacancy_id": "VAL-123",
   "generated_at": "2026-04-21T10:30:00-05:00",
   "vacancy_blocks": {
+    "about_the_company": [],
     "work_conditions": [],
     "responsibilities": [],
-    "required_criteria": [],
-    "desirable_criteria": [],
+    "required_requirements": [],
+    "desirable_requirements": [],
     "benefits": [],
-    "about_the_company": [],
     "unclassified": []
   },
   "warnings": [],
@@ -237,9 +241,8 @@ Tomar Paso 2 y producir la estructura atomizada final.
 ## TODO de revision posterior al gate
 Estos puntos no cambian el contrato ejecutable actual, pero quedan documentados como backlog de diseno antes de una siguiente iteracion de contrato:
 
-- evaluar una futura variante `vacancy_blocks.v2` con naming alineado a Step 3 sin renombrar la raiz de Paso 2 a `vacancy_dimensions`
-- usar en Paso 2 `required_criteria` / `desirable_criteria` como naming objetivo
-- incorporar `about_the_company` en Paso 2 para capturar senales de empresa y contexto corporativo
+- observar si en una iteracion futura conviene alinear naming de Paso 2 con `required_criteria` / `desirable_criteria`; por ahora el contrato vigente conserva `required_requirements` / `desirable_requirements`
+- `about_the_company` queda incorporado en Paso 2 para capturar senales de empresa y contexto corporativo
 - revisar simplificacion del contrato de Paso 3 para reducir ruido y redundancia en items atomicos
 - revisar si la generacion de `semantic_queries` debe permanecer en Paso 3 o moverse a una fase posterior dedicada
 
@@ -264,7 +267,7 @@ Output esperado:
 
 Direccion propuesta:
 - mantener `work_conditions`, `responsibilities`, `benefits`, `about_the_company` y `unclassified`
-- usar `required_criteria` / `desirable_criteria` como naming objetivo de S2
+- conservar `required_requirements` / `desirable_requirements` como naming vigente de S2
 
 Transformaciones prohibidas:
 - no resumir
@@ -347,14 +350,14 @@ Regla:
 - este paso puede devolver `queries: []` cuando no exista una formulacion util
 - mientras no exista schema runtime dedicado para `S4`, la implementacion inicial puede reutilizar `step3.llm_temperature`
 - decision operativa vigente:
-  - mantener por ahora el control dentro del prompt
-  - no introducir aun filtro programatico por tipologia
-  - observar primero el comportamiento real de `S4` sobre todas las tipologias habilitadas en el contrato
+  - limitar programaticamente retrieval semantico a `responsibilities`, `required_criteria` y `desirable_criteria`
+  - mantener `benefits`, `about_the_company` y `work_conditions` presentes en el contrato pero vacios por defecto
+  - dejar la parametrizacion administrable de tipologias como mejora futura si las corridas reales lo justifican
 
-### TODO posterior a observacion de S4
-- si `S4` genera ruido en corridas reales, evaluar control administrable de tipologias dentro del prompt
-- no mover esa mejora a logica programatica mientras no exista evidencia de necesidad
-- si se adopta despues, empezar por `responsibilities`, `required_criteria` y `desirable_criteria`
+### Nota de mejora aplicada en S4
+- el filtro inicial de tipologias para retrieval ya se aplica en backend
+- `S4` puede recibir o producir grupos deshabilitados, pero el normalizador/servicio los deja vacios antes de persistir
+- la busqueda semantica contra CV queda enfocada en evidencia del candidato y evita ruido de condiciones de oferta, beneficios o contexto corporativo
 
 ### S5. Retrieval de evidencia
 Objetivo:
@@ -430,6 +433,50 @@ Regla:
   - artefacto separado `vacancy_alignment_summary.v1`
   - input: `vacancy_evidence_analysis.v1`
   - output: `overall`, `groups`, `strengths`, `gaps`, `review_items`
+
+### S8. Reporte final con LLM grounded
+Objetivo:
+- producir el analisis final candidato-vacante con tablas legibles, dictamen ejecutivo y recomendaciones accionables
+
+Input esperado:
+- `person_context`
+- `opportunity_context`
+- `vacancy_alignment_summary.v1`
+- `vacancy_evidence_analysis.v1`
+
+Output esperado:
+- `executive_summary`
+- `decision_table`
+- `vacancy_fit_matrix`
+- `candidate_preference_matrix`
+- `strengths`
+- `gaps`
+- `preference_conflicts`
+- `improvement_actions`
+- `alerts_and_conflicts`
+- `actionable_conclusion`
+- `rendered_markdown`
+
+Regla:
+- `S8` debe mirar `S6` para citar evidencia
+- `S8` no recalcula clasificaciones; consume `S7` como resumen y `S6` como respaldo detallado
+- `S8` debe separar:
+  - fit objetivo
+  - fit preferencial
+- `S8` debe producir una salida dual:
+  - JSON estructurado estable
+  - markdown renderizable para lectura inmediata
+- implementacion actual:
+  - contrato ejecutable `vacancy_alignment_report.v1`
+  - servicio `LLM-first`
+  - persistencia propia y endpoints `recompute` / `recompute/stream`
+  - exposicion en Prompt Admin
+  - exposicion en la UI experimental `Vacancy V2`
+
+### Backlog prioritario posterior a observacion de S4
+- parametrizar tipologias habilitadas para retrieval
+- mantener como default actual: `responsibilities`, `required_criteria` y `desirable_criteria`
+- evaluar mas adelante si `benefits`, `about_the_company` o `work_conditions` deben participar bajo configuracion explicita
 
 ## Orden recomendado de ejecucion inmediata
 1. cerrar por documento el contrato minimo de S3

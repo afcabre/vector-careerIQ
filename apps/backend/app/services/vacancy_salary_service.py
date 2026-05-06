@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 import json
+import re
 from typing import Any
 
 from app.services.llm_service import FALLBACK_MESSAGE, complete_prompt
@@ -19,6 +20,11 @@ from app.services.vacancy_v2_runtime_config import get_vacancy_v2_runtime_config
 
 class VacancySalaryNormalizationError(RuntimeError):
     pass
+
+
+_SALARY_SIGNAL_PATTERN = re.compile(
+    r"(?i)(salary|salario|sueldo|remuner|compens|pay|usd|cop|eur|mxn|\$\s*\d)"
+)
 
 
 def _now_iso() -> str:
@@ -66,6 +72,16 @@ def _has_any_salary_content(contract: VacancySalaryNormalizationContract) -> boo
     return bool(salary["raw_text"])
 
 
+def _extract_salary_raw_text(vacancy_dimensions_artifact: dict[str, Any]) -> str:
+    work_conditions = vacancy_dimensions_artifact["vacancy_dimensions"]["work_conditions"]
+    salary_candidates: list[str] = []
+    for item in work_conditions:
+        raw_text = str(item.get("raw_text", "")).strip() if isinstance(item, dict) else ""
+        if raw_text and _SALARY_SIGNAL_PATTERN.search(raw_text):
+            salary_candidates.append(" ".join(raw_text.split()))
+    return " | ".join(salary_candidates)
+
+
 def extract_vacancy_salary_normalization(
     opportunity: dict[str, Any],
     vacancy_dimensions_artifact: dict[str, Any],
@@ -79,10 +95,10 @@ def extract_vacancy_salary_normalization(
     normalized_dimensions = normalize_vacancy_dimensions_contract(vacancy_dimensions_artifact)
     vacancy_id = normalized_dimensions["vacancy_id"] or str(opportunity.get("opportunity_id", "")).strip()
     generated_at = _now_iso()
-    salary_raw_text = normalized_dimensions["vacancy_dimensions"]["work_conditions"]["salary"]["raw_text"]
+    salary_raw_text = _extract_salary_raw_text(normalized_dimensions)
     if not salary_raw_text:
         raise VacancySalaryNormalizationError(
-            "Step 3.1 requires non-empty vacancy_dimensions.work_conditions.salary.raw_text."
+            "Step 3.1 requires at least one salary signal in vacancy_dimensions.work_conditions."
         )
 
     system_prompt = (

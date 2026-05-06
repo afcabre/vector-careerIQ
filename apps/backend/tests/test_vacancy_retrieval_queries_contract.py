@@ -16,7 +16,7 @@ class VacancyRetrievalQueriesContractTests(unittest.TestCase):
         self.assertEqual(contract["vacancy_id"], "")
         self.assertEqual(contract["generated_at"], "")
         self.assertEqual(contract["queries"]["responsibilities"], [])
-        self.assertEqual(contract["queries"]["work_conditions"]["salary"], [])
+        self.assertEqual(contract["queries"]["work_conditions"], [])
 
     def test_normalize_contract_applies_shape_and_deduplicates_queries(self) -> None:
         normalized = normalize_vacancy_retrieval_queries_contract(
@@ -37,17 +37,15 @@ class VacancyRetrievalQueriesContractTests(unittest.TestCase):
                     "desirable_criteria": [],
                     "benefits": [],
                     "about_the_company": [],
-                    "work_conditions": {
-                        "salary": [
-                            {
-                                "item_id": "salary_1",
-                                "item_index": 0,
-                                "group_code": "salary",
-                                "raw_text": " Salario COP 12M a 18M mensual ",
-                                "queries": ["salario mensual cop 12 a 18 millones"],
-                            }
-                        ]
-                    },
+                    "work_conditions": [
+                        {
+                            "item_id": "cond_1",
+                            "item_index": 0,
+                            "group_code": "cond",
+                            "raw_text": " Salario COP 12M a 18M mensual ",
+                            "queries": ["salario mensual cop 12 a 18 millones"],
+                        }
+                    ],
                 },
             }
         )
@@ -55,8 +53,8 @@ class VacancyRetrievalQueriesContractTests(unittest.TestCase):
         self.assertEqual(normalized["vacancy_id"], "VAC-1")
         responsibility = normalized["queries"]["responsibilities"][0]
         self.assertEqual(responsibility["queries"], ["liderar roadmap"])
-        salary = normalized["queries"]["work_conditions"]["salary"][0]
-        self.assertEqual(salary["group_code"], "salary")
+        condition = normalized["queries"]["work_conditions"][0]
+        self.assertEqual(condition["group_code"], "cond")
 
     def test_is_contract_detects_version(self) -> None:
         self.assertTrue(

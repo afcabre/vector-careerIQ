@@ -16,6 +16,7 @@ from app.services.vacancy_blocks_contract import (
 )
 from app.services.vacancy_dimensions_contract import (
     VacancyDimensionsContract,
+    merge_quality_notes,
     normalize_vacancy_dimensions_contract,
 )
 from app.services.vacancy_v2_runtime_config import get_vacancy_v2_runtime_config
@@ -28,6 +29,7 @@ DIMENSIONS_KEYS = (
     "desirable_criteria",
     "benefits",
     "about_the_company",
+    "unclassified",
 )
 
 LEGACY_DIMENSIONS_KEYS = (
@@ -98,6 +100,8 @@ def _has_any_dimensions_content(contract: VacancyDimensionsContract) -> bool:
         return True
     if payload["about_the_company"]:
         return True
+    if payload["unclassified"]:
+        return True
     return _has_non_default_value(payload["work_conditions"])
 
 
@@ -108,7 +112,7 @@ def extract_vacancy_dimensions(
 ) -> VacancyDimensionsContract:
     if not isinstance(vacancy_blocks_artifact, dict) or not is_vacancy_blocks_contract(vacancy_blocks_artifact):
         raise VacancyDimensionsExtractionError(
-            "Step 3 requires a valid vacancy_blocks.v1 artifact."
+            "Step 3 requires a valid vacancy_blocks.v2 artifact."
         )
 
     normalized_blocks = normalize_vacancy_blocks_contract(vacancy_blocks_artifact)
@@ -124,29 +128,28 @@ def extract_vacancy_dimensions(
 
     system_prompt = (
         "You are a vacancy Step 3 normalizer. Return valid JSON only for vacancy_dimensions.v2. "
-        "Any compensation/salary signal must be mapped to work_conditions.salary.raw_text. "
-        "Benefits must not contain compensation or salary statements. "
+        "Keep work_conditions as a flat array of raw_text items. "
+        "Do not classify work_conditions into salary, modality, location, contract_type, or other buckets. "
         "Do not generate ids, category labels, summaries, or semantic_queries. "
-        "If vacancy_blocks.work_conditions has salary/compensation signals, "
-        "work_conditions.salary.raw_text must be non-empty."
+        "Do not invent semantic defaults. Preserve only information present in vacancy_blocks."
     )
     fallback_user_prompt = (
-        "Transform vacancy_blocks.v1 into vacancy_dimensions.v2 and respond with valid JSON only. "
-        "Root key allowed: vacancy_dimensions. "
+        "Transform vacancy_blocks.v2 into vacancy_dimensions.v2 and respond with valid JSON only. "
+        "Root keys allowed: vacancy_dimensions, warnings, coverage_notes. "
         "Allowed keys inside vacancy_dimensions: work_conditions, responsibilities, required_criteria, "
-        "desirable_criteria, benefits, about_the_company. "
-        "Inside work_conditions use only: salary, modality, location, contract_type, other_conditions. "
-        "salary keeps only raw_text in this step. modality and contract_type use value plus raw_text. "
-        "location uses places plus raw_text. other_conditions is a list of objects with raw_text only. "
-        "All array items outside work_conditions must be objects with raw_text only. "
-        "Map salary/compensation exclusively to work_conditions.salary and keep benefits for non-compensation perks. "
-        "When input includes salary/compensation in work_conditions, salary.raw_text must not be empty. "
+        "desirable_criteria, benefits, about_the_company, unclassified. "
+        "warnings and coverage_notes must stay at root level, never inside vacancy_dimensions. "
+        "work_conditions must be a list of objects with raw_text only. "
+        "All array items must be objects with raw_text only. "
+        "Keep salary/compensation text in work_conditions as raw_text; Step 3.1 will normalize salary later. "
+        "Keep benefits for non-compensation perks. "
+        "If information cannot be transformed without loss, preserve it in unclassified and explain in coverage_notes. "
         "Do not invent keys and do not embed vacancy_blocks. "
         f"Vacancy title: {opportunity.get('title', '')}. "
         f"Company: {opportunity.get('company', '')}. "
         f"Location: {opportunity.get('location', '')}. "
         f"URL: {opportunity.get('source_url', '')}. "
-        f"Input vacancy_blocks.v1: {blocks_json}"
+        f"Input vacancy_blocks.v2: {blocks_json}"
     )
     user_prompt = build_prompt_text(
         flow_key=FLOW_TASK_VACANCY_DIMENSIONS_EXTRACT,
@@ -187,6 +190,14 @@ def extract_vacancy_dimensions(
     normalized = normalize_vacancy_dimensions_contract(candidate)
     normalized["vacancy_id"] = vacancy_id
     normalized["generated_at"] = generated_at
+    normalized["warnings"] = merge_quality_notes(
+        normalized_blocks.get("warnings", []),
+        normalized.get("warnings", []),
+    )
+    normalized["coverage_notes"] = merge_quality_notes(
+        normalized_blocks.get("coverage_notes", []),
+        normalized.get("coverage_notes", []),
+    )
 
     if _has_any_dimensions_content(normalized):
         return normalized

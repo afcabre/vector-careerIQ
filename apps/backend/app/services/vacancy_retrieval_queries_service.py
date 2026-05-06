@@ -29,6 +29,19 @@ class VacancyRetrievalQueriesExtractionError(RuntimeError):
     pass
 
 
+RETRIEVAL_ENABLED_GROUPS = (
+    "responsibilities",
+    "required_criteria",
+    "desirable_criteria",
+)
+
+RETRIEVAL_DISABLED_GROUPS = (
+    "benefits",
+    "about_the_company",
+    "work_conditions",
+)
+
+
 def _now_iso() -> str:
     return datetime.now(tz=UTC).isoformat()
 
@@ -61,20 +74,12 @@ def _contract_candidate_from_llm(parsed: dict[str, object]) -> dict[str, object]
 
 def _has_any_queries(contract: VacancyRetrievalQueriesContract) -> bool:
     payload = contract["queries"]
-    return any(
-        [
-            bool(payload["responsibilities"]),
-            bool(payload["required_criteria"]),
-            bool(payload["desirable_criteria"]),
-            bool(payload["benefits"]),
-            bool(payload["about_the_company"]),
-            bool(payload["work_conditions"]["salary"]),
-            bool(payload["work_conditions"]["modality"]),
-            bool(payload["work_conditions"]["location"]),
-            bool(payload["work_conditions"]["contract_type"]),
-            bool(payload["work_conditions"]["other_conditions"]),
-        ]
-    )
+    return any(bool(payload[group]) for group in RETRIEVAL_ENABLED_GROUPS)
+
+
+def _clear_disabled_retrieval_groups(contract: VacancyRetrievalQueriesContract) -> None:
+    for group in RETRIEVAL_DISABLED_GROUPS:
+        contract["queries"][group] = []
 
 
 def extract_vacancy_retrieval_queries(
@@ -112,7 +117,9 @@ def extract_vacancy_retrieval_queries(
         "Generate retrieval queries and respond with valid JSON only. "
         "Root key allowed: queries. "
         "Allowed keys inside queries: responsibilities, required_criteria, desirable_criteria, benefits, about_the_company, work_conditions. "
-        "Inside work_conditions use only: salary, modality, location, contract_type, other_conditions. "
+        "work_conditions must be a flat list of query items, not an object with subcategories. "
+        "Generate non-empty queries only for responsibilities, required_criteria, and desirable_criteria. "
+        "Keep benefits, about_the_company, and work_conditions present but empty. "
         "Each query item must include exactly: item_id, item_index, group_code, raw_text, queries. "
         "Use the metadata already present in the input items. Do not invent new ids or group codes. "
         "Queries should be phrased to retrieve evidence from the CV, not to summarize the vacancy. "
@@ -166,6 +173,7 @@ def extract_vacancy_retrieval_queries(
     normalized = normalize_vacancy_retrieval_queries_contract(candidate)
     normalized["vacancy_id"] = vacancy_id
     normalized["generated_at"] = generated_at
+    _clear_disabled_retrieval_groups(normalized)
 
     if _has_any_queries(normalized):
         return normalized

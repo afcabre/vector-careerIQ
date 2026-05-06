@@ -14,7 +14,7 @@ class VacancyRetrievalEvidenceContractTests(unittest.TestCase):
         self.assertEqual(contract["contract_version"], CONTRACT_VERSION_VACANCY_RETRIEVAL_EVIDENCE)
         self.assertEqual(contract["vacancy_id"], "")
         self.assertEqual(contract["evidence"]["responsibilities"], [])
-        self.assertEqual(contract["evidence"]["work_conditions"]["salary"], [])
+        self.assertEqual(contract["evidence"]["work_conditions"], [])
 
     def test_normalize_contract_preserves_matches(self) -> None:
         normalized = normalize_vacancy_retrieval_evidence_contract(

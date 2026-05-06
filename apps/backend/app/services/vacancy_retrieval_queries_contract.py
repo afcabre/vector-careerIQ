@@ -14,21 +14,13 @@ class RetrievalQueryItem(TypedDict):
     queries: list[str]
 
 
-class WorkConditionQueriesPayload(TypedDict):
-    salary: list[RetrievalQueryItem]
-    modality: list[RetrievalQueryItem]
-    location: list[RetrievalQueryItem]
-    contract_type: list[RetrievalQueryItem]
-    other_conditions: list[RetrievalQueryItem]
-
-
 class VacancyRetrievalQueriesPayload(TypedDict):
     responsibilities: list[RetrievalQueryItem]
     required_criteria: list[RetrievalQueryItem]
     desirable_criteria: list[RetrievalQueryItem]
     benefits: list[RetrievalQueryItem]
     about_the_company: list[RetrievalQueryItem]
-    work_conditions: WorkConditionQueriesPayload
+    work_conditions: list[RetrievalQueryItem]
 
 
 class VacancyRetrievalQueriesContract(TypedDict):
@@ -113,16 +105,6 @@ def _normalize_query_list(raw: Any) -> list[RetrievalQueryItem]:
     return items
 
 
-def _empty_work_conditions_queries() -> WorkConditionQueriesPayload:
-    return {
-        "salary": [],
-        "modality": [],
-        "location": [],
-        "contract_type": [],
-        "other_conditions": [],
-    }
-
-
 def empty_vacancy_retrieval_queries_contract() -> VacancyRetrievalQueriesContract:
     return {
         "contract_version": CONTRACT_VERSION_VACANCY_RETRIEVAL_QUERIES,
@@ -134,7 +116,7 @@ def empty_vacancy_retrieval_queries_contract() -> VacancyRetrievalQueriesContrac
             "desirable_criteria": [],
             "benefits": [],
             "about_the_company": [],
-            "work_conditions": _empty_work_conditions_queries(),
+            "work_conditions": [],
         },
     }
 
@@ -147,20 +129,22 @@ def normalize_vacancy_retrieval_queries_contract(raw: Any) -> VacancyRetrievalQu
 
     payload = source.get("queries")
     payload_source = payload if isinstance(payload, dict) else {}
-    work_conditions = payload_source.get("work_conditions") if isinstance(payload_source.get("work_conditions"), dict) else {}
+    raw_work_conditions = payload_source.get("work_conditions")
+    if isinstance(raw_work_conditions, dict):
+        work_conditions = []
+        for key in ("salary", "modality", "location", "contract_type", "other_conditions"):
+            value = raw_work_conditions.get(key)
+            if isinstance(value, list):
+                work_conditions.extend(value)
+    else:
+        work_conditions = raw_work_conditions
     normalized["queries"] = {
         "responsibilities": _normalize_query_list(payload_source.get("responsibilities")),
         "required_criteria": _normalize_query_list(payload_source.get("required_criteria")),
         "desirable_criteria": _normalize_query_list(payload_source.get("desirable_criteria")),
         "benefits": _normalize_query_list(payload_source.get("benefits")),
         "about_the_company": _normalize_query_list(payload_source.get("about_the_company")),
-        "work_conditions": {
-            "salary": _normalize_query_list(work_conditions.get("salary")),
-            "modality": _normalize_query_list(work_conditions.get("modality")),
-            "location": _normalize_query_list(work_conditions.get("location")),
-            "contract_type": _normalize_query_list(work_conditions.get("contract_type")),
-            "other_conditions": _normalize_query_list(work_conditions.get("other_conditions")),
-        },
+        "work_conditions": _normalize_query_list(work_conditions),
     }
     return normalized
 

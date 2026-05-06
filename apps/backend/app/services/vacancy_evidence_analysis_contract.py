@@ -62,21 +62,13 @@ class EvidenceAnalysisItem(TypedDict):
     discarded_matches: list[DiscardedEvidenceMatch]
 
 
-class WorkConditionEvidenceAnalysisPayload(TypedDict):
-    salary: list[EvidenceAnalysisItem]
-    modality: list[EvidenceAnalysisItem]
-    location: list[EvidenceAnalysisItem]
-    contract_type: list[EvidenceAnalysisItem]
-    other_conditions: list[EvidenceAnalysisItem]
-
-
 class VacancyEvidenceAnalysisPayload(TypedDict):
     responsibilities: list[EvidenceAnalysisItem]
     required_criteria: list[EvidenceAnalysisItem]
     desirable_criteria: list[EvidenceAnalysisItem]
     benefits: list[EvidenceAnalysisItem]
     about_the_company: list[EvidenceAnalysisItem]
-    work_conditions: WorkConditionEvidenceAnalysisPayload
+    work_conditions: list[EvidenceAnalysisItem]
 
 
 class VacancyEvidenceAnalysisContract(TypedDict):
@@ -296,16 +288,6 @@ def _normalize_analysis_list(raw: Any) -> list[EvidenceAnalysisItem]:
     return items
 
 
-def _empty_work_conditions_analysis() -> WorkConditionEvidenceAnalysisPayload:
-    return {
-        "salary": [],
-        "modality": [],
-        "location": [],
-        "contract_type": [],
-        "other_conditions": [],
-    }
-
-
 def empty_vacancy_evidence_analysis_contract() -> VacancyEvidenceAnalysisContract:
     return {
         "contract_version": CONTRACT_VERSION_VACANCY_EVIDENCE_ANALYSIS,
@@ -322,7 +304,7 @@ def empty_vacancy_evidence_analysis_contract() -> VacancyEvidenceAnalysisContrac
             "desirable_criteria": [],
             "benefits": [],
             "about_the_company": [],
-            "work_conditions": _empty_work_conditions_analysis(),
+            "work_conditions": [],
         },
     }
 
@@ -342,24 +324,22 @@ def normalize_vacancy_evidence_analysis_contract(raw: Any) -> VacancyEvidenceAna
 
     payload = source.get("analysis")
     payload_source = payload if isinstance(payload, dict) else {}
-    work_conditions = (
-        payload_source.get("work_conditions")
-        if isinstance(payload_source.get("work_conditions"), dict)
-        else {}
-    )
+    raw_work_conditions = payload_source.get("work_conditions")
+    if isinstance(raw_work_conditions, dict):
+        work_conditions = []
+        for key in ("salary", "modality", "location", "contract_type", "other_conditions"):
+            value = raw_work_conditions.get(key)
+            if isinstance(value, list):
+                work_conditions.extend(value)
+    else:
+        work_conditions = raw_work_conditions
     normalized["analysis"] = {
         "responsibilities": _normalize_analysis_list(payload_source.get("responsibilities")),
         "required_criteria": _normalize_analysis_list(payload_source.get("required_criteria")),
         "desirable_criteria": _normalize_analysis_list(payload_source.get("desirable_criteria")),
         "benefits": _normalize_analysis_list(payload_source.get("benefits")),
         "about_the_company": _normalize_analysis_list(payload_source.get("about_the_company")),
-        "work_conditions": {
-            "salary": _normalize_analysis_list(work_conditions.get("salary")),
-            "modality": _normalize_analysis_list(work_conditions.get("modality")),
-            "location": _normalize_analysis_list(work_conditions.get("location")),
-            "contract_type": _normalize_analysis_list(work_conditions.get("contract_type")),
-            "other_conditions": _normalize_analysis_list(work_conditions.get("other_conditions")),
-        },
+        "work_conditions": _normalize_analysis_list(work_conditions),
     }
     return normalized
 

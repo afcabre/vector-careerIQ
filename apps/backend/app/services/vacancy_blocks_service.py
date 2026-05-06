@@ -9,7 +9,7 @@ from app.services.llm_service import FALLBACK_MESSAGE, complete_prompt
 from app.services.opportunity_store import OpportunityRecord
 from app.services.prompt_config_store import (
     FLOW_TASK_VACANCY_BLOCKS_EXTRACT,
-    build_prompt_text,
+    build_prompt_text_with_meta,
 )
 from app.services.vacancy_blocks_contract import (
     VACANCY_BLOCK_KEYS,
@@ -53,8 +53,14 @@ def _with_metadata(
     *,
     vacancy_id: str,
     generated_at: str,
+    prompt_version: str,
 ) -> VacancyBlocksContract:
     normalized = normalize_vacancy_blocks_contract(raw_contract)
+    normalized["flow"] = {
+        "flow_key": FLOW_TASK_VACANCY_BLOCKS_EXTRACT,
+        "contract_version": normalized["flow"]["contract_version"],
+        "prompt_version": prompt_version,
+    }
     normalized["vacancy_id"] = vacancy_id
     normalized["generated_at"] = generated_at
     return normalized
@@ -92,15 +98,17 @@ def extract_vacancy_blocks(
 
     system_prompt = (
         "You are a vacancy Step 2 classifier. "
-        "Return valid JSON only, preserving the raw meaning of fragments. "
+        "Return valid JSON only for vacancy_blocks.v2, preserving the raw meaning of fragments. "
         "Compensation signals (salary, pay, remuneration, compensation range) "
         "must be classified in work_conditions and never in benefits."
     )
     fallback_user_prompt = (
-        "Classify this vacancy into vacancy_blocks.v1 and respond with valid JSON only. "
+        "Classify this vacancy into vacancy_blocks.v2 and respond with valid JSON only. "
         "Root keys allowed: vacancy_blocks, warnings, coverage_notes. "
-        "vacancy_blocks keys allowed: work_conditions, responsibilities, "
+        "Do not write metadata; backend will add flow, vacancy_id, and generated_at. "
+        "vacancy_blocks keys allowed: about_the_company, work_conditions, responsibilities, "
         "required_requirements, desirable_requirements, benefits, unclassified. "
+        "Use about_the_company only for company description, industry, mission, scale, context, or employer signals. "
         "Salary/compensation must always be in work_conditions and never in benefits. "
         "Rules: classify and clean text; do not summarize; do not atomize; do not invent keys. "
         f"Vacancy title: {opportunity.get('title', '')}. "
@@ -109,7 +117,7 @@ def extract_vacancy_blocks(
         f"URL: {opportunity.get('source_url', '')}. "
         f"Description: {raw_text}"
     )
-    user_prompt = build_prompt_text(
+    user_prompt, prompt_meta = build_prompt_text_with_meta(
         flow_key=FLOW_TASK_VACANCY_BLOCKS_EXTRACT,
         context={
             "opportunity_title": str(opportunity.get("title", "")).strip(),
@@ -120,6 +128,7 @@ def extract_vacancy_blocks(
         },
         fallback=fallback_user_prompt,
     )
+    prompt_version = str(prompt_meta.get("updated_at", "")).strip() or "unknown"
 
     runtime_config = get_vacancy_v2_runtime_config(settings)
     llm_temperature = float(runtime_config["step2"]["llm_temperature"])
@@ -145,7 +154,12 @@ def extract_vacancy_blocks(
         )
 
     candidate = _contract_candidate_from_llm(parsed)
-    normalized = _with_metadata(candidate, vacancy_id=vacancy_id, generated_at=generated_at)
+    normalized = _with_metadata(
+        candidate,
+        vacancy_id=vacancy_id,
+        generated_at=generated_at,
+        prompt_version=prompt_version,
+    )
     if _has_any_classified_fragment(normalized):
         return normalized
 

@@ -26,9 +26,7 @@ class VacancyDimensionsEnrichedContractTests(unittest.TestCase):
                 "vacancy_id": "VAC-1",
                 "generated_at": "2026-04-23T10:31:05Z",
                 "vacancy_dimensions": {
-                    "work_conditions": {
-                        "other_conditions": [{"raw_text": "Disponibilidad para viajar"}],
-                    },
+                    "work_conditions": [{"raw_text": "Disponibilidad para viajar"}],
                     "responsibilities": [{"raw_text": "Liderar equipo de desarrollo"}],
                     "required_criteria": [{"raw_text": "Experiencia con Python"}],
                     "benefits": [{"raw_text": "Seguro de salud"}],
@@ -41,7 +39,7 @@ class VacancyDimensionsEnrichedContractTests(unittest.TestCase):
         self.assertEqual(responsibility["item_index"], 0)
         self.assertTrue(responsibility["item_id"].startswith("resp_"))
 
-        other_condition = normalized["vacancy_dimensions"]["work_conditions"]["other_conditions"][0]
+        other_condition = normalized["vacancy_dimensions"]["work_conditions"][0]
         self.assertEqual(other_condition["group_code"], "cond")
         self.assertEqual(other_condition["item_index"], 0)
 

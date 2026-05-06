@@ -51,56 +51,60 @@ Estado:
 - no implementado
 - no cambia contratos ejecutables actuales
 
-Recomendacion actual:
-- si conviene normalizar el vocabulario entre Paso 2 y Paso 3
-- no conviene renombrar la raiz de Paso 2 a `vacancy_dimensions`
-- si conviene evaluar una clave `about_the_company` en Paso 2
-- antes de elegir `required_competencies` para Paso 2, cerrar si el artefacto intermedio modela `competencies` o `criteria`
+Decision vigente:
+- Paso 2 usa `vacancy_blocks.v2`
+- no se renombra la raiz de Paso 2 a `vacancy_dimensions`
+- Paso 2 incorpora `about_the_company`
+- Paso 2 conserva `required_requirements` y `desirable_requirements` para mantener continuidad operativa con el naming ya usado en `vacancy_blocks`
+- `flow`, `vacancy_id` y `generated_at` son metadata inyectada/corregida por backend; el prompt no debe generarla
 
-Propuesta defendida por ahora:
+Contrato vigente:
 ```json
 {
-  "contract_version": "vacancy_blocks.v2",
+  "flow": {
+    "flow_key": "task_vacancy_blocks_extract",
+    "contract_version": "vacancy_blocks.v2",
+    "prompt_version": "2026-04-21T10:00:00-05:00"
+  },
   "vacancy_id": "VAL-123",
   "generated_at": "2026-04-21T10:30:00-05:00",
   "vacancy_blocks": {
+    "about_the_company": [],
     "work_conditions": [],
     "responsibilities": [],
-    "required_criteria": [],
-    "desirable_criteria": [],
+    "required_requirements": [],
+    "desirable_requirements": [],
     "benefits": [],
-    "about_the_company": [],
     "unclassified": []
-  }
+  },
+  "warnings": [],
+  "coverage_notes": []
 }
 ```
 
 Razon:
 - mantiene separado el artefacto intermedio de Paso 2 respecto al artefacto final `vacancy_dimensions.v1`
-- reduce friccion cognitiva entre pasos sin hacer que ambos parezcan el mismo contrato
-- `required_criteria` y `desirable_criteria` describen mejor el contenido amplio de Paso 2 que `required_competencies`
+- conserva continuidad con consumidores y datos operativos existentes que ya usan `required_requirements` y `desirable_requirements`
 - `about_the_company` permite recoger senales de empresa, sector, posicionamiento y contexto corporativo que hoy pueden perderse o caer en `unclassified`
+- `prompt_version` queda trazado contra el `updated_at` efectivo del Prompt Admin para `task_vacancy_blocks_extract`
 
-Impacto esperado si se adopta luego:
-- actualizar contrato y normalizador de Paso 2
-- actualizar prompt y parser de Step 2
-- actualizar fixtures y pruebas de Step 2, Step 3, endpoints y gate
-- actualizar documentacion normativa y operativa
-- definir estrategia de compatibilidad de lectura para artefactos ya persistidos en Firestore
-
-## Contrato propuesto para Paso 2
+## Contrato vigente para Paso 2
 ```json
 {
-  "contract_version": "vacancy_blocks.v2",
+  "flow": {
+    "flow_key": "task_vacancy_blocks_extract",
+    "contract_version": "vacancy_blocks.v2",
+    "prompt_version": "2026-04-21T10:00:00-05:00"
+  },
   "vacancy_id": "VAL-123",
   "generated_at": "2026-04-21T10:30:00-05:00",
   "vacancy_blocks": {
+    "about_the_company": [],
     "work_conditions": [],
     "responsibilities": [],
-    "required_criteria": [],
-    "desirable_criteria": [],
+    "required_requirements": [],
+    "desirable_requirements": [],
     "benefits": [],
-    "about_the_company": [],
     "unclassified": []
   },
   "warnings": [],
@@ -138,8 +142,8 @@ Ejemplo:
 - `Experiencia en metodologias agiles y certificacion Scrum deseable`
 
 Salida esperada:
-- fragmento 1 a `required_criteria`: `Experiencia en metodologias agiles`
-- fragmento 2 a `desirable_criteria`: `Certificacion Scrum deseable`
+- fragmento 1 a `required_requirements`: `Experiencia en metodologias agiles`
+- fragmento 2 a `desirable_requirements`: `Certificacion Scrum deseable`
 
 Principio:
 - separar cuando haya dos requisitos semanticamente distinguibles
@@ -167,7 +171,7 @@ Ejemplos que no van a `work_conditions`:
 
 Regla practica:
 - si responde a `bajo que condiciones se ejerce o se puede ejercer este trabajo`, va a `work_conditions`
-- si responde a `que sabe, tiene o demuestra el candidato como perfil profesional`, va a `required_criteria` o `desirable_criteria`
+- si responde a `que sabe, tiene o demuestra el candidato como perfil profesional`, va a `required_requirements` o `desirable_requirements` en Paso 2
 
 ## Regla de `about_the_company`
 `about_the_company` debe capturar contexto corporativo que ayude a interpretar la vacante, pero que no sea responsabilidad, criterio de candidato ni condicion operativa del puesto.
@@ -557,24 +561,22 @@ Regla:
 - si un item no amerita query util, puede devolver `queries: []`
 - mientras no exista schema runtime dedicado para `S4`, la implementacion inicial puede reutilizar el `llm_temperature` de `step3`
 - decision operativa vigente:
-  - no hay filtro programatico previo al LLM por tipologia
-  - las tipologias habilitadas se controlan hoy desde el contrato y el prompt
-  - `work_conditions` permanece permitido dentro de `S4` y puede producir queries para `salary`, `modality`, `location`, `contract_type` y `other_conditions`
+  - retrieval semantico queda limitado por backend a `responsibilities`, `required_criteria` y `desirable_criteria`
+  - `benefits`, `about_the_company` y `work_conditions` permanecen presentes en el contrato, pero se vacian por defecto antes de persistir
+  - salario y condiciones laborales se tratan por artefactos/analisis separados, no por busqueda semantica contra CV
 
-### TODO posterior de mejora posible para S4
+### Nota de mejora aplicada en S4
 Estado:
-- `documentado`
-- no implementado
-- sin cambios sobre la ejecucion actual
+- `implementado`
+- backend aplica filtro programatico de tipologias
+- Prompt Admin refleja el default operativo
 
-Recomendacion:
-- observar primero corridas reales de `S4` con el prompt actual
-- si aparece demasiado ruido, evaluar luego control administrable por tipologia dentro del prompt
-- no mover esa mejora a logica programatica mientras no exista evidencia clara de necesidad
-
-Direccion sugerida si mas adelante se habilita ese control:
+Default vigente:
 - empezar solo con `responsibilities`, `required_criteria` y `desirable_criteria`
 - dejar `benefits`, `about_the_company` y `work_conditions` fuera por defecto
+
+Mejora futura posible:
+- parametrizar en administracion que tipologias pasan a retrieval en `S4`
 - conservar trazabilidad de la configuracion activa usada por cada corrida
 
 ## Paso 5 propuesto para retrieval de evidencia
@@ -795,6 +797,124 @@ Reglas:
 - `S7` resume solo grupos primarios: `responsibilities`, `required_criteria`, `desirable_criteria`
 - `S7` no copia `accepted_matches` ni `discarded_matches` completos
 - `S8` debe consumir `S7` como mapa resumido y `S6` como respaldo detallado
+
+## Paso 8 implementado para reporte final con LLM
+Objetivo:
+- producir el analisis final candidato-vacante con tablas ejecutivas, dictamen y recomendaciones accionables
+
+Artefacto:
+- `vacancy_alignment_report.v1`
+
+Input:
+- `person_context`
+- `opportunity_context`
+- `vacancy_alignment_summary.v1`
+- `vacancy_evidence_analysis.v1`
+
+Output esperado:
+```json
+{
+  "contract_version": "vacancy_alignment_report.v1",
+  "vacancy_id": "VAL-123",
+  "person_id": "p-001",
+  "generated_at": "2026-04-24T18:00:00Z",
+  "source_artifacts": {
+    "alignment_summary_version": "vacancy_alignment_summary.v1",
+    "evidence_analysis_version": "vacancy_evidence_analysis.v1"
+  },
+  "report": {
+    "executive_summary": "",
+    "decision_table": {
+      "alineacion_general": {
+        "resultado": "",
+        "descripcion_corta": ""
+      },
+      "fit_objetivo": {
+        "resultado": "",
+        "descripcion_corta": ""
+      },
+      "fit_preferencial": {
+        "resultado": "",
+        "descripcion_corta": ""
+      },
+      "requisitos_criticos_cumplidos": {
+        "resultado": "",
+        "descripcion_corta": ""
+      },
+      "bloqueadores": {
+        "resultado": "",
+        "descripcion_corta": ""
+      },
+      "alertas_relevantes": {
+        "resultado": "",
+        "descripcion_corta": ""
+      },
+      "potencial_mejora_fit": {
+        "resultado": "",
+        "descripcion_corta": ""
+      },
+      "recomendacion": {
+        "resultado": "",
+        "descripcion_corta": ""
+      }
+    },
+    "vacancy_fit_matrix": [],
+    "candidate_preference_matrix": [],
+    "fit_answer": "",
+    "strengths": [],
+    "gaps": [],
+    "preference_conflicts": [],
+    "improvement_actions": {
+      "reinforce_in_cv_or_profile": [],
+      "validate_with_recruiter": [],
+      "application_narrative": []
+    },
+    "alerts_and_conflicts": [],
+    "actionable_conclusion": {
+      "final_decision": "",
+      "main_reason": "",
+      "recommended_next_step": ""
+    }
+  },
+  "rendered_markdown": ""
+}
+```
+
+Reglas:
+- `S8` debe mirar `S6` para citar evidencia y no solo `S7`
+- `S8` no recalcula scores ni buckets; consume la clasificacion ya producida por `S6` y `S7`
+- `S8` debe distinguir explicitamente entre:
+  - `no parece tenerlo`
+  - `no esta demostrado`
+  - `la vacante no lo especifica`
+- `S8` debe separar:
+  - ajuste frente a la vacante
+  - ajuste frente a preferencias y condiciones del candidato
+- `S8` debe usar taxonomia visual fija:
+  - `🟢 Cumple`
+  - `🟡 Parcial`
+  - `⚪ Sin informacion`
+  - `🔴 En conflicto`
+  - `🔵 Deseable no evidenciado`
+- `S8` debe devolver:
+  - estructura JSON estable para UI y control
+  - `rendered_markdown` para lectura/render rapido
+- implementacion actual:
+  - contrato ejecutable `vacancy_alignment_report.v1`
+  - servicio `LLM-first`
+  - persistencia propia en oportunidad
+  - endpoints `recompute` / `recompute/stream`
+  - UI experimental con preview de `rendered_markdown`
+
+## TODO de backlog prioritario posterior a observacion de S4
+Estado:
+- `documentado`
+- parcialmente implementado como default programatico
+
+Mejora propuesta:
+- parametrizar en administracion que tipologias pasan a retrieval en `S4`
+- default ya aplicado: `responsibilities`, `required_criteria`, `desirable_criteria`
+- grupos deshabilitados por defecto: `work_conditions`, `benefits`, `about_the_company`
 
 ## Ambiguedades abiertas de Paso 3
 - falta confirmar si `vacancy_dimensions.v2` debe generarse en un solo paso logico con `Paso 3 + Paso 3.1` o si ambos artefactos deben persistirse por separado

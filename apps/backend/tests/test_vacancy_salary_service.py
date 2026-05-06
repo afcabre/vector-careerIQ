@@ -26,19 +26,16 @@ def _vacancy_dimensions(*, salary_raw_text: str = "Salario COP 12M a 18M mensual
         "vacancy_id": "o-salary-001",
         "generated_at": "2026-04-23T10:31:05Z",
         "vacancy_dimensions": {
-            "work_conditions": {
-                "salary": {"raw_text": salary_raw_text},
-                "modality": {"value": "Hibrido", "raw_text": "Hibrido en Bogota"},
-                "location": {"places": ["Bogota"], "raw_text": "Bogota"},
-                "contract_type": {"value": "Indefinido", "raw_text": "Contrato indefinido"},
-                "other_conditions": [],
-            },
+            "work_conditions": ([{"raw_text": salary_raw_text}] if salary_raw_text else []),
             "responsibilities": [],
             "required_criteria": [],
             "desirable_criteria": [],
             "benefits": [],
             "about_the_company": [],
+            "unclassified": [],
         },
+        "warnings": [],
+        "coverage_notes": [],
     }
 
 

@@ -20,15 +20,16 @@ class VacancyDimensionsContractTests(unittest.TestCase):
         self.assertEqual(contract["contract_version"], CONTRACT_VERSION_VACANCY_DIMENSIONS)
         self.assertEqual(contract["vacancy_id"], "")
         self.assertEqual(contract["generated_at"], "")
+        self.assertEqual(contract["warnings"], [])
+        self.assertEqual(contract["coverage_notes"], [])
         dimensions = contract["vacancy_dimensions"]
         self.assertEqual(dimensions["responsibilities"], [])
         self.assertEqual(dimensions["required_criteria"], [])
         self.assertEqual(dimensions["desirable_criteria"], [])
         self.assertEqual(dimensions["benefits"], [])
         self.assertEqual(dimensions["about_the_company"], [])
-        self.assertEqual(dimensions["work_conditions"]["salary"]["raw_text"], "")
-        self.assertEqual(dimensions["work_conditions"]["location"]["places"], [])
-        self.assertEqual(dimensions["work_conditions"]["other_conditions"], [])
+        self.assertEqual(dimensions["unclassified"], [])
+        self.assertEqual(dimensions["work_conditions"], [])
 
     def test_normalize_contract_applies_v2_shape_and_keeps_legacy_alias_compatibility(self) -> None:
         normalized = normalize_vacancy_dimensions_contract(
@@ -88,7 +89,14 @@ class VacancyDimensionsContractTests(unittest.TestCase):
                     "about_the_company": [
                         {"raw_text": " Empresa lider en retail regional "}
                     ],
+                    "unclassified": [
+                        " Fragmento ambiguo ",
+                    ],
+                    "warnings": [" debe ignorarse dentro del payload "],
+                    "coverage_notes": [" debe ignorarse dentro del payload "],
                 },
+                "warnings": [" Nota ambigua ", "nota ambigua"],
+                "coverage_notes": [" Cobertura parcial "],
             }
         )
 
@@ -96,13 +104,16 @@ class VacancyDimensionsContractTests(unittest.TestCase):
         self.assertEqual(normalized["generated_at"], "2026-04-21T16:05:00Z")
 
         work_conditions = normalized["vacancy_dimensions"]["work_conditions"]
-        self.assertEqual(work_conditions["salary"]["raw_text"], "Salario entre 12 y 18 millones")
-        self.assertEqual(work_conditions["modality"]["value"], "Hibrido")
-        self.assertEqual(work_conditions["location"]["places"], ["Bogota"])
-        self.assertEqual(work_conditions["contract_type"]["value"], "Indefinido")
         self.assertEqual(
-            work_conditions["other_conditions"],
-            [{"raw_text": "Horario de oficina"}, {"raw_text": "Viajes ocasionales"}],
+            work_conditions,
+            [
+                {"raw_text": "Salario entre 12 y 18 millones"},
+                {"raw_text": "Hibrido en Bogota"},
+                {"raw_text": "Bogota"},
+                {"raw_text": "Contrato indefinido"},
+                {"raw_text": "Horario de oficina"},
+                {"raw_text": "Viajes ocasionales"},
+            ],
         )
 
         responsibilities = normalized["vacancy_dimensions"]["responsibilities"]
@@ -116,6 +127,15 @@ class VacancyDimensionsContractTests(unittest.TestCase):
 
         about = normalized["vacancy_dimensions"]["about_the_company"]
         self.assertEqual(about, [{"raw_text": "Empresa lider en retail regional"}])
+
+        self.assertEqual(
+            normalized["vacancy_dimensions"]["unclassified"],
+            [{"raw_text": "Fragmento ambiguo"}],
+        )
+        self.assertEqual(normalized["warnings"], ["Nota ambigua"])
+        self.assertEqual(normalized["coverage_notes"], ["Cobertura parcial"])
+        self.assertNotIn("warnings", normalized["vacancy_dimensions"])
+        self.assertNotIn("coverage_notes", normalized["vacancy_dimensions"])
 
     def test_salary_normalization_preserves_structured_fields_for_s3_1(self) -> None:
         self.assertEqual(
@@ -151,12 +171,10 @@ class VacancyDimensionsContractTests(unittest.TestCase):
                 "vacancy_id": "VAC-100",
                 "generated_at": "2026-04-23T10:31:05Z",
                 "vacancy_dimensions": {
-                    "work_conditions": {
-                        "other_conditions": [
-                            {"raw_text": "Disponibilidad para viajar"},
-                            {"raw_text": "Disponibilidad para viajar"},
-                        ]
-                    },
+                    "work_conditions": [
+                        {"raw_text": "Disponibilidad para viajar"},
+                        {"raw_text": "Disponibilidad para viajar"},
+                    ],
                     "responsibilities": [
                         {"raw_text": "Liderar equipo de desarrollo"},
                     ],
@@ -176,13 +194,13 @@ class VacancyDimensionsContractTests(unittest.TestCase):
         enriched = enrich_vacancy_dimensions_items(contract)
         responsibilities = enriched["vacancy_dimensions"]["responsibilities"]
         required = enriched["vacancy_dimensions"]["required_criteria"]
-        other_conditions = enriched["vacancy_dimensions"]["work_conditions"]["other_conditions"]
+        work_conditions = enriched["vacancy_dimensions"]["work_conditions"]
 
         self.assertEqual(responsibilities[0]["group_code"], "resp")
         self.assertEqual(responsibilities[0]["item_index"], 0)
         self.assertEqual(required[0]["group_code"], "req")
-        self.assertEqual(other_conditions[0]["group_code"], "cond")
-        self.assertEqual(len(other_conditions), 1)
+        self.assertEqual(work_conditions[0]["group_code"], "cond")
+        self.assertEqual(len(work_conditions), 1)
         self.assertEqual(
             responsibilities[0]["item_id"],
             build_item_fingerprint_id("VAC-100", "resp", "Liderar equipo de desarrollo"),

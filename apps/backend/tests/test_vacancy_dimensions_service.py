@@ -25,10 +25,15 @@ def _opportunity() -> dict[str, str]:
 
 def _vacancy_blocks() -> dict[str, object]:
     return {
-        "contract_version": "vacancy_blocks.v1",
+        "flow": {
+            "flow_key": "task_vacancy_blocks_extract",
+            "contract_version": "vacancy_blocks.v2",
+            "prompt_version": "2026-04-21T18:00:00Z",
+        },
         "vacancy_id": "o-step3-001",
         "generated_at": "2026-04-21T19:00:00Z",
         "vacancy_blocks": {
+            "about_the_company": [],
             "work_conditions": ["Hibrido en Bogota", "Salario COP 12M a 18M"],
             "responsibilities": ["Liderar roadmap del producto"],
             "required_requirements": ["5 anos de experiencia en producto"],
@@ -36,8 +41,8 @@ def _vacancy_blocks() -> dict[str, object]:
             "benefits": ["Seguro medico"],
             "unclassified": [],
         },
-        "warnings": [],
-        "coverage_notes": [],
+        "warnings": ["Fragmento ambiguo en S2", "fragmento ambiguo en S2"],
+        "coverage_notes": ["S2 sin detalle de horario"],
     }
 
 
@@ -46,19 +51,20 @@ class VacancyDimensionsServiceTests(unittest.TestCase):
         llm_response = (
             "{"
             "\"vacancy_dimensions\":{"
-            "\"work_conditions\":{"
-            "\"salary\":{\"raw_text\":\"Rango salarial COP 12M a 18M\"},"
-            "\"modality\":{\"value\":\"Hibrido\",\"raw_text\":\"Hibrido en Bogota\"},"
-            "\"location\":{\"places\":[\"Bogota\"],\"raw_text\":\"Bogota\"},"
-            "\"contract_type\":{\"value\":\"Indefinido\",\"raw_text\":\"Contrato indefinido\"},"
-            "\"other_conditions\":[{\"raw_text\":\"Disponibilidad para viajar ocasionalmente\"}]"
-            "},"
+            "\"work_conditions\":["
+            "{\"raw_text\":\"Rango salarial COP 12M a 18M\"},"
+            "{\"raw_text\":\"Hibrido en Bogota\"},"
+            "{\"raw_text\":\"Disponibilidad para viajar ocasionalmente\"}"
+            "],"
             "\"responsibilities\":[{\"raw_text\":\"Liderar roadmap\"}],"
             "\"required_criteria\":[{\"raw_text\":\"5 anos de experiencia en producto\"}],"
             "\"desirable_criteria\":[{\"raw_text\":\"MBA deseable\"}],"
             "\"benefits\":[{\"raw_text\":\"Seguro medico\"}],"
-            "\"about_the_company\":[{\"raw_text\":\"Empresa lider en tecnologia B2B\"}]"
-            "}"
+            "\"about_the_company\":[{\"raw_text\":\"Empresa lider en tecnologia B2B\"}],"
+            "\"unclassified\":[]"
+            "},"
+            "\"warnings\":[\"Fragmento ambiguo conservado en la dimension mas probable\"],"
+            "\"coverage_notes\":[\"Transformacion parcial de condiciones\"]"
             "}"
         )
 
@@ -76,12 +82,32 @@ class VacancyDimensionsServiceTests(unittest.TestCase):
         self.assertEqual(contract["vacancy_id"], "o-step3-001")
         self.assertTrue(contract["generated_at"])
         payload = contract["vacancy_dimensions"]
-        self.assertEqual(payload["work_conditions"]["salary"]["raw_text"], "Rango salarial COP 12M a 18M")
-        self.assertEqual(payload["work_conditions"]["modality"]["value"], "Hibrido")
+        self.assertEqual(
+            payload["work_conditions"],
+            [
+                {"raw_text": "Rango salarial COP 12M a 18M"},
+                {"raw_text": "Hibrido en Bogota"},
+                {"raw_text": "Disponibilidad para viajar ocasionalmente"},
+            ],
+        )
         self.assertEqual(payload["responsibilities"][0]["raw_text"], "Liderar roadmap")
         self.assertEqual(payload["required_criteria"][0]["raw_text"], "5 anos de experiencia en producto")
         self.assertEqual(payload["benefits"][0]["raw_text"], "Seguro medico")
         self.assertEqual(payload["about_the_company"][0]["raw_text"], "Empresa lider en tecnologia B2B")
+        self.assertEqual(payload["unclassified"], [])
+        self.assertEqual(
+            contract["warnings"],
+            [
+                "Fragmento ambiguo en S2",
+                "Fragmento ambiguo conservado en la dimension mas probable",
+            ],
+        )
+        self.assertEqual(
+            contract["coverage_notes"],
+            ["S2 sin detalle de horario", "Transformacion parcial de condiciones"],
+        )
+        self.assertNotIn("warnings", payload)
+        self.assertNotIn("coverage_notes", payload)
 
     def test_extract_invalid_or_missing_step2_artifact_raises_controlled_error(self) -> None:
         with self.assertRaises(VacancyDimensionsExtractionError):
@@ -97,12 +123,13 @@ class VacancyDimensionsServiceTests(unittest.TestCase):
     def test_extract_normalizes_fixed_shape_and_ignores_unknown_root_keys(self) -> None:
         llm_response = (
             "{"
-            "\"work_conditions\":{\"salary\":{\"raw_text\":\"\"}},"
+            "\"work_conditions\":[],"
             "\"responsibilities\":[{\"raw_text\":\"Coordinar equipo\"}],"
             "\"required_criteria\":[],"
             "\"desirable_criteria\":[],"
             "\"benefits\":[],"
             "\"about_the_company\":[],"
+            "\"unclassified\":[\"Texto no transformable\"],"
             "\"unknown_key\":{\"foo\":\"bar\"}"
             "}"
         )
@@ -124,18 +151,20 @@ class VacancyDimensionsServiceTests(unittest.TestCase):
             "desirable_criteria",
             "benefits",
             "about_the_company",
+            "unclassified",
         })
 
     def test_extract_uses_dedicated_step3_prompt_flow_not_step2_flow(self) -> None:
         llm_response = (
             "{"
             "\"vacancy_dimensions\":{"
-            "\"work_conditions\":{\"salary\":{\"raw_text\":\"COP 12M\"}},"
+            "\"work_conditions\":[{\"raw_text\":\"COP 12M\"}],"
             "\"responsibilities\":[{\"raw_text\":\"Liderar roadmap\"}],"
             "\"required_criteria\":[],"
             "\"desirable_criteria\":[],"
             "\"benefits\":[],"
-            "\"about_the_company\":[]"
+            "\"about_the_company\":[],"
+            "\"unclassified\":[]"
             "}"
             "}"
         )
@@ -168,8 +197,9 @@ class VacancyDimensionsServiceTests(unittest.TestCase):
         )
         fallback_prompt = str(prompt_builder_mock.call_args.kwargs.get("fallback", ""))
         self.assertIn("salary/compensation", fallback_prompt)
-        self.assertIn("salary.raw_text", fallback_prompt)
+        self.assertIn("Step 3.1", fallback_prompt)
         self.assertIn("about_the_company", fallback_prompt)
+        self.assertIn("coverage_notes", fallback_prompt)
         self.assertIn("raw_text only", fallback_prompt)
 
     def test_extract_invalid_json_raises_controlled_error(self) -> None:
@@ -184,12 +214,13 @@ class VacancyDimensionsServiceTests(unittest.TestCase):
         llm_response = (
             "{"
             "\"vacancy_dimensions\":{"
-            "\"work_conditions\":{\"salary\":{\"raw_text\":\"COP 12M\"}},"
+            "\"work_conditions\":[{\"raw_text\":\"COP 12M\"}],"
             "\"responsibilities\":[{\"raw_text\":\"Liderar roadmap\"}],"
             "\"required_criteria\":[],"
             "\"desirable_criteria\":[],"
             "\"benefits\":[],"
-            "\"about_the_company\":[]"
+            "\"about_the_company\":[],"
+            "\"unclassified\":[]"
             "}"
             "}"
         )
