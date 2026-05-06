@@ -23,6 +23,7 @@ FLOW_TASK_VACANCY_BLOCKS_EXTRACT = "task_vacancy_blocks_extract"
 FLOW_TASK_VACANCY_DIMENSIONS_EXTRACT = "task_vacancy_dimensions_extract"
 FLOW_TASK_VACANCY_SALARY_NORMALIZE = "task_vacancy_salary_normalize"
 FLOW_TASK_VACANCY_RETRIEVAL_QUERIES_EXTRACT = "task_vacancy_retrieval_queries_extract"
+FLOW_TASK_VACANCY_ALIGNMENT_REPORT = "task_vacancy_alignment_report"
 FLOW_TASK_PREPARE_GUIDANCE = "task_prepare_guidance"
 FLOW_TASK_PREPARE_COVER_LETTER = "task_prepare_cover_letter"
 FLOW_TASK_PREPARE_EXPERIENCE_SUMMARY = "task_prepare_experience_summary"
@@ -122,6 +123,13 @@ def _required_placeholders(flow_key: str) -> set[str]:
         return {"salary_raw_text"}
     if flow_key == FLOW_TASK_VACANCY_RETRIEVAL_QUERIES_EXTRACT:
         return {"vacancy_dimensions_enriched_json", "retrieval_queries_per_item"}
+    if flow_key == FLOW_TASK_VACANCY_ALIGNMENT_REPORT:
+        return {
+            "person_context",
+            "opportunity_context",
+            "alignment_summary_json",
+            "evidence_analysis_json",
+        }
     if flow_key == FLOW_TASK_PREPARE_GUIDANCE:
         return {"person_context", "opportunity_context"}
     if flow_key == FLOW_TASK_PREPARE_COVER_LETTER:
@@ -385,11 +393,13 @@ def _default_configs() -> dict[str, PromptConfigRecord]:
             "scope": "global",
             "flow_key": FLOW_TASK_VACANCY_BLOCKS_EXTRACT,
             "template_text": (
-                "Clasifica la vacante en el contrato vacancy_blocks.v1 y responde SOLO JSON valido. "
+                "Clasifica la vacante en el contrato vacancy_blocks.v2 y responde SOLO JSON valido. "
                 "No resumes. No atomices. No inventes claves nuevas. "
                 "Usa solo estas claves raiz: vacancy_blocks, warnings, coverage_notes. "
-                "Dentro de vacancy_blocks usa exactamente: work_conditions, responsibilities, "
+                "No escribas metadata; el backend agregara flow, vacancy_id y generated_at. "
+                "Dentro de vacancy_blocks usa exactamente: about_the_company, work_conditions, responsibilities, "
                 "required_requirements, desirable_requirements, benefits, unclassified. "
+                "about_the_company contiene solo descripcion de empresa, industria, mision, escala, contexto o senales del empleador. "
                 "Toda senal de salario/compensacion debe ir en work_conditions y nunca en benefits. "
                 "Cada clave debe ser lista de strings limpios sin duplicados. "
                 "Si un fragmento es ambiguo o inseparable, asigna una categoria principal y explica en warnings. "
@@ -411,26 +421,24 @@ def _default_configs() -> dict[str, PromptConfigRecord]:
             "scope": "global",
             "flow_key": FLOW_TASK_VACANCY_DIMENSIONS_EXTRACT,
             "template_text": (
-                "Transforma vacancy_blocks.v1 en vacancy_dimensions.v2 y responde SOLO JSON valido. "
+                "Transforma vacancy_blocks.v2 en vacancy_dimensions.v2 y responde SOLO JSON valido. "
                 "No inventes claves nuevas y no mezcles contracts. "
-                "Usa estas claves raiz: vacancy_dimensions. "
+                "Usa estas claves raiz: vacancy_dimensions, warnings, coverage_notes. "
                 "Dentro de vacancy_dimensions usa exactamente: work_conditions, responsibilities, "
-                "required_criteria, desirable_criteria, benefits, about_the_company. "
-                "work_conditions debe mantener siempre estas subclaves: salary, modality, location, "
-                "contract_type, other_conditions. "
-                "Toda senal de salario/compensacion debe mapearse a work_conditions.salary; "
-                "benefits es solo para perks no salariales. "
-                "Si el input trae salario/compensacion en work_conditions, salary.raw_text no puede quedar vacio. "
-                "salary solo conserva raw_text en este paso. "
+                "required_criteria, desirable_criteria, benefits, about_the_company, unclassified. "
+                "warnings y coverage_notes deben permanecer en la raiz, nunca dentro de vacancy_dimensions. "
+                "work_conditions debe ser una lista de objetos con solo raw_text. "
+                "No clasifiques work_conditions en salary, modality, location, contract_type ni otros buckets. "
+                "Toda senal de salario/compensacion se conserva como raw_text dentro de work_conditions; "
+                "S3.1 normalizara salario despues. benefits es solo para perks no salariales. "
+                "Si alguna informacion no puede transformarse sin perdida, conservala en unclassified y explicalo en coverage_notes. "
                 "Cada item atomico debe incluir solo raw_text. "
-                "modality y contract_type usan value y raw_text. "
-                "location usa places y raw_text. "
-                "Aplica defaults del contrato cuando falte informacion. "
+                "No apliques defaults semanticos ni inventes informacion. "
                 "Vacante titulo: {opportunity_title}. "
                 "Empresa: {opportunity_company}. "
                 "Ubicacion: {opportunity_location}. "
                 "URL: {opportunity_url}. "
-                "Entrada vacancy_blocks.v1: {vacancy_blocks_json}"
+                "Entrada vacancy_blocks.v2: {vacancy_blocks_json}"
             ),
             "target_sources": [],
             "is_active": True,
@@ -468,7 +476,9 @@ def _default_configs() -> dict[str, PromptConfigRecord]:
                 "Usa solo estas claves raiz: queries. "
                 "Dentro de queries usa exactamente: responsibilities, required_criteria, desirable_criteria, "
                 "benefits, about_the_company, work_conditions. "
-                "Dentro de work_conditions usa exactamente: salary, modality, location, contract_type, other_conditions. "
+                "work_conditions debe ser una lista plana de items, sin subcategorias. "
+                "Genera queries no vacias solo para responsibilities, required_criteria y desirable_criteria. "
+                "Mantén benefits, about_the_company y work_conditions presentes pero vacios. "
                 "Cada item debe incluir exactamente: item_id, item_index, group_code, raw_text, queries. "
                 "No reclasifiques ni resumes la vacante. Formula queries orientadas a buscar evidencia en el CV. "
                 "Para cada item que amerite query, genera exactamente {retrieval_queries_per_item} queries distintas y utiles. "
@@ -479,6 +489,55 @@ def _default_configs() -> dict[str, PromptConfigRecord]:
                 "URL: {opportunity_url}. "
                 "Entrada vacancy_dimensions_enriched.v1: {vacancy_dimensions_enriched_json}. "
                 "Entrada vacancy_salary_normalization.v1: {vacancy_salary_json}"
+            ),
+            "target_sources": [],
+            "is_active": True,
+            "updated_by": "system",
+            "created_at": now,
+            "updated_at": now,
+        },
+        {
+            "config_id": f"pc-{FLOW_TASK_VACANCY_ALIGNMENT_REPORT}",
+            "scope": "global",
+            "flow_key": FLOW_TASK_VACANCY_ALIGNMENT_REPORT,
+            "template_text": (
+                "Actua como analista senior de ajuste candidato-vacante, orientado a ayudar al candidato y/o a su tutor a decidir si conviene priorizar esta vacante. "
+                "Responde SOLO JSON valido para vacancy_alignment_report.v1 y no escribas texto fuera del JSON. "
+                "Debes producir exactamente dos claves raiz: report, rendered_markdown. "
+                "Usa los insumos asi: person_context sirve para analizar rol objetivo, ubicacion, anos de experiencia, skills, expectativa salarial, preferencias culturales, condiciones laborales y notas abiertas del candidato; "
+                "opportunity_context sirve para leer la vacante completa, incluyendo snapshot_raw_text, y detectar senales transversales del rol que no siempre viven en un criterio atomico, como seniority implicito, peso real del liderazgo, foco en CRM/data/marketing/transformacion y complejidad del rol; "
+                "vacancy_alignment_summary.v1 es el mapa resumido principal del caso y debes usarlo para identificar todos los criterios evaluados sin omitir ninguno; "
+                "vacancy_evidence_analysis.v1 es la base de evidencia detallada por criterio y debes usarlo para sustentar cumplimiento, parcialidad, ausencia de evidencia o conflicto. "
+                "No recalcules scores ni buckets. No inventes informacion, no adornes al candidato y no omitas criterios evaluados relevantes. "
+                "No conviertas ausencia de evidencia en contradiccion. No conviertas una senal semantica debil en cumplimiento pleno. "
+                "El publico objetivo del analisis es el candidato o el tutor que lo acompana; no escribas como reclutador, hiring manager ni headhunter. "
+                "La recomendacion final debe responder si conviene al candidato avanzar con esta vacante. "
+                "Usa solo estas recomendaciones finales permitidas: Avanzar, Avanzar con reservas, Avanzar si se valida X, No priorizar, Descartar. "
+                "Debes separar fit objetivo y fit preferencial. "
+                "Usa la taxonomia visual obligatoria: 🟢 Cumple, 🟡 Parcial, ⚪ Sin informacion, 🔴 En conflicto, 🔵 Deseable no evidenciado. "
+                "Distingue explicitamente entre: no parece tenerlo, no esta demostrado, la vacante no lo especifica. "
+                "Si un criterio tiene evidencia parcial o indirecta usa 🟡 Parcial. Si no hay evidencia suficiente usa ⚪ Sin informacion. Usa 🔵 Deseable no evidenciado solo para criterios deseables no demostrados. Usa 🔴 En conflicto solo si existe contradiccion explicita o altamente probable. "
+                "Si la vacante no especifica una condicion y el candidato si tiene una preferencia, usa ⚪ Sin informacion. Si existe comparacion objetiva de salario, ubicacion, modalidad, contrato, intensidad, formalidad, liderazgo deseado u otras preferencias comparables, debes incluirla en candidate_preference_matrix. "
+                "Dentro de report usa exactamente estas claves: executive_summary, decision_table, vacancy_fit_matrix, candidate_preference_matrix, fit_answer, strengths, gaps, preference_conflicts, improvement_actions, alerts_and_conflicts, actionable_conclusion. "
+                "decision_table debe usar exactamente: alineacion_general, fit_objetivo, fit_preferencial, requisitos_criticos_cumplidos, bloqueadores, alertas_relevantes, potencial_mejora_fit, recomendacion. "
+                "Cada entrada de decision_table debe incluir exactamente: resultado, descripcion_corta. "
+                "Cada fila de vacancy_fit_matrix debe incluir exactamente: criterio, categoria, origen_del_criterio, estado, lo_que_solicita_la_vacante, evidencia_del_candidato, descripcion_corta. "
+                "vacancy_fit_matrix debe incluir todos los criterios evaluados relevantes de la vacante, no una muestra. categoria debe usar categorias legibles como Experiencia, Herramientas, Conocimientos, Formacion, Certificaciones, Idioma, Responsabilidades, Condiciones laborales o Cultura y entorno. origen_del_criterio debe usar Vacante obligatoria, Vacante deseable o Vacante condicion. "
+                "Cada fila de candidate_preference_matrix debe incluir exactamente: criterio, categoria, origen_del_criterio, estado, lo_que_ofrece_o_define_la_vacante, preferencia_o_condicion_del_candidato, descripcion_corta. "
+                "candidate_preference_matrix solo puede ir vacio si de verdad no existe ninguna preferencia o condicion comparable. "
+                "executive_summary debe ser un texto breve real de 3 a 5 lineas, en un solo parrafo corto, que sintetice el ajuste general, la principal fortaleza, la principal brecha o tension y la recomendacion general. No devuelvas un diccionario serializado como string ni uses formato tipo {'clave': 'valor'}. "
+                "strengths debe ser una lista de fortalezas concretas, cortas y no redundantes. gaps debe ser una lista de brechas, faltantes o criterios no demostrados. preference_conflicts debe listar conflictos, tensiones o incertidumbres frente a preferencias del candidato. alerts_and_conflicts debe listar incompatibilidades, bloqueadores o ambiguedades criticas. "
+                "improvement_actions debe incluir exactamente: reinforce_in_cv_or_profile, validate_with_recruiter, application_narrative. Cada una debe ser una lista de acciones concretas. "
+                "actionable_conclusion debe incluir exactamente: final_decision, main_reason, recommended_next_step. No uses frases como Continuar con el proceso de seleccion, Considerar para entrevista o Preparar para la entrevista. "
+                "preference_conflicts y alerts_and_conflicts pueden ir vacios si no aplica. "
+                "rendered_markdown es obligatorio y debe reflejar el mismo contenido del JSON. "
+                "rendered_markdown debe incluir secciones en este orden exacto: ## Resumen ejecutivo, ## Matriz de alineacion, ### Ajuste frente a la vacante, ### Ajuste frente a preferencias y condiciones del candidato, ## 1. ¿Encaga con la vacante?, ## 2. ¿Que tiene a favor?, ## 3. ¿Que le falta o no esta demostrado?, ## 4. ¿Que choca con sus preferencias o condiciones?, ## 5. ¿Que deberia ajustar o mejorar para aumentar su fit?, ## Alertas y conflictos, ## Conclusion accionable. "
+                "En rendered_markdown, la seccion ## Resumen ejecutivo debe incluir primero el executive_summary como un parrafo breve, y despues una tabla markdown compacta con: Alineacion general, Fit objetivo, Fit preferencial, Requisitos criticos cumplidos, Bloqueadores, Alertas relevantes, Potencial de mejora del fit, Recomendacion. "
+                "Luego debes incluir tablas markdown legibles para ambas matrices. No escribas texto fuera de esas secciones. "
+                "Persona: {person_context}. "
+                "Vacante: {opportunity_context}. "
+                "Entrada vacancy_alignment_summary.v1: {alignment_summary_json}. "
+                "Entrada vacancy_evidence_analysis.v1: {evidence_analysis_json}"
             ),
             "target_sources": [],
             "is_active": True,

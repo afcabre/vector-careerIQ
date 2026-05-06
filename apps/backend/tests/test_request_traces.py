@@ -36,7 +36,7 @@ class RequestTracesTests(unittest.TestCase):
         get_settings.cache_clear()
         _clear_in_memory_state()
 
-    def test_request_traces_endpoint_filters_by_person_destination_and_opportunity(self) -> None:
+    def test_request_traces_endpoint_filters_by_person_destination_flow_and_opportunity(self) -> None:
         add_request_trace(
             person_id="p-001",
             opportunity_id="o-001",
@@ -90,6 +90,7 @@ class RequestTracesTests(unittest.TestCase):
         openai_items = request_traces_api.list_person_request_traces(
             person_id="p-001",
             destination="openai",
+            flow_key=None,
             opportunity_id=None,
             run_id=None,
             limit=50,
@@ -103,9 +104,22 @@ class RequestTracesTests(unittest.TestCase):
         self.assertEqual(openai_items.items[0].stage, "chat_generation")
         self.assertEqual(openai_items.items[0].status, "ok")
 
+        flow_items = request_traces_api.list_person_request_traces(
+            person_id="p-001",
+            destination=None,
+            flow_key="search_culture_tavily",
+            opportunity_id=None,
+            run_id=None,
+            limit=50,
+            _=self.session,
+        )
+        self.assertEqual(len(flow_items.items), 1)
+        self.assertEqual(flow_items.items[0].flow_key, "search_culture_tavily")
+
         opportunity_items = request_traces_api.list_person_request_traces(
             person_id="p-001",
             destination=None,
+            flow_key=None,
             opportunity_id="o-001",
             run_id=None,
             limit=50,
@@ -117,6 +131,7 @@ class RequestTracesTests(unittest.TestCase):
         run_items = request_traces_api.list_person_request_traces(
             person_id="p-001",
             destination=None,
+            flow_key=None,
             opportunity_id=None,
             run_id="r-111",
             limit=50,
@@ -130,6 +145,7 @@ class RequestTracesTests(unittest.TestCase):
             request_traces_api.list_person_request_traces(
                 person_id="p-unknown",
                 destination=None,
+                flow_key=None,
                 opportunity_id=None,
                 run_id=None,
                 limit=50,

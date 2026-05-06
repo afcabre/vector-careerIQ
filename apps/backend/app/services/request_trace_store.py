@@ -258,11 +258,13 @@ def list_request_traces(
     person_id: str,
     opportunity_id: str | None = None,
     destination: str | None = None,
+    flow_key: str | None = None,
     run_id: str | None = None,
     limit: int = 50,
 ) -> list[RequestTraceRecord]:
     normalized_destination = (destination or "").strip().lower()
     normalized_opportunity_id = (opportunity_id or "").strip()
+    normalized_flow_key = (flow_key or "").strip()
     normalized_run_id = (run_id or "").strip()
 
     if _is_firestore_backend():
@@ -280,6 +282,8 @@ def list_request_traces(
         items = [item for item in items if item["opportunity_id"] == normalized_opportunity_id]
     if normalized_destination:
         items = [item for item in items if item["destination"] == normalized_destination]
+    if normalized_flow_key:
+        items = [item for item in items if item["flow_key"] == normalized_flow_key]
     if normalized_run_id:
         items = [item for item in items if item["run_id"] == normalized_run_id]
     items = sorted(items, key=lambda item: item["created_at"], reverse=True)
