@@ -292,6 +292,7 @@ class VacancyAlignmentReportServiceTests(unittest.TestCase):
         self.assertIn("alignment_summary_json", task_call.kwargs["context"])
         self.assertIn("evidence_analysis_json", task_call.kwargs["context"])
         self.assertEqual(complete_prompt_mock.call_args.kwargs["flow_key"], FLOW_TASK_VACANCY_ALIGNMENT_REPORT)
+        self.assertFalse(complete_prompt_mock.call_args.kwargs["trace_truncation_override"])
         self.assertIn("prompt::guardrails_core", complete_prompt_mock.call_args.args[0])
         self.assertIn("prompt::system_identity", complete_prompt_mock.call_args.args[0])
 

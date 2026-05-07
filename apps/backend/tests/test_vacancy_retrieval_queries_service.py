@@ -159,6 +159,8 @@ class VacancyRetrievalQueriesServiceTests(unittest.TestCase):
         fallback_prompt = str(prompt_builder_mock.call_args.kwargs.get("fallback", ""))
         self.assertIn("responsibilities, required_criteria, and desirable_criteria", fallback_prompt)
         self.assertIn("benefits, about_the_company, and work_conditions", fallback_prompt)
+        self.assertIn("observable evidence", fallback_prompt)
+        self.assertIn("budget ownership", fallback_prompt)
 
     def test_extract_invalid_json_raises_controlled_error(self) -> None:
         with patch(

@@ -222,6 +222,7 @@ def extract_vacancy_alignment_report(
         person_id=person_id,
         opportunity_id=str(opportunity.get("opportunity_id", "")).strip(),
         flow_key=FLOW_TASK_VACANCY_ALIGNMENT_REPORT,
+        trace_truncation_override=False,
     )
     if not response_text or response_text == FALLBACK_MESSAGE:
         raise VacancyAlignmentReportBuildError(

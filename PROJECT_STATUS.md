@@ -27,6 +27,7 @@
 - plan operativo de implementacion agregado en `docs/vacancy_structure_implementation_plan.md`
 - referencia consolidada de Steps `vacancy_v2` agregada en `docs/vacancy_v2_steps_reference.md`, incluyendo `S1-S8`, outputs y llaves de prompt por paso
 - plan detallado de rediseño para match `vacancy-candidato` agregado en `docs/vacancy_v2_improvement_plan_match_analysis.md`, incluyendo diagnostico, nueva arquitectura `S6.5`, contratos propuestos, prompts recomendados, validaciones y roadmap por sprint
+- `Sprint 1` del rediseño de match iniciado en backend: `S3` ahora refuerza preservacion de contexto minimo en items atomizados, `S4` refuerza queries probatorias, los defaults de retrieval quedan en `retrieval_queries_per_item=4` y `top_k_semantic_per_criterion=6`, y `S8` ya persiste traza completa de request/response sin truncacion forzada por flow
 - plan de implementacion y tareas de seguimiento volcados a Notion en `Engineering Projects Hub`
 - mecanica operativa de ejecucion y fuente de verdad formalizada en `AGENTS.md`
 - protocolo iterativo de implementacion agregado en `.specify/instructions/Implementation-Worker-Protocol.md`

@@ -194,7 +194,46 @@ class RequestTracesTests(unittest.TestCase):
             )
         )
         with patch.object(llm_service, "_client", return_value=fake_client):
-            with patch.object(llm_service, "add_request_trace") as mocked_trace:
+            with patch.object(
+                llm_service,
+                "add_request_trace",
+                return_value={"trace_id": "t-linked"},
+            ) as mocked_trace:
+                with patch.object(llm_service, "update_request_trace") as mocked_update:
+                    output = llm_service.complete_prompt(
+                        system_prompt="sys",
+                        user_prompt="usr",
+                        settings=get_settings(),
+                        temperature=0.2,
+                        person_id="p-001",
+                        opportunity_id="o-001",
+                        flow_key="analyze_profile_match",
+                        run_id="r-link-001",
+                    )
+        self.assertEqual(output, "Respuesta sintetica")
+        self.assertEqual(mocked_trace.call_count, 1)
+        self.assertEqual(mocked_update.call_count, 1)
+        kwargs = mocked_trace.call_args.kwargs
+        self.assertEqual(kwargs.get("person_id"), "p-001")
+        self.assertEqual(kwargs.get("opportunity_id"), "o-001")
+        self.assertEqual(kwargs.get("run_id"), "r-link-001")
+
+    def test_complete_prompt_persists_response_payload_in_trace_store(self) -> None:
+        fake_response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content="Respuesta completa grounded")
+                )
+            ]
+        )
+        fake_client = SimpleNamespace(
+            chat=SimpleNamespace(
+                completions=SimpleNamespace(
+                    create=lambda **_: fake_response
+                )
+            )
+        )
+        with patch.object(llm_service, "_client", return_value=fake_client):
                 output = llm_service.complete_prompt(
                     system_prompt="sys",
                     user_prompt="usr",
@@ -203,14 +242,15 @@ class RequestTracesTests(unittest.TestCase):
                     person_id="p-001",
                     opportunity_id="o-001",
                     flow_key="analyze_profile_match",
-                    run_id="r-link-001",
+                    run_id="r-trace-001",
                 )
-        self.assertEqual(output, "Respuesta sintetica")
-        self.assertEqual(mocked_trace.call_count, 1)
-        kwargs = mocked_trace.call_args.kwargs
-        self.assertEqual(kwargs.get("person_id"), "p-001")
-        self.assertEqual(kwargs.get("opportunity_id"), "o-001")
-        self.assertEqual(kwargs.get("run_id"), "r-link-001")
+        self.assertEqual(output, "Respuesta completa grounded")
+        items = list_request_traces(person_id="p-001", limit=10)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["run_id"], "r-trace-001")
+        self.assertEqual(items[0]["status"], "ok")
+        self.assertEqual(items[0]["response_payload"]["content"], "Respuesta completa grounded")
+        self.assertTrue(items[0]["finished_at"])
 
     def test_request_trace_store_redacts_sensitive_values(self) -> None:
         add_request_trace(

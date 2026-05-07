@@ -111,7 +111,9 @@ def extract_vacancy_retrieval_queries(
         "You are a vacancy retrieval query generator. Return valid JSON only for vacancy_retrieval_queries.v1. "
         "Do not reclassify the vacancy. Do not generate categories. Do not decide compliance. "
         "Generate search queries that help retrieve evidence from the CV for each item. "
-        f"For each item that merits queries, generate exactly {retrieval_queries_per_item} distinct useful queries."
+        "Queries must be probative, not just semantically similar restatements of the requirement. "
+        "When the criterion is abstract, translate it into observable signals such as roles, responsibilities, metrics, business outcomes, certifications, years of experience, budget ownership, stakeholder management, governance, architecture, cost optimization, profitability, delivery control, or transformation results. "
+        f"For each item that merits queries, generate exactly {retrieval_queries_per_item} distinct useful queries with diverse probative angles."
     )
     fallback_user_prompt = (
         "Generate retrieval queries and respond with valid JSON only. "
@@ -123,7 +125,9 @@ def extract_vacancy_retrieval_queries(
         "Each query item must include exactly: item_id, item_index, group_code, raw_text, queries. "
         "Use the metadata already present in the input items. Do not invent new ids or group codes. "
         "Queries should be phrased to retrieve evidence from the CV, not to summarize the vacancy. "
-        f"For each item that merits queries, generate exactly {retrieval_queries_per_item} distinct useful queries. "
+        "Prioritize observable evidence patterns such as equivalent responsibilities, measurable outcomes, technologies used, certifications, years of experience, business cases, budget ownership, stakeholder coordination, time-cost-scope control, efficiency gains, profitability, governance, standards, architecture, and transformation results. "
+        "When a criterion is abstract, translate it into concrete observable evidence rather than merely repeating the wording of the vacancy. "
+        f"For each item that merits queries, generate exactly {retrieval_queries_per_item} distinct useful queries with diverse probative angles. "
         "If an item does not justify a useful query, leave queries empty. "
         f"Vacancy title: {opportunity.get('title', '')}. "
         f"Company: {opportunity.get('company', '')}. "

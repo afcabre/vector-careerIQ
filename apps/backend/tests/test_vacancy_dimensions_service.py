@@ -201,6 +201,8 @@ class VacancyDimensionsServiceTests(unittest.TestCase):
         self.assertIn("about_the_company", fallback_prompt)
         self.assertIn("coverage_notes", fallback_prompt)
         self.assertIn("raw_text only", fallback_prompt)
+        self.assertIn("too abstract", fallback_prompt)
+        self.assertIn("minimum explicit context", fallback_prompt)
 
     def test_extract_invalid_json_raises_controlled_error(self) -> None:
         with patch(

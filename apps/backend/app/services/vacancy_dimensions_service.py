@@ -131,7 +131,9 @@ def extract_vacancy_dimensions(
         "Keep work_conditions as a flat array of raw_text items. "
         "Do not classify work_conditions into salary, modality, location, contract_type, or other buckets. "
         "Do not generate ids, category labels, summaries, or semantic_queries. "
-        "Do not invent semantic defaults. Preserve only information present in vacancy_blocks."
+        "Do not invent semantic defaults. Preserve only information present in vacancy_blocks. "
+        "When an atomic item depends on its parent sentence to remain understandable, preserve the minimum explicit context needed inside raw_text. "
+        "Avoid orphan abstract items such as 'Ensure technical excellence' or 'Guarantee high-impact deliverables' when the original block already states the object or scope."
     )
     fallback_user_prompt = (
         "Transform vacancy_blocks.v2 into vacancy_dimensions.v2 and respond with valid JSON only. "
@@ -143,6 +145,9 @@ def extract_vacancy_dimensions(
         "All array items must be objects with raw_text only. "
         "Keep salary/compensation text in work_conditions as raw_text; Step 3.1 will normalize salary later. "
         "Keep benefits for non-compensation perks. "
+        "When an atomic item would become too abstract on its own, keep the minimum explicit context already present in the same source block so the raw_text remains understandable. "
+        "Do not leave orphan items such as 'Ensure technical excellence', 'Guarantee high-impact deliverables', 'Ensure profitability', or 'Coordinate stakeholders' when the original block states what they apply to. "
+        "Use only context already present in vacancy_blocks; do not add new information or interpret hidden intent. "
         "If information cannot be transformed without loss, preserve it in unclassified and explain in coverage_notes. "
         "Do not invent keys and do not embed vacancy_blocks. "
         f"Vacancy title: {opportunity.get('title', '')}. "

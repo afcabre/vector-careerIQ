@@ -201,6 +201,29 @@ def _save(record: RequestTraceRecord) -> RequestTraceRecord:
     return record
 
 
+def _find_request_trace(trace_id: str) -> RequestTraceRecord | None:
+    normalized_trace_id = trace_id.strip()
+    if not normalized_trace_id:
+        return None
+    if _is_firestore_backend():
+        settings = get_settings()
+        client = get_firestore_client(settings)
+        snapshot = client.collection("request_traces").document(normalized_trace_id).get()
+        if not snapshot.exists:
+            return None
+        return _normalize(snapshot.to_dict())
+
+    with _store_lock:
+        current = _request_traces.get(normalized_trace_id)
+    return _normalize(current) if current else None
+
+
+def _resolve_truncation(truncate_payload: bool | None) -> bool:
+    if truncate_payload is not None:
+        return bool(truncate_payload)
+    return bool(get_ai_runtime_config().get("trace_truncation_enabled", True))
+
+
 def add_request_trace(
     *,
     person_id: str,
@@ -218,10 +241,9 @@ def add_request_trace(
     started_at: str = "",
     finished_at: str = "",
     response_payload: dict[str, Any] | None = None,
+    truncate_payload: bool | None = None,
 ) -> RequestTraceRecord:
-    trace_truncation_enabled = bool(
-        get_ai_runtime_config().get("trace_truncation_enabled", True)
-    )
+    trace_truncation_enabled = _resolve_truncation(truncate_payload)
     safe_payload = _sanitize_request_payload(
         request_payload,
         truncate=trace_truncation_enabled,
@@ -251,6 +273,46 @@ def add_request_trace(
         "created_at": _now_iso(),
     }
     return _save(record)
+
+
+def update_request_trace(
+    trace_id: str,
+    *,
+    request_payload: dict[str, Any] | None = None,
+    response_payload: dict[str, Any] | None = None,
+    status: str | None = None,
+    input_summary: str | None = None,
+    output_summary: str | None = None,
+    started_at: str | None = None,
+    finished_at: str | None = None,
+    truncate_payload: bool | None = None,
+) -> RequestTraceRecord | None:
+    current = _find_request_trace(trace_id)
+    if not current:
+        return None
+
+    trace_truncation_enabled = _resolve_truncation(truncate_payload)
+    if request_payload is not None:
+        current["request_payload"] = _sanitize_request_payload(
+            request_payload,
+            truncate=trace_truncation_enabled,
+        )
+    if response_payload is not None:
+        current["response_payload"] = _sanitize_request_payload(
+            response_payload,
+            truncate=trace_truncation_enabled,
+        )
+    if status is not None:
+        current["status"] = status.strip()
+    if input_summary is not None:
+        current["input_summary"] = input_summary.strip()
+    if output_summary is not None:
+        current["output_summary"] = output_summary.strip()
+    if started_at is not None:
+        current["started_at"] = started_at.strip()
+    if finished_at is not None:
+        current["finished_at"] = finished_at.strip()
+    return _save(current)
 
 
 def list_request_traces(

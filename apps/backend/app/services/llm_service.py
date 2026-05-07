@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Iterator
 
 from app.core.settings import Settings
@@ -16,7 +17,7 @@ from app.services.prompt_config_store import (
     FLOW_TASK_CHAT,
     build_prompt_text,
 )
-from app.services.request_trace_store import add_request_trace
+from app.services.request_trace_store import add_request_trace, update_request_trace
 
 try:
     from openai import OpenAI
@@ -31,6 +32,10 @@ FALLBACK_MESSAGE = (
 CV_RETRIEVAL_TOP_K = 24
 CV_RETRIEVAL_MAX_CONTEXT_CHARS = 7000
 CV_FALLBACK_PREVIEW_CHARS = 1600
+
+
+def _now_iso() -> str:
+    return datetime.now(tz=UTC).isoformat()
 
 
 def _latest_user_message(history: list[MessageRecord]) -> str:
@@ -168,8 +173,9 @@ def _trace_openai_request(
     stream: bool,
     opportunity_id: str = "",
     run_id: str = "",
-) -> None:
-    add_request_trace(
+    truncate_payload: bool | None = None,
+) -> str:
+    trace = add_request_trace(
         person_id=person_id,
         opportunity_id=opportunity_id,
         run_id=run_id,
@@ -181,7 +187,12 @@ def _trace_openai_request(
             "stream": stream,
             "messages": messages,
         },
+        started_at=_now_iso(),
+        status="started",
+        input_summary=str(messages[-1].get("content", "")).strip()[:240] if messages else "",
+        truncate_payload=truncate_payload,
     )
+    return str(trace.get("trace_id", "")).strip()
 
 
 def generate_reply(
@@ -228,6 +239,7 @@ def complete_prompt(
     opportunity_id: str = "",
     flow_key: str = "generic_complete",
     run_id: str = "",
+    trace_truncation_override: bool | None = None,
 ) -> str:
     client = _client(settings)
     if client is None:
@@ -236,8 +248,9 @@ def complete_prompt(
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
     ]
+    trace_id = ""
     if person_id:
-        _trace_openai_request(
+        trace_id = _trace_openai_request(
             person_id=person_id,
             opportunity_id=opportunity_id,
             flow_key=flow_key,
@@ -246,6 +259,7 @@ def complete_prompt(
             temperature=temperature,
             stream=False,
             run_id=run_id,
+            truncate_payload=trace_truncation_override,
         )
     try:
         response = client.chat.completions.create(
@@ -254,12 +268,39 @@ def complete_prompt(
             messages=messages,
         )
     except Exception:
+        if trace_id:
+            update_request_trace(
+                trace_id,
+                status="error",
+                finished_at=_now_iso(),
+                output_summary="openai request failed",
+                response_payload={"error": "openai_request_failed"},
+                truncate_payload=trace_truncation_override,
+            )
         return FALLBACK_MESSAGE
 
     if not response.choices:
+        if trace_id:
+            update_request_trace(
+                trace_id,
+                status="empty",
+                finished_at=_now_iso(),
+                output_summary="openai returned no choices",
+                response_payload={"error": "openai_empty_choices"},
+                truncate_payload=trace_truncation_override,
+            )
         return FALLBACK_MESSAGE
     content = response.choices[0].message.content or ""
     safe = enforce_output_guardrails(content)
+    if trace_id:
+        update_request_trace(
+            trace_id,
+            status="ok" if safe else "empty",
+            finished_at=_now_iso(),
+            output_summary=(safe or FALLBACK_MESSAGE)[:240],
+            response_payload={"content": safe or FALLBACK_MESSAGE},
+            truncate_payload=trace_truncation_override,
+        )
     return safe or FALLBACK_MESSAGE
 
 
