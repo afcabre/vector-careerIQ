@@ -25,6 +25,8 @@
 - contrato propuesto `vacancy_structure.v2` agregado como artefacto aislado en backend para revision de esquema
 - nota tecnica del contrato propuesta agregada en `docs/vacancy_structure_contract_v2.md`
 - plan operativo de implementacion agregado en `docs/vacancy_structure_implementation_plan.md`
+- referencia consolidada de Steps `vacancy_v2` agregada en `docs/vacancy_v2_steps_reference.md`, incluyendo `S1-S8`, outputs y llaves de prompt por paso
+- plan detallado de rediseño para match `vacancy-candidato` agregado en `docs/vacancy_v2_improvement_plan_match_analysis.md`, incluyendo diagnostico, nueva arquitectura `S6.5`, contratos propuestos, prompts recomendados, validaciones y roadmap por sprint
 - plan de implementacion y tareas de seguimiento volcados a Notion en `Engineering Projects Hub`
 - mecanica operativa de ejecucion y fuente de verdad formalizada en `AGENTS.md`
 - protocolo iterativo de implementacion agregado en `.specify/instructions/Implementation-Worker-Protocol.md`
