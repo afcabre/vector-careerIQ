@@ -2,9 +2,9 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `S8 ya usa composicion global de sistema, prompt reforzado en espanol, trazas filtrables por flow_key y señal visible de etapas SSE en la UI experimental; ademas se agrego hardening de autenticacion y un ajuste UX/contrato en oportunidades manuales para separar carga por URL vs WhatsApp-texto, mantener titulo obligatorio y registrar source_label opcional`
+- checkpoint_actual: `Sprint 1 del rediseño de match ya incluye prompts reforzados en S3/S4, defaults de retrieval ajustados, trazas completas de S8 y ahora un nuevo Step 6.5 backend para adjudicacion grounded de evidencia con contrato propio, persistencia por oportunidad y endpoints recompute/stream dedicados`
 - repo_status: `flujo V1 operativo con analisis, postulacion, chat, CV semantico, admin de prompts y extraccion estructurada de vacantes en forma legacy estable; propuesta v2 desacoplada en branch experimental`
-- ultima_actualizacion: `2026-05-06`
+- ultima_actualizacion: `2026-05-08`
 
 ## Progreso Por Fase
 - `Fase 0`: completada
@@ -28,6 +28,8 @@
 - referencia consolidada de Steps `vacancy_v2` agregada en `docs/vacancy_v2_steps_reference.md`, incluyendo `S1-S8`, outputs y llaves de prompt por paso
 - plan detallado de rediseño para match `vacancy-candidato` agregado en `docs/vacancy_v2_improvement_plan_match_analysis.md`, incluyendo diagnostico, nueva arquitectura `S6.5`, contratos propuestos, prompts recomendados, validaciones y roadmap por sprint
 - `Sprint 1` del rediseño de match iniciado en backend: `S3` ahora refuerza preservacion de contexto minimo en items atomizados, `S4` refuerza queries probatorias, los defaults de retrieval quedan en `retrieval_queries_per_item=4` y `top_k_semantic_per_criterion=6`, y `S8` ya persiste traza completa de request/response sin truncacion forzada por flow
+- nuevo slice backend de `S6.5` implementado: contrato `vacancy_evidence_adjudication.v1`, flow `task_vacancy_evidence_adjudication`, servicio grounded LLM-first, persistencia de artefacto/status/generated_at por oportunidad y endpoints `recompute` / `recompute/stream`
+- validacion tecnica del slice `S6.5` en verde: `cd apps/backend && .venv/bin/python -m unittest tests.test_vacancy_evidence_adjudication_contract tests.test_vacancy_evidence_adjudication_service tests.test_vacancy_v2_endpoints` (`47 tests`)
 - plan de implementacion y tareas de seguimiento volcados a Notion en `Engineering Projects Hub`
 - mecanica operativa de ejecucion y fuente de verdad formalizada en `AGENTS.md`
 - protocolo iterativo de implementacion agregado en `.specify/instructions/Implementation-Worker-Protocol.md`

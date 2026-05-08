@@ -23,6 +23,7 @@ FLOW_TASK_VACANCY_BLOCKS_EXTRACT = "task_vacancy_blocks_extract"
 FLOW_TASK_VACANCY_DIMENSIONS_EXTRACT = "task_vacancy_dimensions_extract"
 FLOW_TASK_VACANCY_SALARY_NORMALIZE = "task_vacancy_salary_normalize"
 FLOW_TASK_VACANCY_RETRIEVAL_QUERIES_EXTRACT = "task_vacancy_retrieval_queries_extract"
+FLOW_TASK_VACANCY_EVIDENCE_ADJUDICATION = "task_vacancy_evidence_adjudication"
 FLOW_TASK_VACANCY_ALIGNMENT_REPORT = "task_vacancy_alignment_report"
 FLOW_TASK_PREPARE_GUIDANCE = "task_prepare_guidance"
 FLOW_TASK_PREPARE_COVER_LETTER = "task_prepare_cover_letter"
@@ -123,6 +124,14 @@ def _required_placeholders(flow_key: str) -> set[str]:
         return {"salary_raw_text"}
     if flow_key == FLOW_TASK_VACANCY_RETRIEVAL_QUERIES_EXTRACT:
         return {"vacancy_dimensions_enriched_json", "retrieval_queries_per_item"}
+    if flow_key == FLOW_TASK_VACANCY_EVIDENCE_ADJUDICATION:
+        return {
+            "person_context",
+            "opportunity_context",
+            "vacancy_dimensions_enriched_json",
+            "evidence_analysis_json",
+            "adjudication_input_json",
+        }
     if flow_key == FLOW_TASK_VACANCY_ALIGNMENT_REPORT:
         return {
             "person_context",
@@ -494,6 +503,41 @@ def _default_configs() -> dict[str, PromptConfigRecord]:
                 "URL: {opportunity_url}. "
                 "Entrada vacancy_dimensions_enriched.v1: {vacancy_dimensions_enriched_json}. "
                 "Entrada vacancy_salary_normalization.v1: {vacancy_salary_json}"
+            ),
+            "target_sources": [],
+            "is_active": True,
+            "updated_by": "system",
+            "created_at": now,
+            "updated_at": now,
+        },
+        {
+            "config_id": f"pc-{FLOW_TASK_VACANCY_EVIDENCE_ADJUDICATION}",
+            "scope": "global",
+            "flow_key": FLOW_TASK_VACANCY_EVIDENCE_ADJUDICATION,
+            "template_text": (
+                "Actua como evaluador senior de evidencia candidato-vacante. "
+                "Tu tarea es decidir, de forma estrictamente grounded, si la evidencia recuperada del CV soporta cada criterio de la vacante. "
+                "Responde exclusivamente JSON valido conforme a vacancy_evidence_adjudication.v1. "
+                "No escribas markdown ni texto fuera del JSON. "
+                "Debes devolver exactamente estas claves raiz: items, warnings. "
+                "items debe contener un item por cada criterio recibido en adjudication_input, sin omitir ninguno ni inventar nuevos. "
+                "Para cada item devuelve exactamente: item_id, item_index, group, group_code, raw_text, criterion_type, priority, alignment_status, evidence_strength, proof_summary, best_supporting_evidence, weak_or_discarded_evidence, limitations, candidate_risk, cv_improvement_opportunity, confidence. "
+                "Usa unicamente la evidencia proporcionada. No inventes experiencia, certificaciones, cargos, sectores, herramientas, anos, salario, preferencias ni condiciones. "
+                "No conviertas similitud semantica en cumplimiento. No conviertas ausencia de evidencia en incumplimiento. No uses el score como conclusion final; usalo solo como pista auxiliar. "
+                "Si un snippet es semanticamente cercano pero no prueba el criterio, muevelo a weak_or_discarded_evidence e indica la razon. "
+                "Si el criterio tiene una parte obligatoria y otra ideal, deseable o preferible, no trates la parte deseable como bloqueador. "
+                "alignment_status solo puede ser: direct, partial, indirect, not_evidenced, conflict, not_applicable. "
+                "evidence_strength solo puede ser: high, medium, low, none. "
+                "priority solo puede ser: critical, important, desirable, contextual. "
+                "criterion_type solo puede ser: education, years_experience, leadership, technical_skill, project_management, transformation, business_outcome, certification, language, condition, cultural, other. "
+                "candidate_risk solo puede ser: none, low, medium, high. confidence solo puede ser: high, medium, low. "
+                "Si no hay evidencia suficiente, usa not_evidenced y evidence_strength none o low segun corresponda. "
+                "best_supporting_evidence debe incluir solo snippets que realmente soporten el criterio e indicar why_it_supports. "
+                "Vacante: {opportunity_context}. "
+                "Persona: {person_context}. "
+                "Entrada vacancy_dimensions_enriched.v1: {vacancy_dimensions_enriched_json}. "
+                "Entrada vacancy_evidence_analysis.v1: {evidence_analysis_json}. "
+                "Entrada adjudication_input: {adjudication_input_json}."
             ),
             "target_sources": [],
             "is_active": True,

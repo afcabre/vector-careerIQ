@@ -86,6 +86,10 @@ from app.services.vacancy_evidence_analysis_service import (
     VacancyEvidenceAnalysisBuildError,
     build_vacancy_evidence_analysis,
 )
+from app.services.vacancy_evidence_adjudication_service import (
+    VacancyEvidenceAdjudicationBuildError,
+    build_vacancy_evidence_adjudication,
+)
 from app.services.vacancy_alignment_summary_service import (
     VacancyAlignmentSummaryBuildError,
     build_vacancy_alignment_summary,
@@ -137,6 +141,9 @@ class OpportunityResponse(BaseModel):
     vacancy_evidence_analysis_artifact: dict[str, Any]
     vacancy_evidence_analysis_status: str
     vacancy_evidence_analysis_generated_at: str
+    vacancy_evidence_adjudication_artifact: dict[str, Any]
+    vacancy_evidence_adjudication_status: str
+    vacancy_evidence_adjudication_generated_at: str
     vacancy_alignment_summary_artifact: dict[str, Any]
     vacancy_alignment_summary_status: str
     vacancy_alignment_summary_generated_at: str
@@ -241,6 +248,8 @@ class UpdateOpportunityRequest(BaseModel):
     vacancy_retrieval_evidence_status: str | None = Field(default=None)
     vacancy_evidence_analysis_artifact: dict[str, Any] | None = Field(default=None)
     vacancy_evidence_analysis_status: str | None = Field(default=None)
+    vacancy_evidence_adjudication_artifact: dict[str, Any] | None = Field(default=None)
+    vacancy_evidence_adjudication_status: str | None = Field(default=None)
     vacancy_alignment_summary_artifact: dict[str, Any] | None = Field(default=None)
     vacancy_alignment_summary_status: str | None = Field(default=None)
     vacancy_alignment_report_artifact: dict[str, Any] | None = Field(default=None)
@@ -648,6 +657,14 @@ def update_opportunity(
             detail="Invalid vacancy_evidence_analysis_status",
         )
     if (
+        payload.vacancy_evidence_adjudication_status is not None
+        and payload.vacancy_evidence_adjudication_status not in VACANCY_V2_ARTIFACT_STATUSES
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid vacancy_evidence_adjudication_status",
+        )
+    if (
         payload.vacancy_alignment_summary_status is not None
         and payload.vacancy_alignment_summary_status not in VACANCY_V2_ARTIFACT_STATUSES
     ):
@@ -685,6 +702,8 @@ def update_opportunity(
         vacancy_retrieval_evidence_status=payload.vacancy_retrieval_evidence_status,
         vacancy_evidence_analysis_artifact=payload.vacancy_evidence_analysis_artifact,
         vacancy_evidence_analysis_status=payload.vacancy_evidence_analysis_status,
+        vacancy_evidence_adjudication_artifact=payload.vacancy_evidence_adjudication_artifact,
+        vacancy_evidence_adjudication_status=payload.vacancy_evidence_adjudication_status,
         vacancy_alignment_summary_artifact=payload.vacancy_alignment_summary_artifact,
         vacancy_alignment_summary_status=payload.vacancy_alignment_summary_status,
         vacancy_alignment_report_artifact=payload.vacancy_alignment_report_artifact,
@@ -1779,6 +1798,171 @@ async def recompute_vacancy_alignment_summary_stream(
                 status=None,
                 notes=None,
                 vacancy_alignment_summary_status="error",
+            )
+            yield _serialize_sse(
+                "error",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "detail": str(exc),
+                },
+            )
+        except Exception as exc:  # pragma: no cover - stream runtime path
+            yield _serialize_sse(
+                "error",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "detail": str(exc),
+                },
+            )
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.post("/{opportunity_id}/vacancy-evidence-adjudication/recompute")
+def recompute_vacancy_evidence_adjudication(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+    settings: Settings = Depends(get_settings),
+) -> OpportunityResponse:
+    person = _require_person(person_id)
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    try:
+        artifact = build_vacancy_evidence_adjudication(
+            person=person,
+            opportunity=opportunity,
+            vacancy_dimensions_enriched_artifact=opportunity.get(
+                "vacancy_dimensions_enriched_artifact",
+                {},
+            ),
+            vacancy_evidence_analysis_artifact=opportunity.get(
+                "vacancy_evidence_analysis_artifact",
+                {},
+            ),
+            settings=settings,
+        )
+    except VacancyEvidenceAdjudicationBuildError as exc:
+        update_saved_opportunity(
+            person_id=person_id,
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_evidence_adjudication_status="error",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    updated = update_saved_opportunity(
+        person_id=person_id,
+        opportunity_id=opportunity_id,
+        status=None,
+        notes=None,
+        vacancy_evidence_adjudication_artifact=artifact,
+        vacancy_evidence_adjudication_status="draft",
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Could not recompute vacancy evidence adjudication",
+        )
+    return _to_response(updated)
+
+
+@router.post("/{opportunity_id}/vacancy-evidence-adjudication/recompute/stream")
+async def recompute_vacancy_evidence_adjudication_stream(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+    settings: Settings = Depends(get_settings),
+) -> StreamingResponse:
+    person = _require_person(person_id)
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    async def event_generator():
+        try:
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "vacancy_evidence_adjudication_recompute_started",
+                },
+            )
+            await asyncio.sleep(0)
+
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "vacancy_evidence_adjudication_extracting",
+                },
+            )
+            await asyncio.sleep(0)
+
+            artifact = build_vacancy_evidence_adjudication(
+                person=person,
+                opportunity=opportunity,
+                vacancy_dimensions_enriched_artifact=opportunity.get(
+                    "vacancy_dimensions_enriched_artifact",
+                    {},
+                ),
+                vacancy_evidence_analysis_artifact=opportunity.get(
+                    "vacancy_evidence_analysis_artifact",
+                    {},
+                ),
+                settings=settings,
+            )
+
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "vacancy_evidence_adjudication_saving",
+                },
+            )
+            await asyncio.sleep(0)
+
+            updated = update_saved_opportunity(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                status=None,
+                notes=None,
+                vacancy_evidence_adjudication_artifact=artifact,
+                vacancy_evidence_adjudication_status="draft",
+            )
+            if not updated:
+                raise RuntimeError("Could not recompute vacancy evidence adjudication")
+
+            yield _serialize_sse(
+                "message_complete",
+                {
+                    "opportunity": updated,
+                },
+            )
+        except VacancyEvidenceAdjudicationBuildError as exc:
+            update_saved_opportunity(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                status=None,
+                notes=None,
+                vacancy_evidence_adjudication_status="error",
             )
             yield _serialize_sse(
                 "error",
