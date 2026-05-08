@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `Sprint 1 del rediseño de match ya incluye prompts reforzados en S3/S4, defaults de retrieval ajustados, trazas completas de S8 y ahora un nuevo Step 6.5 backend para adjudicacion grounded de evidencia con contrato propio, persistencia por oportunidad y endpoints recompute/stream dedicados`
+- checkpoint_actual: `El rediseño backend de match ya avanza hasta S7 v2 en paralelo: Sprint 1 reforzo S3/S4 y trazas de S8; luego se agrego S6.5 para adjudicacion grounded y ahora S7 v2 resume desde esa adjudicacion con artefacto, persistencia y endpoints propios sin romper todavia S7/S8 legacy`
 - repo_status: `flujo V1 operativo con analisis, postulacion, chat, CV semantico, admin de prompts y extraccion estructurada de vacantes en forma legacy estable; propuesta v2 desacoplada en branch experimental`
 - ultima_actualizacion: `2026-05-08`
 
@@ -30,6 +30,8 @@
 - `Sprint 1` del rediseño de match iniciado en backend: `S3` ahora refuerza preservacion de contexto minimo en items atomizados, `S4` refuerza queries probatorias, los defaults de retrieval quedan en `retrieval_queries_per_item=4` y `top_k_semantic_per_criterion=6`, y `S8` ya persiste traza completa de request/response sin truncacion forzada por flow
 - nuevo slice backend de `S6.5` implementado: contrato `vacancy_evidence_adjudication.v1`, flow `task_vacancy_evidence_adjudication`, servicio grounded LLM-first, persistencia de artefacto/status/generated_at por oportunidad y endpoints `recompute` / `recompute/stream`
 - validacion tecnica del slice `S6.5` en verde: `cd apps/backend && .venv/bin/python -m unittest tests.test_vacancy_evidence_adjudication_contract tests.test_vacancy_evidence_adjudication_service tests.test_vacancy_v2_endpoints` (`47 tests`)
+- nuevo slice backend de `S7 v2` implementado en paralelo: contrato `vacancy_alignment_summary.v2`, servicio deterministico basado en `vacancy_evidence_adjudication.v1`, persistencia separada `vacancy_alignment_summary_v2_*` por oportunidad y endpoints `vacancy-alignment-summary-v2/recompute` y `recompute/stream`
+- validacion tecnica del slice `S7 v2` en verde: `cd apps/backend && .venv/bin/python -m unittest tests.test_vacancy_alignment_summary_v2_contract tests.test_vacancy_alignment_summary_v2_service tests.test_vacancy_v2_endpoints` (`51 tests`)
 - plan de implementacion y tareas de seguimiento volcados a Notion en `Engineering Projects Hub`
 - mecanica operativa de ejecucion y fuente de verdad formalizada en `AGENTS.md`
 - protocolo iterativo de implementacion agregado en `.specify/instructions/Implementation-Worker-Protocol.md`
