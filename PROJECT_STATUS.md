@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `El rediseño backend de match ya avanza hasta S7 v2 en paralelo: Sprint 1 reforzo S3/S4 y trazas de S8; luego se agrego S6.5 para adjudicacion grounded y ahora S7 v2 resume desde esa adjudicacion con artefacto, persistencia y endpoints propios sin romper todavia S7/S8 legacy`
+- checkpoint_actual: `El rediseño de match ya expone en la UI experimental Vacancy V2 los nuevos Steps S6.5 y S7 v2, con recompute SSE, status, generated_at y JSON read-only, sobre backend ya validado; S8 legacy sigue intacto mientras el siguiente slice prepara S8 v2`
 - repo_status: `flujo V1 operativo con analisis, postulacion, chat, CV semantico, admin de prompts y extraccion estructurada de vacantes en forma legacy estable; propuesta v2 desacoplada en branch experimental`
 - ultima_actualizacion: `2026-05-08`
 
@@ -32,6 +32,8 @@
 - validacion tecnica del slice `S6.5` en verde: `cd apps/backend && .venv/bin/python -m unittest tests.test_vacancy_evidence_adjudication_contract tests.test_vacancy_evidence_adjudication_service tests.test_vacancy_v2_endpoints` (`47 tests`)
 - nuevo slice backend de `S7 v2` implementado en paralelo: contrato `vacancy_alignment_summary.v2`, servicio deterministico basado en `vacancy_evidence_adjudication.v1`, persistencia separada `vacancy_alignment_summary_v2_*` por oportunidad y endpoints `vacancy-alignment-summary-v2/recompute` y `recompute/stream`
 - validacion tecnica del slice `S7 v2` en verde: `cd apps/backend && .venv/bin/python -m unittest tests.test_vacancy_alignment_summary_v2_contract tests.test_vacancy_alignment_summary_v2_service tests.test_vacancy_v2_endpoints` (`51 tests`)
+- slice frontend experimental agregado para `S6.5` y `S7 v2`: panel `Vacancy V2` ahora muestra cards dedicadas, estado, `generated_at`, boton `Recalcular`, aprobacion manual `draft/approved`, etiquetas SSE amigables y JSON read-only para ambos artefactos
+- validacion tecnica del slice frontend `S6.5 + S7 v2`: `cd apps/frontend && npm run build` en verde
 - plan de implementacion y tareas de seguimiento volcados a Notion en `Engineering Projects Hub`
 - mecanica operativa de ejecucion y fuente de verdad formalizada en `AGENTS.md`
 - protocolo iterativo de implementacion agregado en `.specify/instructions/Implementation-Worker-Protocol.md`

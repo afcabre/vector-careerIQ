@@ -107,6 +107,12 @@ export type Opportunity = {
   vacancy_evidence_analysis_artifact: Record<string, unknown>;
   vacancy_evidence_analysis_status: "none" | "draft" | "approved" | "error";
   vacancy_evidence_analysis_generated_at: string;
+  vacancy_evidence_adjudication_artifact: Record<string, unknown>;
+  vacancy_evidence_adjudication_status: "none" | "draft" | "approved" | "error";
+  vacancy_evidence_adjudication_generated_at: string;
+  vacancy_alignment_summary_v2_artifact: Record<string, unknown>;
+  vacancy_alignment_summary_v2_status: "none" | "draft" | "approved" | "error";
+  vacancy_alignment_summary_v2_generated_at: string;
   vacancy_alignment_summary_artifact: Record<string, unknown>;
   vacancy_alignment_summary_status: "none" | "draft" | "approved" | "error";
   vacancy_alignment_summary_generated_at: string;
@@ -974,6 +980,10 @@ export async function updateOpportunity(
     vacancy_retrieval_evidence_status?: "none" | "draft" | "approved" | "error";
     vacancy_evidence_analysis_artifact?: Record<string, unknown>;
     vacancy_evidence_analysis_status?: "none" | "draft" | "approved" | "error";
+    vacancy_evidence_adjudication_artifact?: Record<string, unknown>;
+    vacancy_evidence_adjudication_status?: "none" | "draft" | "approved" | "error";
+    vacancy_alignment_summary_v2_artifact?: Record<string, unknown>;
+    vacancy_alignment_summary_v2_status?: "none" | "draft" | "approved" | "error";
     vacancy_alignment_summary_artifact?: Record<string, unknown>;
     vacancy_alignment_summary_status?: "none" | "draft" | "approved" | "error";
     vacancy_alignment_report_artifact?: Record<string, unknown>;
@@ -1104,6 +1114,82 @@ export async function recomputeOpportunityVacancyEvidenceAnalysis(
   return parseResponse<Opportunity>(response);
 }
 
+export async function recomputeOpportunityVacancyEvidenceAdjudicationStream(
+  personId: string,
+  opportunityId: string,
+  onStatus: (stage: string) => void
+): Promise<Opportunity> {
+  const response = await safeFetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/vacancy-evidence-adjudication/recompute/stream`,
+    {
+      method: "POST",
+      credentials: "include"
+    }
+  );
+  if (!response.ok) {
+    let messageText = `Request failed: ${response.status}`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) {
+        messageText = payload.detail;
+      }
+    } catch {
+      // Ignore parsing errors for stream setup failures.
+    }
+    throw new Error(messageText);
+  }
+  if (!response.body) {
+    throw new Error("Streaming response body is empty");
+  }
+
+  const decoder = new TextDecoder();
+  const reader = response.body.getReader();
+  let pending = "";
+  let completedOpportunity: Opportunity | null = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+    pending += decoder.decode(value, { stream: true });
+    const consumed = consumeSseBuffer(pending, (eventName, payload) => {
+      if (eventName === "tool_status") {
+        const stage = payload.stage;
+        if (typeof stage === "string" && stage.trim()) {
+          onStatus(stage.trim());
+        }
+      } else if (eventName === "message_complete") {
+        const opportunity = payload.opportunity;
+        if (opportunity && typeof opportunity === "object") {
+          completedOpportunity = opportunity as unknown as Opportunity;
+        }
+      }
+    });
+    pending = consumed.remainder;
+  }
+  if (pending.trim()) {
+    consumeSseBuffer(`${pending}\n\n`, (eventName, payload) => {
+      if (eventName === "tool_status") {
+        const stage = payload.stage;
+        if (typeof stage === "string" && stage.trim()) {
+          onStatus(stage.trim());
+        }
+      } else if (eventName === "message_complete") {
+        const opportunity = payload.opportunity;
+        if (opportunity && typeof opportunity === "object") {
+          completedOpportunity = opportunity as unknown as Opportunity;
+        }
+      }
+    });
+  }
+
+  if (!completedOpportunity) {
+    throw new Error("Vacancy evidence adjudication stream ended without completion payload");
+  }
+  return completedOpportunity;
+}
+
 export async function recomputeOpportunityVacancyAlignmentSummary(
   personId: string,
   opportunityId: string
@@ -1116,6 +1202,82 @@ export async function recomputeOpportunityVacancyAlignmentSummary(
     }
   );
   return parseResponse<Opportunity>(response);
+}
+
+export async function recomputeOpportunityVacancyAlignmentSummaryV2Stream(
+  personId: string,
+  opportunityId: string,
+  onStatus: (stage: string) => void
+): Promise<Opportunity> {
+  const response = await safeFetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/vacancy-alignment-summary-v2/recompute/stream`,
+    {
+      method: "POST",
+      credentials: "include"
+    }
+  );
+  if (!response.ok) {
+    let messageText = `Request failed: ${response.status}`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) {
+        messageText = payload.detail;
+      }
+    } catch {
+      // Ignore parsing errors for stream setup failures.
+    }
+    throw new Error(messageText);
+  }
+  if (!response.body) {
+    throw new Error("Streaming response body is empty");
+  }
+
+  const decoder = new TextDecoder();
+  const reader = response.body.getReader();
+  let pending = "";
+  let completedOpportunity: Opportunity | null = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+    pending += decoder.decode(value, { stream: true });
+    const consumed = consumeSseBuffer(pending, (eventName, payload) => {
+      if (eventName === "tool_status") {
+        const stage = payload.stage;
+        if (typeof stage === "string" && stage.trim()) {
+          onStatus(stage.trim());
+        }
+      } else if (eventName === "message_complete") {
+        const opportunity = payload.opportunity;
+        if (opportunity && typeof opportunity === "object") {
+          completedOpportunity = opportunity as unknown as Opportunity;
+        }
+      }
+    });
+    pending = consumed.remainder;
+  }
+  if (pending.trim()) {
+    consumeSseBuffer(`${pending}\n\n`, (eventName, payload) => {
+      if (eventName === "tool_status") {
+        const stage = payload.stage;
+        if (typeof stage === "string" && stage.trim()) {
+          onStatus(stage.trim());
+        }
+      } else if (eventName === "message_complete") {
+        const opportunity = payload.opportunity;
+        if (opportunity && typeof opportunity === "object") {
+          completedOpportunity = opportunity as unknown as Opportunity;
+        }
+      }
+    });
+  }
+
+  if (!completedOpportunity) {
+    throw new Error("Vacancy alignment summary v2 stream ended without completion payload");
+  }
+  return completedOpportunity;
 }
 
 export async function recomputeOpportunityVacancyAlignmentReport(
