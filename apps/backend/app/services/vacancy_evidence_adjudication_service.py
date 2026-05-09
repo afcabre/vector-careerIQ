@@ -67,6 +67,15 @@ def _analysis_signature(*, item_id: str, item_index: int, group_code: str, raw_t
     )
 
 
+def _expected_item_signature(item: dict[str, Any] | VacancyEvidenceAdjudicationItem) -> str:
+    return _analysis_signature(
+        item_id=str(item.get("item_id", "")).strip(),
+        item_index=int(item.get("item_index", 0) or 0),
+        group_code=str(item.get("group_code", "")).strip(),
+        raw_text=str(item.get("raw_text", "")).strip(),
+    )
+
+
 def _iter_expected_items(
     vacancy_dimensions_enriched_artifact: dict[str, Any],
 ) -> list[dict[str, Any]]:
@@ -169,6 +178,194 @@ def _has_meaningful_items(contract: VacancyEvidenceAdjudicationContract) -> bool
     return bool(contract["items"])
 
 
+def _describe_expected_item(item: dict[str, Any]) -> str:
+    item_id = str(item.get("item_id", "")).strip()
+    raw_text = str(item.get("raw_text", "")).strip()
+    if item_id and raw_text:
+        return f"{item_id}: {raw_text}"
+    return item_id or raw_text or "unknown_item"
+
+
+def _filter_dimensions_enriched_artifact(
+    vacancy_dimensions_enriched_artifact: dict[str, Any],
+    expected_items: list[dict[str, Any]],
+) -> dict[str, Any]:
+    expected_signatures = {_expected_item_signature(item) for item in expected_items}
+    payload = vacancy_dimensions_enriched_artifact["vacancy_dimensions"]
+    return {
+        "contract_version": vacancy_dimensions_enriched_artifact["contract_version"],
+        "vacancy_id": vacancy_dimensions_enriched_artifact["vacancy_id"],
+        "generated_at": vacancy_dimensions_enriched_artifact["generated_at"],
+        "vacancy_dimensions": {
+            group: [
+                item
+                for item in payload[group]
+                if _expected_item_signature(item) in expected_signatures
+            ]
+            for group in ADJUDICATION_GROUPS
+        },
+    }
+
+
+def _filter_evidence_analysis_artifact(
+    vacancy_evidence_analysis_artifact: VacancyEvidenceAnalysisContract,
+    expected_items: list[dict[str, Any]],
+) -> dict[str, Any]:
+    expected_signatures = {_expected_item_signature(item) for item in expected_items}
+    payload = vacancy_evidence_analysis_artifact["analysis"]
+    return {
+        "contract_version": vacancy_evidence_analysis_artifact["contract_version"],
+        "vacancy_id": vacancy_evidence_analysis_artifact["vacancy_id"],
+        "generated_at": vacancy_evidence_analysis_artifact["generated_at"],
+        "thresholds": dict(vacancy_evidence_analysis_artifact["thresholds"]),
+        "analysis": {
+            group: [
+                item
+                for item in payload[group]
+                if _expected_item_signature(item) in expected_signatures
+            ]
+            for group in ADJUDICATION_GROUPS
+        },
+    }
+
+
+def _build_prompt_inputs(
+    *,
+    person: dict[str, Any],
+    opportunity: dict[str, Any],
+    vacancy_id: str,
+    expected_items: list[dict[str, Any]],
+    vacancy_dimensions_enriched_artifact: dict[str, Any],
+    vacancy_evidence_analysis_artifact: VacancyEvidenceAnalysisContract,
+) -> dict[str, str]:
+    person_context = json.dumps(_person_context_payload(person), ensure_ascii=False)
+    opportunity_context = json.dumps(_opportunity_context_payload(opportunity), ensure_ascii=False)
+    dimensions_json = json.dumps(
+        _filter_dimensions_enriched_artifact(
+            vacancy_dimensions_enriched_artifact,
+            expected_items,
+        ),
+        ensure_ascii=False,
+    )
+    evidence_analysis_json = json.dumps(
+        _filter_evidence_analysis_artifact(
+            vacancy_evidence_analysis_artifact,
+            expected_items,
+        ),
+        ensure_ascii=False,
+    )
+    adjudication_input_json = json.dumps(
+        {
+            "vacancy_id": vacancy_id,
+            "items": _build_adjudication_input(
+                expected_items,
+                _build_analysis_index(vacancy_evidence_analysis_artifact),
+            ),
+        },
+        ensure_ascii=False,
+    )
+    return {
+        "person_context": person_context,
+        "opportunity_context": opportunity_context,
+        "vacancy_dimensions_enriched_json": dimensions_json,
+        "evidence_analysis_json": evidence_analysis_json,
+        "adjudication_input_json": adjudication_input_json,
+    }
+
+
+def _run_adjudication_completion(
+    *,
+    person: dict[str, Any],
+    opportunity: dict[str, Any],
+    vacancy_id: str,
+    expected_items: list[dict[str, Any]],
+    vacancy_dimensions_enriched_artifact: dict[str, Any],
+    vacancy_evidence_analysis_artifact: VacancyEvidenceAnalysisContract,
+    settings: Any,
+    llm_temperature: float,
+    phase_label: str,
+) -> VacancyEvidenceAdjudicationContract:
+    prompt_inputs = _build_prompt_inputs(
+        person=person,
+        opportunity=opportunity,
+        vacancy_id=vacancy_id,
+        expected_items=expected_items,
+        vacancy_dimensions_enriched_artifact=vacancy_dimensions_enriched_artifact,
+        vacancy_evidence_analysis_artifact=vacancy_evidence_analysis_artifact,
+    )
+    fallback_user_prompt = (
+        "Actua como evaluador senior de evidencia candidato-vacante. "
+        "Tu tarea es decidir, de forma estrictamente grounded, si la evidencia recuperada del CV soporta cada criterio de la vacante. "
+        "Responde exclusivamente JSON valido conforme a vacancy_evidence_adjudication.v1. "
+        "No incluyas markdown ni explicaciones fuera del JSON. "
+        "Debes devolver exactamente estas claves raiz: items, warnings. "
+        "Usa un item de salida por cada item de entrada en adjudication_input. "
+        "No omitas ningun item de entrada y no inventes items nuevos. "
+        "Antes de responder, verifica internamente que la cantidad de items en items coincide exactamente con la cantidad de items recibidos en adjudication_input. "
+        "Para cada item debes devolver exactamente: item_id, item_index, group, group_code, raw_text, criterion_type, priority, alignment_status, evidence_strength, proof_summary, best_supporting_evidence, weak_or_discarded_evidence, limitations, candidate_risk, cv_improvement_opportunity, confidence. "
+        "Reglas obligatorias: usa unicamente la evidencia proporcionada; no inventes experiencia, certificaciones, cargos, sectores, herramientas, anos ni preferencias; "
+        "no conviertas similitud semantica en cumplimiento; no conviertas ausencia de evidencia en incumplimiento; no uses el score como prueba final; "
+        "evalua si el snippet realmente prueba el criterio; si un snippet es cercano pero no prueba el criterio, muevelo a weak_or_discarded_evidence; "
+        "si el criterio incluye parte obligatoria y parte deseable, no trates la parte deseable como bloqueador. "
+        "alignment_status solo puede ser: direct, partial, indirect, not_evidenced, conflict, not_applicable. "
+        "evidence_strength solo puede ser: high, medium, low, none. "
+        "priority solo puede ser: critical, important, desirable, contextual. "
+        "criterion_type solo puede ser: education, years_experience, leadership, technical_skill, project_management, transformation, business_outcome, certification, language, condition, cultural, other. "
+        "candidate_risk solo puede ser: none, low, medium, high. confidence solo puede ser: high, medium, low. "
+        "best_supporting_evidence debe incluir solo evidencia que realmente soporte el criterio e indicar why_it_supports. "
+        "Vacante: {opportunity_context}. Persona: {person_context}. "
+        "Entrada vacancy_dimensions_enriched.v1: {vacancy_dimensions_enriched_json}. "
+        "Entrada vacancy_evidence_analysis.v1: {evidence_analysis_json}. "
+        "Entrada adjudication_input: {adjudication_input_json}."
+    )
+    user_prompt = build_prompt_text(
+        flow_key=FLOW_TASK_VACANCY_EVIDENCE_ADJUDICATION,
+        context=prompt_inputs,
+        fallback=fallback_user_prompt,
+    )
+    response_text = complete_prompt(
+        _system_prompt_from_global_layers(person),
+        user_prompt,
+        settings,
+        temperature=llm_temperature,
+        person_id=str(person.get("person_id", "")).strip(),
+        opportunity_id=str(opportunity.get("opportunity_id", "")).strip(),
+        flow_key=FLOW_TASK_VACANCY_EVIDENCE_ADJUDICATION,
+        trace_truncation_override=False,
+    )
+    if not response_text or response_text == FALLBACK_MESSAGE:
+        raise VacancyEvidenceAdjudicationBuildError(
+            f"{phase_label} LLM response unavailable; evidence adjudication aborted."
+        )
+
+    parsed = _extract_json_object(response_text)
+    if not parsed:
+        raise VacancyEvidenceAdjudicationBuildError(
+            f"{phase_label} LLM response is not valid JSON; evidence adjudication aborted."
+        )
+
+    candidate = _contract_candidate_from_llm(parsed)
+    return normalize_vacancy_evidence_adjudication_contract(candidate)
+
+
+def _merge_candidate_contracts(
+    primary: VacancyEvidenceAdjudicationContract,
+    supplemental: VacancyEvidenceAdjudicationContract,
+) -> VacancyEvidenceAdjudicationContract:
+    merged_items_by_signature: dict[str, VacancyEvidenceAdjudicationItem] = {}
+    for item in primary["items"]:
+        merged_items_by_signature[_expected_item_signature(item)] = item
+    for item in supplemental["items"]:
+        merged_items_by_signature[_expected_item_signature(item)] = item
+
+    return normalize_vacancy_evidence_adjudication_contract(
+        {
+            "items": list(merged_items_by_signature.values()),
+            "warnings": list(primary["warnings"]) + list(supplemental["warnings"]),
+        }
+    )
+
+
 def _ordered_items_from_expected(
     *,
     candidate_contract: VacancyEvidenceAdjudicationContract,
@@ -203,7 +400,7 @@ def _ordered_items_from_expected(
         )
         matched = by_signature.get(signature)
         if not matched:
-            missing.append(expected["raw_text"])
+            missing.append(_describe_expected_item(expected))
             continue
         ordered.append(
             {
@@ -264,95 +461,63 @@ def build_vacancy_evidence_adjudication(
         or str(opportunity.get("opportunity_id", "")).strip()
     )
     generated_at = _now_iso()
-
-    person_context = json.dumps(_person_context_payload(person), ensure_ascii=False)
-    opportunity_context = json.dumps(_opportunity_context_payload(opportunity), ensure_ascii=False)
-    dimensions_json = json.dumps(normalized_dimensions, ensure_ascii=False)
-    evidence_analysis_json = json.dumps(normalized_analysis, ensure_ascii=False)
-    adjudication_input_json = json.dumps(
-        {
-            "vacancy_id": vacancy_id,
-            "items": _build_adjudication_input(
-                expected_items,
-                _build_analysis_index(normalized_analysis),
-            ),
-        },
-        ensure_ascii=False,
-    )
-
-    fallback_user_prompt = (
-        "Actua como evaluador senior de evidencia candidato-vacante. "
-        "Tu tarea es decidir, de forma estrictamente grounded, si la evidencia recuperada del CV soporta cada criterio de la vacante. "
-        "Responde exclusivamente JSON valido conforme a vacancy_evidence_adjudication.v1. "
-        "No incluyas markdown ni explicaciones fuera del JSON. "
-        "Usa un item de salida por cada item de entrada en adjudication_input. "
-        "Para cada item debes devolver exactamente: item_id, item_index, group, group_code, raw_text, criterion_type, priority, alignment_status, evidence_strength, proof_summary, best_supporting_evidence, weak_or_discarded_evidence, limitations, candidate_risk, cv_improvement_opportunity, confidence. "
-        "Reglas obligatorias: usa unicamente la evidencia proporcionada; no inventes experiencia, certificaciones, cargos, sectores, herramientas, anos ni preferencias; "
-        "no conviertas similitud semantica en cumplimiento; no conviertas ausencia de evidencia en incumplimiento; no uses el score como prueba final; "
-        "evalua si el snippet realmente prueba el criterio; si un snippet es cercano pero no prueba el criterio, muevelo a weak_or_discarded_evidence; "
-        "si el criterio incluye parte obligatoria y parte deseable, no trates la parte deseable como bloqueador. "
-        "alignment_status solo puede ser: direct, partial, indirect, not_evidenced, conflict, not_applicable. "
-        "evidence_strength solo puede ser: high, medium, low, none. "
-        "priority solo puede ser: critical, important, desirable, contextual. "
-        "criterion_type solo puede ser: education, years_experience, leadership, technical_skill, project_management, transformation, business_outcome, certification, language, condition, cultural, other. "
-        "candidate_risk solo puede ser: none, low, medium, high. confidence solo puede ser: high, medium, low. "
-        "best_supporting_evidence debe incluir solo evidencia que realmente soporte el criterio e indicar why_it_supports. "
-        "Vacante: {opportunity_context}. Persona: {person_context}. "
-        "Entrada vacancy_dimensions_enriched.v1: {vacancy_dimensions_enriched_json}. "
-        "Entrada vacancy_evidence_analysis.v1: {evidence_analysis_json}. "
-        "Entrada adjudication_input: {adjudication_input_json}."
-    )
-    user_prompt = build_prompt_text(
-        flow_key=FLOW_TASK_VACANCY_EVIDENCE_ADJUDICATION,
-        context={
-            "person_context": person_context,
-            "opportunity_context": opportunity_context,
-            "vacancy_dimensions_enriched_json": dimensions_json,
-            "evidence_analysis_json": evidence_analysis_json,
-            "adjudication_input_json": adjudication_input_json,
-        },
-        fallback=fallback_user_prompt,
-    )
     runtime_config = get_vacancy_v2_runtime_config(settings)
     llm_temperature = float(runtime_config["step3"]["llm_temperature"])
-
-    response_text = complete_prompt(
-        _system_prompt_from_global_layers(person),
-        user_prompt,
-        settings,
-        temperature=llm_temperature,
-        person_id=str(person.get("person_id", "")).strip(),
-        opportunity_id=str(opportunity.get("opportunity_id", "")).strip(),
-        flow_key=FLOW_TASK_VACANCY_EVIDENCE_ADJUDICATION,
-        trace_truncation_override=False,
+    normalized = _run_adjudication_completion(
+        person=person,
+        opportunity=opportunity,
+        vacancy_id=vacancy_id,
+        expected_items=expected_items,
+        vacancy_dimensions_enriched_artifact=normalized_dimensions,
+        vacancy_evidence_analysis_artifact=normalized_analysis,
+        settings=settings,
+        llm_temperature=llm_temperature,
+        phase_label="Step 6.5",
     )
-    if not response_text or response_text == FALLBACK_MESSAGE:
-        raise VacancyEvidenceAdjudicationBuildError(
-            "Step 6.5 LLM response unavailable; evidence adjudication aborted."
-        )
-
-    parsed = _extract_json_object(response_text)
-    if not parsed:
-        raise VacancyEvidenceAdjudicationBuildError(
-            "Step 6.5 LLM response is not valid JSON; evidence adjudication aborted."
-        )
-
-    candidate = _contract_candidate_from_llm(parsed)
-    normalized = normalize_vacancy_evidence_adjudication_contract(candidate)
     ordered_items, missing_items, extra_items = _ordered_items_from_expected(
         candidate_contract=normalized,
         expected_items=expected_items,
     )
+    retry_used = False
     if missing_items:
-        raise VacancyEvidenceAdjudicationBuildError(
-            "Step 6.5 LLM response omitted adjudication for one or more vacancy items."
+        missing_expected_items = [
+            item
+            for item in expected_items
+            if _describe_expected_item(item) in missing_items
+        ]
+        retry_used = True
+        retry_contract = _run_adjudication_completion(
+            person=person,
+            opportunity=opportunity,
+            vacancy_id=vacancy_id,
+            expected_items=missing_expected_items,
+            vacancy_dimensions_enriched_artifact=normalized_dimensions,
+            vacancy_evidence_analysis_artifact=normalized_analysis,
+            settings=settings,
+            llm_temperature=llm_temperature,
+            phase_label="Step 6.5 retry",
         )
+        normalized = _merge_candidate_contracts(normalized, retry_contract)
+        ordered_items, missing_items, extra_items = _ordered_items_from_expected(
+            candidate_contract=normalized,
+            expected_items=expected_items,
+        )
+        if missing_items:
+            missing_detail = ", ".join(missing_items)
+            raise VacancyEvidenceAdjudicationBuildError(
+                "Step 6.5 LLM response omitted adjudication for one or more vacancy items. "
+                f"Missing items after retry: {missing_detail}"
+            )
 
     artifact = empty_vacancy_evidence_adjudication_contract()
     artifact["vacancy_id"] = vacancy_id
     artifact["generated_at"] = generated_at
     artifact["items"] = ordered_items
     artifact["warnings"] = list(normalized["warnings"])
+    if retry_used:
+        artifact["warnings"].append(
+            "Step 6.5 required a retry because the initial LLM response omitted one or more items."
+        )
     if extra_items:
         artifact["warnings"].append(
             "Step 6.5 returned extra items not present in vacancy_dimensions_enriched.v1; they were ignored."

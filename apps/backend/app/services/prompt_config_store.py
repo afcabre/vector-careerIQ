@@ -530,6 +530,7 @@ def _default_configs() -> dict[str, PromptConfigRecord]:
                 "No escribas markdown ni texto fuera del JSON. "
                 "Debes devolver exactamente estas claves raiz: items, warnings. "
                 "items debe contener un item por cada criterio recibido en adjudication_input, sin omitir ninguno ni inventar nuevos. "
+                "Antes de responder, verifica internamente que la cantidad de items en items coincide exactamente con la cantidad de criterios recibidos en adjudication_input. "
                 "Para cada item devuelve exactamente: item_id, item_index, group, group_code, raw_text, criterion_type, priority, alignment_status, evidence_strength, proof_summary, best_supporting_evidence, weak_or_discarded_evidence, limitations, candidate_risk, cv_improvement_opportunity, confidence. "
                 "Usa unicamente la evidencia proporcionada. No inventes experiencia, certificaciones, cargos, sectores, herramientas, anos, salario, preferencias ni condiciones. "
                 "No conviertas similitud semantica en cumplimiento. No conviertas ausencia de evidencia en incumplimiento. No uses el score como conclusion final; usalo solo como pista auxiliar. "

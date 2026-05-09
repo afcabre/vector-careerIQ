@@ -289,6 +289,76 @@ class VacancyEvidenceAdjudicationServiceTests(unittest.TestCase):
             FLOW_TASK_VACANCY_EVIDENCE_ADJUDICATION,
         )
 
+    def test_build_retries_missing_items_and_merges_retry_output(self) -> None:
+        normalized_items = _normalized_dimension_items()
+        responsibility = normalized_items["responsibility"]
+        required = normalized_items["required"]
+        first_response = (
+            "{"
+            "\"items\":["
+            f"{{\"item_id\":\"{responsibility['item_id']}\",\"item_index\":{responsibility['item_index']},\"group\":\"responsibilities\",\"group_code\":\"resp\",\"raw_text\":\"Liderar area de servicios digitales\",\"criterion_type\":\"leadership\",\"priority\":\"important\",\"alignment_status\":\"partial\",\"evidence_strength\":\"medium\",\"proof_summary\":\"Resumen\",\"best_supporting_evidence\":[],\"weak_or_discarded_evidence\":[],\"limitations\":[],\"candidate_risk\":\"low\",\"cv_improvement_opportunity\":\"\",\"confidence\":\"medium\"}}"
+            "],"
+            "\"warnings\":[]"
+            "}"
+        )
+        retry_response = (
+            "{"
+            "\"items\":["
+            f"{{\"item_id\":\"{required['item_id']}\",\"item_index\":{required['item_index']},\"group\":\"required_criteria\",\"group_code\":\"req\",\"raw_text\":\"Minimo 5 anos de experiencia profesional\",\"criterion_type\":\"years_experience\",\"priority\":\"important\",\"alignment_status\":\"direct\",\"evidence_strength\":\"high\",\"proof_summary\":\"Resumen\",\"best_supporting_evidence\":[],\"weak_or_discarded_evidence\":[],\"limitations\":[],\"candidate_risk\":\"low\",\"cv_improvement_opportunity\":\"\",\"confidence\":\"high\"}}"
+            "],"
+            "\"warnings\":[]"
+            "}"
+        )
+
+        with patch(
+            "app.services.vacancy_evidence_adjudication_service.complete_prompt",
+            side_effect=[first_response, retry_response],
+        ) as mocked_complete:
+            contract = build_vacancy_evidence_adjudication(
+                person=_person(),
+                opportunity=_opportunity(),
+                vacancy_dimensions_enriched_artifact=_dimensions_enriched(),
+                vacancy_evidence_analysis_artifact=_evidence_analysis(),
+                settings=object(),
+            )
+
+        self.assertEqual(mocked_complete.call_count, 2)
+        self.assertEqual(len(contract["items"]), 2)
+        self.assertTrue(
+            any("required a retry" in warning for warning in contract["warnings"])
+        )
+
+    def test_build_reports_missing_items_after_retry(self) -> None:
+        normalized_items = _normalized_dimension_items()
+        responsibility = normalized_items["responsibility"]
+        required = normalized_items["required"]
+        first_response = (
+            "{"
+            "\"items\":["
+            f"{{\"item_id\":\"{responsibility['item_id']}\",\"item_index\":{responsibility['item_index']},\"group\":\"responsibilities\",\"group_code\":\"resp\",\"raw_text\":\"Liderar area de servicios digitales\",\"criterion_type\":\"leadership\",\"priority\":\"important\",\"alignment_status\":\"partial\",\"evidence_strength\":\"medium\",\"proof_summary\":\"Resumen\",\"best_supporting_evidence\":[],\"weak_or_discarded_evidence\":[],\"limitations\":[],\"candidate_risk\":\"low\",\"cv_improvement_opportunity\":\"\",\"confidence\":\"medium\"}}"
+            "],"
+            "\"warnings\":[]"
+            "}"
+        )
+
+        with patch(
+            "app.services.vacancy_evidence_adjudication_service.complete_prompt",
+            side_effect=[first_response, "{\"items\":[],\"warnings\":[]}"],
+        ):
+            with self.assertRaises(VacancyEvidenceAdjudicationBuildError) as raised:
+                build_vacancy_evidence_adjudication(
+                    person=_person(),
+                    opportunity=_opportunity(),
+                    vacancy_dimensions_enriched_artifact=_dimensions_enriched(),
+                    vacancy_evidence_analysis_artifact=_evidence_analysis(),
+                    settings=object(),
+                )
+
+        self.assertIn(
+            f"{required['item_id']}: Minimo 5 anos de experiencia profesional",
+            str(raised.exception),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
