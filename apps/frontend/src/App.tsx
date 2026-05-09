@@ -61,6 +61,7 @@ import {
   recomputeOpportunityVacancyAlignmentSummary,
   recomputeOpportunityVacancyAlignmentSummaryV2Stream,
   recomputeOpportunityVacancyAlignmentReport,
+  recomputeOpportunityVacancyAlignmentReportV2Stream,
   recomputeOpportunityVacancyAlignmentReportStream,
   recomputeOpportunityVacancySalary,
   saveOpportunityFromSearch,
@@ -930,6 +931,23 @@ function getVacancyAlignmentReportStageLabel(stage: string): string {
   return `SSE activo: ${stage}`;
 }
 
+function getVacancyAlignmentReportV2StageLabel(stage: string): string {
+  const normalized = stage.trim().toLowerCase();
+  if (!normalized) {
+    return "";
+  }
+  if (normalized === "vacancy_alignment_report_v2_recompute_started") {
+    return "SSE activo: iniciando reporte grounded v2";
+  }
+  if (normalized === "vacancy_alignment_report_v2_extracting") {
+    return "SSE activo: generando reporte grounded v2";
+  }
+  if (normalized === "vacancy_alignment_report_v2_saving") {
+    return "SSE activo: guardando reporte v2";
+  }
+  return `SSE activo: ${stage}`;
+}
+
 function getVacancyEvidenceAdjudicationStageLabel(stage: string): string {
   const normalized = stage.trim().toLowerCase();
   if (!normalized) {
@@ -1787,6 +1805,8 @@ export default function App() {
   ] = useState<Record<string, string>>({});
   const [recomputingVacancyAlignmentSummaryV2Id, setRecomputingVacancyAlignmentSummaryV2Id] =
     useState<string | null>(null);
+  const [recomputingVacancyAlignmentReportV2Id, setRecomputingVacancyAlignmentReportV2Id] =
+    useState<string | null>(null);
   const [recomputingVacancyAlignmentSummaryId, setRecomputingVacancyAlignmentSummaryId] =
     useState<string | null>(null);
   const [recomputingVacancyAlignmentReportId, setRecomputingVacancyAlignmentReportId] =
@@ -1839,6 +1859,8 @@ export default function App() {
   const [vacancyEvidenceAdjudicationStageByOpportunityId, setVacancyEvidenceAdjudicationStageByOpportunityId] =
     useState<Record<string, string>>({});
   const [vacancyAlignmentSummaryV2StageByOpportunityId, setVacancyAlignmentSummaryV2StageByOpportunityId] =
+    useState<Record<string, string>>({});
+  const [vacancyAlignmentReportV2StageByOpportunityId, setVacancyAlignmentReportV2StageByOpportunityId] =
     useState<Record<string, string>>({});
   const [vacancyAlignmentReportStageByOpportunityId, setVacancyAlignmentReportStageByOpportunityId] =
     useState<Record<string, string>>({});
@@ -3826,6 +3848,53 @@ export default function App() {
     }
   }
 
+  async function handleRecomputeVacancyAlignmentReportV2(item: Opportunity) {
+    if (!selectedPersonId || recomputingVacancyAlignmentReportV2Id) {
+      return;
+    }
+    setRecomputingVacancyAlignmentReportV2Id(item.opportunity_id);
+    setVacancyAlignmentReportV2StageByOpportunityId((current) => ({
+      ...current,
+      [item.opportunity_id]: "vacancy_alignment_report_v2_recompute_started"
+    }));
+    setErrorMessage(null);
+    try {
+      await recomputeOpportunityVacancyAlignmentReportV2Stream(
+        selectedPersonId,
+        item.opportunity_id,
+        (stage) => {
+          setVacancyAlignmentReportV2StageByOpportunityId((current) => ({
+            ...current,
+            [item.opportunity_id]: stage
+          }));
+        }
+      );
+      const items = await listOpportunities(selectedPersonId);
+      setSavedOpportunities(items);
+      if (selectedOpportunityId === item.opportunity_id) {
+        const refreshed = items.find((entry) => entry.opportunity_id === item.opportunity_id);
+        if (refreshed) {
+          setOpportunityStatus(refreshed.status);
+          setOpportunityNotes(refreshed.notes);
+        }
+      }
+      setToastMessage("Vacancy Alignment Report v2 recalculado");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "No se pudo recalcular Vacancy Alignment Report v2";
+      setErrorMessage(message);
+    } finally {
+      setVacancyAlignmentReportV2StageByOpportunityId((current) => {
+        const next = { ...current };
+        delete next[item.opportunity_id];
+        return next;
+      });
+      setRecomputingVacancyAlignmentReportV2Id(null);
+    }
+  }
+
   async function handleRecomputeVacancyAlignmentReport(item: Opportunity) {
     if (!selectedPersonId || recomputingVacancyAlignmentReportId) {
       return;
@@ -3957,6 +4026,7 @@ export default function App() {
       | "vacancy_evidence_analysis"
       | "vacancy_evidence_adjudication"
       | "vacancy_alignment_summary_v2"
+      | "vacancy_alignment_report_v2"
       | "vacancy_alignment_summary"
       | "vacancy_alignment_report",
     status: "none" | "draft" | "approved" | "error"
@@ -4003,6 +4073,10 @@ export default function App() {
       } else if (artifact === "vacancy_alignment_summary_v2") {
         await updateOpportunity(selectedPersonId, item.opportunity_id, {
           vacancy_alignment_summary_v2_status: status,
+        });
+      } else if (artifact === "vacancy_alignment_report_v2") {
+        await updateOpportunity(selectedPersonId, item.opportunity_id, {
+          vacancy_alignment_report_v2_status: status,
         });
       } else if (artifact === "vacancy_alignment_summary") {
         await updateOpportunity(selectedPersonId, item.opportunity_id, {
@@ -6845,6 +6919,8 @@ export default function App() {
                 Object.keys(item.vacancy_evidence_adjudication_artifact ?? {}).length > 0;
               const hasVacancyAlignmentSummaryV2Artifact =
                 Object.keys(item.vacancy_alignment_summary_v2_artifact ?? {}).length > 0;
+              const hasVacancyAlignmentReportV2Artifact =
+                Object.keys(item.vacancy_alignment_report_v2_artifact ?? {}).length > 0;
               const hasVacancyAlignmentSummaryArtifact =
                 Object.keys(item.vacancy_alignment_summary_artifact ?? {}).length > 0;
               const hasVacancyAlignmentReportArtifact =
@@ -6871,6 +6947,9 @@ export default function App() {
               );
               const vacancyAlignmentSummaryV2StatusLabel = getVacancyV2StatusLabel(
                 item.vacancy_alignment_summary_v2_status
+              );
+              const vacancyAlignmentReportV2StatusLabel = getVacancyV2StatusLabel(
+                item.vacancy_alignment_report_v2_status
               );
               const vacancyAlignmentSummaryStatusLabel = getVacancyV2StatusLabel(
                 item.vacancy_alignment_summary_status
@@ -6905,6 +6984,9 @@ export default function App() {
               const vacancyAlignmentSummaryV2GeneratedAt = item.vacancy_alignment_summary_v2_generated_at
                 ? formatAiRunTimestamp(item.vacancy_alignment_summary_v2_generated_at)
                 : "Sin generar";
+              const vacancyAlignmentReportV2GeneratedAt = item.vacancy_alignment_report_v2_generated_at
+                ? formatAiRunTimestamp(item.vacancy_alignment_report_v2_generated_at)
+                : "Sin generar";
               const vacancyAlignmentSummaryGeneratedAt = item.vacancy_alignment_summary_generated_at
                 ? formatAiRunTimestamp(item.vacancy_alignment_summary_generated_at)
                 : "Sin generar";
@@ -6929,6 +7011,8 @@ export default function App() {
                 updatingVacancyV2StatusKey === `vacancy_evidence_adjudication:${item.opportunity_id}`;
               const isUpdatingVacancyAlignmentSummaryV2Status =
                 updatingVacancyV2StatusKey === `vacancy_alignment_summary_v2:${item.opportunity_id}`;
+              const isUpdatingVacancyAlignmentReportV2Status =
+                updatingVacancyV2StatusKey === `vacancy_alignment_report_v2:${item.opportunity_id}`;
               const isUpdatingVacancyAlignmentSummaryStatus =
                 updatingVacancyV2StatusKey === `vacancy_alignment_summary:${item.opportunity_id}`;
               const isUpdatingVacancyAlignmentReportStatus =
@@ -6943,6 +7027,10 @@ export default function App() {
                 vacancyAlignmentSummaryV2StageByOpportunityId[item.opportunity_id] ?? "";
               const vacancyAlignmentSummaryV2StageLabel =
                 getVacancyAlignmentSummaryV2StageLabel(vacancyAlignmentSummaryV2Stage);
+              const vacancyAlignmentReportV2Stage =
+                vacancyAlignmentReportV2StageByOpportunityId[item.opportunity_id] ?? "";
+              const vacancyAlignmentReportV2StageLabel =
+                getVacancyAlignmentReportV2StageLabel(vacancyAlignmentReportV2Stage);
               const vacancyAlignmentReportTraces =
                 vacancyAlignmentReportTracesByOpportunityId[item.opportunity_id] ?? [];
               const isLoadingVacancyAlignmentReportTraces =
@@ -8039,6 +8127,98 @@ export default function App() {
                       ) : (
                         <p className="metaText">
                           Sin artefacto S7 v2. Requiere S6.5 valido para resumir alineacion grounded.
+                        </p>
+                      )}
+                    </section>
+
+                    <section className="vacancyV2Section">
+                      <div className="vacancyV2SectionHeader">
+                        <div>
+                          <p className="metaText vacancyV2SectionTitle">
+                            S8 v2 · Vacancy Alignment Report Grounded
+                          </p>
+                          <p className="metaText">Generado: {vacancyAlignmentReportV2GeneratedAt}</p>
+                          {recomputingVacancyAlignmentReportV2Id === item.opportunity_id
+                          && vacancyAlignmentReportV2StageLabel ? (
+                            <p className="metaText">{vacancyAlignmentReportV2StageLabel}</p>
+                          ) : null}
+                        </div>
+                        <div className="metaChips vacancyV2HeaderChips">
+                          <span
+                            className={`metaChip ${getVacancyV2StatusClassName(item.vacancy_alignment_report_v2_status)}`}
+                          >
+                            {vacancyAlignmentReportV2StatusLabel}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="cardActions">
+                        <button
+                          className="vacancyProfileQuickActionButton"
+                          disabled={
+                            !hasVacancyAlignmentSummaryV2Artifact
+                            || !hasVacancyEvidenceAdjudicationArtifact
+                            || !hasVacancyEvidenceAnalysisArtifact
+                            || recomputingVacancyAlignmentReportV2Id === item.opportunity_id
+                          }
+                          onClick={() => void handleRecomputeVacancyAlignmentReportV2(item)}
+                          type="button"
+                        >
+                          {recomputingVacancyAlignmentReportV2Id === item.opportunity_id
+                            ? vacancyAlignmentReportV2StageLabel || "SSE activo..."
+                            : "Recalcular S8 v2"}
+                        </button>
+                        {hasVacancyAlignmentReportV2Artifact ? (
+                          <button
+                            className="vacancyProfileQuickActionButton"
+                            disabled={isUpdatingVacancyAlignmentReportV2Status}
+                            onClick={() =>
+                              void handleSetVacancyV2Status(
+                                item,
+                                "vacancy_alignment_report_v2",
+                                item.vacancy_alignment_report_v2_status === "approved"
+                                  ? "draft"
+                                  : "approved"
+                              )}
+                            type="button"
+                          >
+                            {isUpdatingVacancyAlignmentReportV2Status
+                              ? "Actualizando..."
+                              : item.vacancy_alignment_report_v2_status === "approved"
+                                ? "Marcar borrador"
+                                : "Aprobar S8 v2"}
+                          </button>
+                        ) : null}
+                      </div>
+                      {hasVacancyAlignmentReportV2Artifact ? (
+                        <>
+                          {typeof item.vacancy_alignment_report_v2_artifact?.rendered_markdown === "string"
+                          && item.vacancy_alignment_report_v2_artifact.rendered_markdown.trim() ? (
+                            <div className="field">
+                              <span>Vista Markdown S8 v2</span>
+                              <div className="analysisMarkdownCard">
+                                <MarkdownContent
+                                  className="analysisMarkdown"
+                                  content={item.vacancy_alignment_report_v2_artifact.rendered_markdown}
+                                />
+                              </div>
+                            </div>
+                          ) : null}
+                          <details className="payloadDetails">
+                            <summary>Ver JSON S8 v2</summary>
+                            <label className="field">
+                              <span>JSON S8 v2</span>
+                              <textarea
+                                className="vacancyV2JsonTextarea"
+                                readOnly
+                                rows={16}
+                                value={safePrettyJson(item.vacancy_alignment_report_v2_artifact)}
+                              />
+                            </label>
+                          </details>
+                        </>
+                      ) : (
+                        <p className="metaText">
+                          Sin artefacto S8 v2. Requiere S6.5, S7 v2 y S6 validos para generar el reporte grounded nuevo.
                         </p>
                       )}
                     </section>
