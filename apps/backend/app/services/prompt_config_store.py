@@ -474,8 +474,9 @@ def _default_configs() -> dict[str, PromptConfigRecord]:
             "template_text": (
                 "Normaliza el salario de la vacante y responde SOLO JSON valido. "
                 "Usa solo estas claves raiz: salary. "
-                "Dentro de salary usa exactamente: min, max, currency, period, raw_text. "
+                "Dentro de salary usa exactamente: min, max, currency, period, raw_text, has_variable_component, variable_component_type, variable_component_note. "
                 "No inventes claves nuevas. Conserva raw_text cuando falte certeza sobre moneda o periodo. "
+                "Si la vacante mezcla salario fijo con comisiones o bono, min/max/currency/period deben representar solo la base fija comparable y el componente variable debe quedar explicito. "
                 "Vacante titulo: {opportunity_title}. "
                 "Empresa: {opportunity_company}. "
                 "Ubicacion: {opportunity_location}. "

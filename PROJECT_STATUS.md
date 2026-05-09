@@ -2,9 +2,9 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `El rediseño de match ya cuenta con S8 v2 en backend, en paralelo al reporte legacy: el nuevo reporte consume S6.5 y S7 v2, valida completitud de la matriz contra la adjudicacion y persiste artefacto propio; la UI experimental ya expone S6.5 y S7 v2 y el siguiente paso natural es exponer S8 v2 en frontend`
+- checkpoint_actual: `El rediseño de match ya cuenta con P0 operativo en perfil y con C1 backend implementado: la vacante ya puede normalizar condiciones comparables (ubicacion, modalidad, compensacion y tipo de contrato) como artefacto separado, mientras S3.1 preserva componente variable explicito para casos de salario fijo + comisiones/bono`
 - repo_status: `flujo V1 operativo con analisis, postulacion, chat, CV semantico, admin de prompts y extraccion estructurada de vacantes en forma legacy estable; propuesta v2 desacoplada en branch experimental`
-- ultima_actualizacion: `2026-05-08`
+- ultima_actualizacion: `2026-05-09`
 
 ## Progreso Por Fase
 - `Fase 0`: completada
@@ -36,6 +36,10 @@
 - decision documental refinada adicional: `P0` se reduce a preferencias operativas comparables (`accepted_locations`, `accepted_modalities`, `contract_types_accepted`, `salary_expectation`, `relocation_willingness`, `travel_willingness`, `hard_constraints`) y excluye senales abstractas como `company_scale`, `organizational_moment`, `cultural_formality`, `work_intensity` y afines, que se reservan para `cultural/company fit`
 - slice `P0` ajustado e implementado de extremo a extremo: el perfil del candidato ahora captura `accepted_locations`, `accepted_modalities`, `contract_types_accepted`, `relocation_willingness`, `travel_willingness` y `hard_constraints`; `P0` ya consume esos campos explicitos y deja de derivar modalidades o rasgos abstractos desde `cultural_fit_preferences`
 - UI de perfil actualizada para capturar y editar las nuevas preferencias comparables de `P0` (ubicaciones aceptadas, modalidades aceptadas, tipos de contrato, relocalizacion, viaje y restricciones duras), manteniendo `languages`, `tools_technologies` y `certifications` en el perfil profesional base y fuera de `P0`
+- decision documental refinada para `C1`: la normalizacion de condiciones comparables de vacante arranca como slice programatico/controlado sin LLM, con enums alineados al modelo comparable de `P0` y con `contract_type` reducido a `indefinite`, `fixed_term`, `service_contract` y `unknown`
+- slice backend `C1` implementado: nuevo contrato `vacancy_comparable_conditions.v1`, servicio deterministico de normalizacion de `location`, `modality`, `compensation` y `contract_type`, persistencia por oportunidad y endpoints `vacancy-comparable-conditions/recompute` y `recompute/stream`
+- `S3.1` extendido de forma acotada: `vacancy_salary_normalization.v1` ahora preserva `has_variable_component`, `variable_component_type` y `variable_component_note`, con inferencia de respaldo cuando el LLM omite la senal pero el `raw_text` contiene `comisiones` o `bono`
+- validacion tecnica del slice `C1 + S3.1 variable component` en verde: `cd apps/backend && .venv/bin/python -m unittest tests.test_vacancy_comparable_conditions_contract tests.test_vacancy_comparable_conditions_service tests.test_vacancy_salary_contract tests.test_vacancy_salary_service tests.test_vacancy_v2_endpoints` (`71 tests`)
 - `Sprint 1` del rediseño de match iniciado en backend: `S3` ahora refuerza preservacion de contexto minimo en items atomizados, `S4` refuerza queries probatorias, los defaults de retrieval quedan en `retrieval_queries_per_item=4` y `top_k_semantic_per_criterion=6`, y `S8` ya persiste traza completa de request/response sin truncacion forzada por flow
 - nuevo slice backend de `S6.5` implementado: contrato `vacancy_evidence_adjudication.v1`, flow `task_vacancy_evidence_adjudication`, servicio grounded LLM-first, persistencia de artefacto/status/generated_at por oportunidad y endpoints `recompute` / `recompute/stream`
 - validacion tecnica del slice `S6.5` en verde: `cd apps/backend && .venv/bin/python -m unittest tests.test_vacancy_evidence_adjudication_contract tests.test_vacancy_evidence_adjudication_service tests.test_vacancy_v2_endpoints` (`47 tests`)

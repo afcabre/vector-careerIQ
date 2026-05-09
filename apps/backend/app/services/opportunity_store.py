@@ -56,6 +56,9 @@ class OpportunityRecord(TypedDict):
     vacancy_salary_artifact: dict[str, Any]
     vacancy_salary_status: str
     vacancy_salary_generated_at: str
+    vacancy_comparable_conditions_artifact: dict[str, Any]
+    vacancy_comparable_conditions_status: str
+    vacancy_comparable_conditions_generated_at: str
     vacancy_dimensions_enriched_artifact: dict[str, Any]
     vacancy_dimensions_enriched_status: str
     vacancy_dimensions_enriched_generated_at: str
@@ -132,6 +135,9 @@ def _normalize(payload: dict | None) -> OpportunityRecord:
         "vacancy_salary_artifact": dict(source.get("vacancy_salary_artifact", {})),
         "vacancy_salary_status": str(source.get("vacancy_salary_status", "none")),
         "vacancy_salary_generated_at": str(source.get("vacancy_salary_generated_at", "")),
+        "vacancy_comparable_conditions_artifact": dict(source.get("vacancy_comparable_conditions_artifact", {})),
+        "vacancy_comparable_conditions_status": str(source.get("vacancy_comparable_conditions_status", "none")),
+        "vacancy_comparable_conditions_generated_at": str(source.get("vacancy_comparable_conditions_generated_at", "")),
         "vacancy_dimensions_enriched_artifact": dict(source.get("vacancy_dimensions_enriched_artifact", {})),
         "vacancy_dimensions_enriched_status": str(source.get("vacancy_dimensions_enriched_status", "none")),
         "vacancy_dimensions_enriched_generated_at": str(source.get("vacancy_dimensions_enriched_generated_at", "")),
@@ -262,6 +268,9 @@ def create_opportunity(
         "vacancy_salary_artifact": {},
         "vacancy_salary_status": "none",
         "vacancy_salary_generated_at": "",
+        "vacancy_comparable_conditions_artifact": {},
+        "vacancy_comparable_conditions_status": "none",
+        "vacancy_comparable_conditions_generated_at": "",
         "vacancy_dimensions_enriched_artifact": {},
         "vacancy_dimensions_enriched_status": "none",
         "vacancy_dimensions_enriched_generated_at": "",
@@ -396,6 +405,8 @@ def update_opportunity(
     vacancy_dimensions_status: str | None = None,
     vacancy_salary_artifact: dict[str, Any] | None = None,
     vacancy_salary_status: str | None = None,
+    vacancy_comparable_conditions_artifact: dict[str, Any] | None = None,
+    vacancy_comparable_conditions_status: str | None = None,
     vacancy_dimensions_enriched_artifact: dict[str, Any] | None = None,
     vacancy_dimensions_enriched_status: str | None = None,
     vacancy_retrieval_queries_artifact: dict[str, Any] | None = None,
@@ -470,6 +481,17 @@ def update_opportunity(
         existing["vacancy_salary_status"] = vacancy_salary_status
         if vacancy_salary_artifact is None:
             existing["vacancy_salary_generated_at"] = _now_iso()
+
+    if vacancy_comparable_conditions_artifact is not None:
+        existing["vacancy_comparable_conditions_artifact"] = dict(vacancy_comparable_conditions_artifact)
+        existing["vacancy_comparable_conditions_generated_at"] = _now_iso()
+
+    if vacancy_comparable_conditions_status is not None:
+        if vacancy_comparable_conditions_status not in VACANCY_V2_ARTIFACT_STATUSES:
+            return None
+        existing["vacancy_comparable_conditions_status"] = vacancy_comparable_conditions_status
+        if vacancy_comparable_conditions_artifact is None:
+            existing["vacancy_comparable_conditions_generated_at"] = _now_iso()
 
     if vacancy_dimensions_enriched_artifact is not None:
         existing["vacancy_dimensions_enriched_artifact"] = dict(vacancy_dimensions_enriched_artifact)

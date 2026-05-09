@@ -48,7 +48,10 @@ class VacancySalaryNormalizationServiceTests(unittest.TestCase):
             "\"max\":18000000,"
             "\"currency\":\" COP \","
             "\"period\":\" mensual \","
-            "\"raw_text\":\"Salario COP 12M a 18M mensual\""
+            "\"raw_text\":\"Salario COP 12M a 18M mensual\","
+            "\"has_variable_component\":false,"
+            "\"variable_component_type\":\"\","
+            "\"variable_component_note\":\"\""
             "}"
             "}"
         )
@@ -93,7 +96,10 @@ class VacancySalaryNormalizationServiceTests(unittest.TestCase):
             "\"max\":18000000,"
             "\"currency\":\"COP\","
             "\"period\":\"mensual\","
-            "\"raw_text\":\"\""
+            "\"raw_text\":\"\","
+            "\"has_variable_component\":false,"
+            "\"variable_component_type\":\"\","
+            "\"variable_component_note\":\"\""
             "}"
             "}"
         )
@@ -118,7 +124,10 @@ class VacancySalaryNormalizationServiceTests(unittest.TestCase):
             "\"max\":null,"
             "\"currency\":\"\","
             "\"period\":\"\","
-            "\"raw_text\":\"Salario COP 12M a 18M mensual\""
+            "\"raw_text\":\"Salario COP 12M a 18M mensual\","
+            "\"has_variable_component\":false,"
+            "\"variable_component_type\":\"\","
+            "\"variable_component_note\":\"\""
             "}"
             "}"
         )
@@ -144,6 +153,7 @@ class VacancySalaryNormalizationServiceTests(unittest.TestCase):
         fallback_prompt = str(prompt_builder_mock.call_args.kwargs.get("fallback", ""))
         self.assertIn("Allowed keys inside salary", fallback_prompt)
         self.assertIn("Salary raw text", fallback_prompt)
+        self.assertIn("variable_component_type", fallback_prompt)
 
     def test_extract_invalid_json_raises_controlled_error(self) -> None:
         with patch(
@@ -161,7 +171,10 @@ class VacancySalaryNormalizationServiceTests(unittest.TestCase):
             "\"max\":null,"
             "\"currency\":\"\","
             "\"period\":\"\","
-            "\"raw_text\":\"Salario COP 12M a 18M mensual\""
+            "\"raw_text\":\"Salario COP 12M a 18M mensual\","
+            "\"has_variable_component\":false,"
+            "\"variable_component_type\":\"\","
+            "\"variable_component_note\":\"\""
             "}"
             "}"
         )
@@ -177,6 +190,35 @@ class VacancySalaryNormalizationServiceTests(unittest.TestCase):
                 extract_vacancy_salary_normalization(_opportunity(), _vacancy_dimensions(), settings=object())
 
         self.assertEqual(complete_prompt_mock.call_args.kwargs["temperature"], 0.22)
+
+    def test_extract_infers_variable_component_from_raw_text_when_llm_omits_it(self) -> None:
+        llm_response = (
+            "{"
+            "\"salary\":{"
+            "\"min\":\"12000000\","
+            "\"max\":null,"
+            "\"currency\":\"COP\","
+            "\"period\":\"mensual\","
+            "\"raw_text\":\"Salario COP 12M + comisiones\","
+            "\"has_variable_component\":false,"
+            "\"variable_component_type\":\"\","
+            "\"variable_component_note\":\"\""
+            "}"
+            "}"
+        )
+
+        with patch(
+            "app.services.vacancy_salary_service.complete_prompt",
+            return_value=llm_response,
+        ):
+            contract = extract_vacancy_salary_normalization(
+                _opportunity(),
+                _vacancy_dimensions(salary_raw_text="Salario COP 12M + comisiones"),
+                settings=object(),
+            )
+
+        self.assertTrue(contract["salary"]["has_variable_component"])
+        self.assertEqual(contract["salary"]["variable_component_type"], "commission")
 
 
 if __name__ == "__main__":

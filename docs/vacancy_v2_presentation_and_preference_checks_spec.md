@@ -271,6 +271,7 @@ Recommended controlled values:
 
 Interpretation rule:
 - if none are selected, the preference remains unspecified / unknown;
+- no explicit `unknown` checkbox should be captured for contract types; leaving the set empty is equivalent to "not specified yet";
 - no separate `remote_accepted` field should be captured;
 - remote acceptance is inferred from whether `remote` is included inside `accepted_modalities`.
 
@@ -533,15 +534,15 @@ Suggested shape:
     "currency": "COP",
     "min_amount": 12000000,
     "max_amount": null,
+    "period": "monthly",
     "has_variable_component": true,
     "variable_component_type": "commission | bonus | mixed | unknown",
     "variable_component_note": "comisiones",
-    "bonus": true,
     "confidence": "high"
   },
   "contract_type": {
     "raw": "",
-    "value": "",
+    "value": "indefinite | fixed_term | service_contract | unknown",
     "confidence": "none"
   },
   "warnings": []
@@ -556,6 +557,13 @@ Input sources:
 Notes:
 - this artifact may use deterministic normalization plus lightweight interpretation where needed
 - unknown data must remain unknown
+- first implementation decision: `C1` should be deterministic/programmatic and should not require a prompt-configured LLM step
+- `contract_type.value` should align with the reduced comparable contract model:
+  - `indefinite`
+  - `fixed_term`
+  - `service_contract`
+  - `unknown`
+- if the vacancy expresses a contract label outside that reduced set, the normalizer may map it conservatively to the closest stable comparable value or keep it as `unknown` with a warning
 
 ## Narrow Extension Proposed for `S3.1`
 

@@ -38,7 +38,7 @@ Consolidar en un solo documento la definicion operativa de los Steps de `vacancy
 | Capa | Nombre | Tipo | Output principal | Prompt key |
 | --- | --- | --- | --- | --- |
 | `P0` | Limpieza de perfil comparable del candidato | programatico | `candidate_preference_profile.v1` | `ninguna` |
-| `C1` | Normalizacion de condiciones comparables de vacante | mixto/controlado | `vacancy_comparable_conditions.v1` | `por definir si se requiere` |
+| `C1` | Normalizacion de condiciones comparables de vacante | programatico/controlado | `vacancy_comparable_conditions.v1` | `ninguna` |
 | `C2` | Checks deterministas vacante-perfil | programatico | `candidate_preference_checks.v1` | `ninguna` |
 | `P1` | Matriz deterministica de presentacion profesional | programatico | `vacancy_fit_presentation.v1` | `ninguna` |
 | `S8 v2` | Relato final centrado en la persona candidata | `LLM-first` | `vacancy_alignment_report.v2` | `task_vacancy_alignment_report_v2` |
@@ -277,7 +277,7 @@ Esas senales quedan fuera del artefacto comparable y, si se usan, pertenecen al 
 Convertir las condiciones observables de la vacante en senales comparables estables antes de cruzarlas con el perfil del candidato.
 
 ### Tipo de ejecucion
-Mixto o controlado
+Programatico o controlado
 
 ### Input
 - `vacancy_dimensions.v2.work_conditions`
@@ -299,8 +299,20 @@ La interpretacion puede existir al normalizar, pero el output debe quedar establ
 ### Caso especial planeado
 Si la vacante expresa `salario fijo + comisiones` o `salario fijo + variable`, la base fija debe quedar comparable y el componente variable debe quedar explicitado, no solo escondido en `raw_text`.
 
+### Regla de valores
+- `contract_type.value` debe alinearse con el set reducido comparable:
+  - `indefinite`
+  - `fixed_term`
+  - `service_contract`
+  - `unknown`
+- `modality.mode` debe alinearse con:
+  - `onsite`
+  - `hybrid`
+  - `remote`
+  - `unknown`
+
 ### Prompt key
-- `por definir si se requiere`
+- `ninguna`
 
 ## C2. Checks deterministas vacante-perfil
 ### Objetivo

@@ -25,6 +25,9 @@ class VacancySalaryNormalizationError(RuntimeError):
 _SALARY_SIGNAL_PATTERN = re.compile(
     r"(?i)(salary|salario|sueldo|remuner|compens|pay|usd|cop|eur|mxn|\$\s*\d)"
 )
+_VARIABLE_COMMISSION_PATTERN = re.compile(r"(?i)\b(comision(?:es)?|commission(?:s)?)\b")
+_VARIABLE_BONUS_PATTERN = re.compile(r"(?i)\b(bono(?:s)?|bonus(?:es)?)\b")
+_VARIABLE_GENERIC_PATTERN = re.compile(r"(?i)\b(variable|variable compensation)\b")
 
 
 def _now_iso() -> str:
@@ -72,6 +75,29 @@ def _has_any_salary_content(contract: VacancySalaryNormalizationContract) -> boo
     return bool(salary["raw_text"])
 
 
+def _infer_variable_component(raw_text: str) -> tuple[bool, str, str]:
+    compact = " ".join(str(raw_text or "").strip().split())
+    if not compact:
+        return False, "", ""
+
+    labels: list[str] = []
+    component_type = ""
+
+    if _VARIABLE_COMMISSION_PATTERN.search(compact):
+        labels.append("comisiones")
+        component_type = "commission"
+    if _VARIABLE_BONUS_PATTERN.search(compact):
+        labels.append("bono")
+        component_type = "bonus" if not component_type else "mixed"
+    if _VARIABLE_GENERIC_PATTERN.search(compact) and not component_type:
+        labels.append("variable")
+        component_type = "unknown"
+
+    if not component_type:
+        return False, "", ""
+    return True, component_type, ", ".join(labels)
+
+
 def _extract_salary_raw_text(vacancy_dimensions_artifact: dict[str, Any]) -> str:
     work_conditions = vacancy_dimensions_artifact["vacancy_dimensions"]["work_conditions"]
     salary_candidates: list[str] = []
@@ -103,14 +129,16 @@ def extract_vacancy_salary_normalization(
 
     system_prompt = (
         "You are a vacancy salary normalizer. Return valid JSON only for vacancy_salary_normalization.v1. "
-        "Normalize salary into min, max, currency, period, and raw_text. "
+        "Normalize salary into min, max, currency, period, raw_text, has_variable_component, variable_component_type, and variable_component_note. "
+        "min/max/currency/period must represent only the fixed comparable base when the vacancy also mentions commissions or bonuses. "
         "Preserve raw_text exactly when min/max/currency/period are uncertain."
     )
     fallback_user_prompt = (
         "Normalize vacancy salary and respond with valid JSON only. "
         "Root key allowed: salary. "
-        "Allowed keys inside salary: min, max, currency, period, raw_text. "
+        "Allowed keys inside salary: min, max, currency, period, raw_text, has_variable_component, variable_component_type, variable_component_note. "
         "Do not invent extra keys. Keep raw_text aligned with the source salary signal. "
+        "If the text includes fixed salary plus commissions or bonus, keep the fixed base in min/max and preserve the variable component explicitly. "
         f"Vacancy title: {opportunity.get('title', '')}. "
         f"Company: {opportunity.get('company', '')}. "
         f"Location: {opportunity.get('location', '')}. "
@@ -157,6 +185,12 @@ def extract_vacancy_salary_normalization(
     normalized["vacancy_id"] = vacancy_id
     normalized["generated_at"] = generated_at
     normalized["salary"]["raw_text"] = normalized["salary"]["raw_text"] or salary_raw_text
+    if not normalized["salary"]["has_variable_component"]:
+        (
+            normalized["salary"]["has_variable_component"],
+            normalized["salary"]["variable_component_type"],
+            normalized["salary"]["variable_component_note"],
+        ) = _infer_variable_component(normalized["salary"]["raw_text"])
 
     if _has_any_salary_content(normalized):
         return normalized

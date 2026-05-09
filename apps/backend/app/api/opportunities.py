@@ -70,6 +70,10 @@ from app.services.vacancy_salary_service import (
     VacancySalaryNormalizationError,
     extract_vacancy_salary_normalization,
 )
+from app.services.vacancy_comparable_conditions_service import (
+    VacancyComparableConditionsBuildError,
+    build_vacancy_comparable_conditions,
+)
 from app.services.vacancy_dimensions_enrichment_service import (
     VacancyDimensionsEnrichmentError,
     enrich_vacancy_dimensions_artifact,
@@ -137,6 +141,9 @@ class OpportunityResponse(BaseModel):
     vacancy_salary_artifact: dict[str, Any]
     vacancy_salary_status: str
     vacancy_salary_generated_at: str
+    vacancy_comparable_conditions_artifact: dict[str, Any]
+    vacancy_comparable_conditions_status: str
+    vacancy_comparable_conditions_generated_at: str
     vacancy_dimensions_enriched_artifact: dict[str, Any]
     vacancy_dimensions_enriched_status: str
     vacancy_dimensions_enriched_generated_at: str
@@ -254,6 +261,8 @@ class UpdateOpportunityRequest(BaseModel):
     vacancy_dimensions_status: str | None = Field(default=None)
     vacancy_salary_artifact: dict[str, Any] | None = Field(default=None)
     vacancy_salary_status: str | None = Field(default=None)
+    vacancy_comparable_conditions_artifact: dict[str, Any] | None = Field(default=None)
+    vacancy_comparable_conditions_status: str | None = Field(default=None)
     vacancy_dimensions_enriched_artifact: dict[str, Any] | None = Field(default=None)
     vacancy_dimensions_enriched_status: str | None = Field(default=None)
     vacancy_retrieval_queries_artifact: dict[str, Any] | None = Field(default=None)
@@ -643,6 +652,14 @@ def update_opportunity(
             detail="Invalid vacancy_salary_status",
         )
     if (
+        payload.vacancy_comparable_conditions_status is not None
+        and payload.vacancy_comparable_conditions_status not in VACANCY_V2_ARTIFACT_STATUSES
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid vacancy_comparable_conditions_status",
+        )
+    if (
         payload.vacancy_dimensions_enriched_status is not None
         and payload.vacancy_dimensions_enriched_status not in VACANCY_V2_ARTIFACT_STATUSES
     ):
@@ -728,6 +745,8 @@ def update_opportunity(
         vacancy_dimensions_status=payload.vacancy_dimensions_status,
         vacancy_salary_artifact=payload.vacancy_salary_artifact,
         vacancy_salary_status=payload.vacancy_salary_status,
+        vacancy_comparable_conditions_artifact=payload.vacancy_comparable_conditions_artifact,
+        vacancy_comparable_conditions_status=payload.vacancy_comparable_conditions_status,
         vacancy_dimensions_enriched_artifact=payload.vacancy_dimensions_enriched_artifact,
         vacancy_dimensions_enriched_status=payload.vacancy_dimensions_enriched_status,
         vacancy_retrieval_queries_artifact=payload.vacancy_retrieval_queries_artifact,
@@ -1190,6 +1209,155 @@ async def recompute_vacancy_salary_stream(
                 status=None,
                 notes=None,
                 vacancy_salary_status="error",
+            )
+            yield _serialize_sse(
+                "error",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "detail": str(exc),
+                },
+            )
+        except Exception as exc:  # pragma: no cover - stream runtime path
+            yield _serialize_sse(
+                "error",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "detail": str(exc),
+                },
+            )
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.post("/{opportunity_id}/vacancy-comparable-conditions/recompute")
+def recompute_vacancy_comparable_conditions(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+) -> OpportunityResponse:
+    _require_person(person_id)
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    try:
+        artifact = build_vacancy_comparable_conditions(
+            opportunity=opportunity,
+            vacancy_dimensions_artifact=opportunity.get("vacancy_dimensions_artifact", {}),
+            vacancy_salary_artifact=opportunity.get("vacancy_salary_artifact", {}),
+        )
+    except VacancyComparableConditionsBuildError as exc:
+        update_saved_opportunity(
+            person_id=person_id,
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_comparable_conditions_status="error",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    updated = update_saved_opportunity(
+        person_id=person_id,
+        opportunity_id=opportunity_id,
+        status=None,
+        notes=None,
+        vacancy_comparable_conditions_artifact=artifact,
+        vacancy_comparable_conditions_status="draft",
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Could not recompute vacancy comparable conditions",
+        )
+    return _to_response(updated)
+
+
+@router.post("/{opportunity_id}/vacancy-comparable-conditions/recompute/stream")
+async def recompute_vacancy_comparable_conditions_stream(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+) -> StreamingResponse:
+    _require_person(person_id)
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    async def event_generator():
+        try:
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "vacancy_comparable_conditions_recompute_started",
+                },
+            )
+            await asyncio.sleep(0)
+
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "vacancy_comparable_conditions_building",
+                },
+            )
+            await asyncio.sleep(0)
+
+            artifact = build_vacancy_comparable_conditions(
+                opportunity=opportunity,
+                vacancy_dimensions_artifact=opportunity.get("vacancy_dimensions_artifact", {}),
+                vacancy_salary_artifact=opportunity.get("vacancy_salary_artifact", {}),
+            )
+
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "vacancy_comparable_conditions_saving",
+                },
+            )
+            await asyncio.sleep(0)
+
+            updated = update_saved_opportunity(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                status=None,
+                notes=None,
+                vacancy_comparable_conditions_artifact=artifact,
+                vacancy_comparable_conditions_status="draft",
+            )
+            if not updated:
+                raise RuntimeError("Could not recompute vacancy comparable conditions")
+
+            yield _serialize_sse(
+                "message_complete",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "opportunity": updated,
+                },
+            )
+        except VacancyComparableConditionsBuildError as exc:
+            update_saved_opportunity(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                status=None,
+                notes=None,
+                vacancy_comparable_conditions_status="error",
             )
             yield _serialize_sse(
                 "error",

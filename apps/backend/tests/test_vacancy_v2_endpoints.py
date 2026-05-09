@@ -27,6 +27,7 @@ from app.services.vacancy_evidence_analysis_service import VacancyEvidenceAnalys
 from app.services.vacancy_retrieval_evidence_service import VacancyRetrievalEvidenceBuildError
 from app.services.vacancy_retrieval_queries_service import VacancyRetrievalQueriesExtractionError
 from app.services.vacancy_salary_service import VacancySalaryNormalizationError
+from app.services.vacancy_comparable_conditions_service import VacancyComparableConditionsBuildError
 
 
 def _clear_in_memory_state() -> None:
@@ -93,7 +94,47 @@ def _sample_vacancy_salary(opportunity_id: str) -> dict[str, Any]:
             "currency": "COP",
             "period": "mensual",
             "raw_text": "Salario COP 12M a 18M mensual",
+            "has_variable_component": False,
+            "variable_component_type": "",
+            "variable_component_note": "",
         },
+    }
+
+
+def _sample_vacancy_comparable_conditions(opportunity_id: str) -> dict[str, Any]:
+    return {
+        "contract_version": "vacancy_comparable_conditions.v1",
+        "vacancy_id": opportunity_id,
+        "generated_at": "2026-04-21T10:02:30Z",
+        "location": {
+            "raw": "Bogota D.C.",
+            "normalized_city": "Bogota",
+            "normalized_country": "Colombia",
+            "confidence": "high",
+        },
+        "modality": {
+            "raw": "Hibrido 4x1",
+            "mode": "hybrid",
+            "intensity": "4x1",
+            "confidence": "high",
+        },
+        "compensation": {
+            "raw": "Salario COP 12M a 18M mensual",
+            "currency": "COP",
+            "min_amount": 12000000,
+            "max_amount": 18000000,
+            "period": "mensual",
+            "has_variable_component": False,
+            "variable_component_type": "",
+            "variable_component_note": "",
+            "confidence": "high",
+        },
+        "contract_type": {
+            "raw": "Contrato indefinido",
+            "value": "indefinite",
+            "confidence": "high",
+        },
+        "warnings": [],
     }
 
 
@@ -662,6 +703,21 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         self.assertEqual(invalid_salary_status.exception.status_code, 422)
         self.assertEqual(invalid_salary_status.exception.detail, "Invalid vacancy_salary_status")
 
+        with self.assertRaises(HTTPException) as invalid_comparable_conditions_status:
+            opportunities_api.update_opportunity(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                payload=opportunities_api.UpdateOpportunityRequest(
+                    vacancy_comparable_conditions_status="invalid"
+                ),
+                _=self.session,
+            )
+        self.assertEqual(invalid_comparable_conditions_status.exception.status_code, 422)
+        self.assertEqual(
+            invalid_comparable_conditions_status.exception.detail,
+            "Invalid vacancy_comparable_conditions_status",
+        )
+
         with self.assertRaises(HTTPException) as invalid_enriched_status:
             opportunities_api.update_opportunity(
                 person_id="p-001",
@@ -896,6 +952,87 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         stored = opportunity_store.find_opportunity("p-001", opportunity_id)
         assert stored is not None
         self.assertEqual(stored["vacancy_salary_status"], "error")
+
+    def test_recompute_vacancy_comparable_conditions_success_sets_draft_artifact(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Gerente de Tecnologia",
+            company="Asssiprex",
+            location="Bogota, Colombia",
+            raw_text="Vacante con modalidad, salario y tipo de contrato.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_dimensions_artifact=_sample_vacancy_dimensions(opportunity_id),
+            vacancy_dimensions_status="approved",
+            vacancy_salary_artifact=_sample_vacancy_salary(opportunity_id),
+            vacancy_salary_status="approved",
+        )
+        assert updated is not None
+        artifact = _sample_vacancy_comparable_conditions(opportunity_id)
+
+        with patch.object(
+            opportunities_api,
+            "build_vacancy_comparable_conditions",
+            return_value=artifact,
+        ):
+            response = opportunities_api.recompute_vacancy_comparable_conditions(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                _=self.session,
+            )
+
+        self.assertEqual(response.vacancy_comparable_conditions_status, "draft")
+        self.assertEqual(
+            response.vacancy_comparable_conditions_artifact["contract_version"],
+            "vacancy_comparable_conditions.v1",
+        )
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_comparable_conditions_status"], "draft")
+
+    def test_recompute_vacancy_comparable_conditions_failure_sets_error_status(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Gerente de Tecnologia",
+            company="Asssiprex",
+            location="Bogota, Colombia",
+            raw_text="Vacante con modalidad y salario.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_dimensions_artifact=_sample_vacancy_dimensions(opportunity_id),
+            vacancy_dimensions_status="approved",
+        )
+        assert updated is not None
+
+        with patch.object(
+            opportunities_api,
+            "build_vacancy_comparable_conditions",
+            side_effect=VacancyComparableConditionsBuildError(
+                "C1 requires a valid vacancy_dimensions.v2 artifact."
+            ),
+        ):
+            with self.assertRaises(HTTPException) as ctx:
+                opportunities_api.recompute_vacancy_comparable_conditions(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                )
+
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertIn("C1 requires a valid vacancy_dimensions.v2 artifact.", str(ctx.exception.detail))
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_comparable_conditions_status"], "error")
 
     def test_recompute_vacancy_dimensions_enriched_success_sets_draft_artifact(self) -> None:
         created = opportunity_store.import_text_opportunity(
@@ -1980,6 +2117,95 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         stored = opportunity_store.find_opportunity("p-001", opportunity_id)
         assert stored is not None
         self.assertEqual(stored["vacancy_salary_status"], "error")
+
+    def test_vacancy_comparable_conditions_stream_emits_stages_and_message_complete(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Gerente de Tecnologia",
+            company="Asssiprex",
+            location="Bogota, Colombia",
+            raw_text="Rol con modalidad, salario y contrato.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_dimensions_artifact=_sample_vacancy_dimensions(opportunity_id),
+            vacancy_dimensions_status="approved",
+            vacancy_salary_artifact=_sample_vacancy_salary(opportunity_id),
+            vacancy_salary_status="approved",
+        )
+        assert updated is not None
+        artifact = _sample_vacancy_comparable_conditions(opportunity_id)
+
+        with patch.object(opportunities_api, "build_vacancy_comparable_conditions", return_value=artifact):
+            response = asyncio.run(
+                opportunities_api.recompute_vacancy_comparable_conditions_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        stages = [payload.get("stage", "") for name, payload in events if name == "tool_status"]
+        self.assertIn("vacancy_comparable_conditions_recompute_started", stages)
+        self.assertIn("vacancy_comparable_conditions_building", stages)
+        self.assertIn("vacancy_comparable_conditions_saving", stages)
+        complete_payload = next(payload for name, payload in events if name == "message_complete")
+        self.assertEqual(
+            complete_payload["opportunity"]["vacancy_comparable_conditions_status"],
+            "draft",
+        )
+
+    def test_vacancy_comparable_conditions_stream_emits_error_and_marks_status(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Gerente de Tecnologia",
+            company="Asssiprex",
+            location="Bogota, Colombia",
+            raw_text="Rol con modalidad y salario.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_dimensions_artifact=_sample_vacancy_dimensions(opportunity_id),
+            vacancy_dimensions_status="approved",
+        )
+        assert updated is not None
+
+        with patch.object(
+            opportunities_api,
+            "build_vacancy_comparable_conditions",
+            side_effect=VacancyComparableConditionsBuildError(
+                "C1 requires a valid vacancy_dimensions.v2 artifact."
+            ),
+        ):
+            response = asyncio.run(
+                opportunities_api.recompute_vacancy_comparable_conditions_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        names = [name for name, _ in events]
+        self.assertIn("tool_status", names)
+        self.assertIn("error", names)
+        error_payload = next(payload for name, payload in events if name == "error")
+        self.assertIn("C1 requires a valid vacancy_dimensions.v2 artifact.", str(error_payload.get("detail", "")))
+
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_comparable_conditions_status"], "error")
 
     def test_vacancy_dimensions_enriched_stream_emits_stages_and_message_complete(self) -> None:
         created = opportunity_store.import_text_opportunity(

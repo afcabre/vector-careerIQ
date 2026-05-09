@@ -26,6 +26,9 @@ class VacancySalaryNormalizationContractTests(unittest.TestCase):
                 "currency": "",
                 "period": "",
                 "raw_text": "",
+                "has_variable_component": False,
+                "variable_component_type": "",
+                "variable_component_note": "",
             },
         )
 
@@ -40,6 +43,9 @@ class VacancySalaryNormalizationContractTests(unittest.TestCase):
                     "currency": " COP ",
                     "period": " mensual ",
                     "raw_text": " Salario entre 12 y 18 millones ",
+                    "has_variable_component": True,
+                    "variable_component_type": " commission ",
+                    "variable_component_note": " comisiones ",
                 },
             }
         )
@@ -56,6 +62,8 @@ class VacancySalaryNormalizationContractTests(unittest.TestCase):
 
         self.assertEqual(nested["vacancy_id"], "VAC-1")
         self.assertEqual(nested["salary"]["currency"], "COP")
+        self.assertTrue(nested["salary"]["has_variable_component"])
+        self.assertEqual(nested["salary"]["variable_component_type"], "commission")
         self.assertEqual(flat["vacancy_id"], "VAC-2")
         self.assertEqual(flat["salary"]["min"], 5000)
         self.assertEqual(flat["salary"]["raw_text"], "USD 5k-7k monthly")
