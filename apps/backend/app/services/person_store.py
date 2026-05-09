@@ -69,6 +69,9 @@ class PersonRecord(TypedDict):
     culture_preferences: list[str]
     cultural_fit_preferences: dict[str, CulturalFieldPreferenceRecord]
     culture_preferences_notes: str
+    candidate_preference_profile_artifact: dict[str, Any]
+    candidate_preference_profile_status: str
+    candidate_preference_profile_generated_at: str
     created_at: str
     updated_at: str
 
@@ -102,6 +105,9 @@ def _seed_records() -> list[PersonRecord]:
             "culture_preferences": ["aprendizaje continuo", "liderazgo cercano"],
             "cultural_fit_preferences": _default_cultural_fit_preferences(),
             "culture_preferences_notes": "",
+            "candidate_preference_profile_artifact": {},
+            "candidate_preference_profile_status": "none",
+            "candidate_preference_profile_generated_at": "",
             "created_at": now,
             "updated_at": now,
         },
@@ -119,6 +125,9 @@ def _seed_records() -> list[PersonRecord]:
             "culture_preferences": ["claridad en objetivos", "colaboracion"],
             "cultural_fit_preferences": _default_cultural_fit_preferences(),
             "culture_preferences_notes": "",
+            "candidate_preference_profile_artifact": {},
+            "candidate_preference_profile_status": "none",
+            "candidate_preference_profile_generated_at": "",
             "created_at": now,
             "updated_at": now,
         },
@@ -255,6 +264,15 @@ def _normalize_firestore_record(person_id: str, payload: dict | None) -> PersonR
             source.get("cultural_fit_preferences", {})
         ),
         culture_preferences_notes=str(source.get("culture_preferences_notes", "")).strip(),
+        candidate_preference_profile_artifact=dict(
+            source.get("candidate_preference_profile_artifact", {})
+        ),
+        candidate_preference_profile_status=str(
+            source.get("candidate_preference_profile_status", "none")
+        ),
+        candidate_preference_profile_generated_at=str(
+            source.get("candidate_preference_profile_generated_at", "")
+        ),
         created_at=str(source.get("created_at", "")),
         updated_at=str(source.get("updated_at", "")),
     )
@@ -327,6 +345,9 @@ def create_person(
         "culture_preferences": _dedupe_non_empty(culture_preferences or []),
         "cultural_fit_preferences": sanitize_cultural_fit_preferences(cultural_fit_preferences),
         "culture_preferences_notes": str(culture_preferences_notes or "").strip(),
+        "candidate_preference_profile_artifact": {},
+        "candidate_preference_profile_status": "none",
+        "candidate_preference_profile_generated_at": "",
         "created_at": now,
         "updated_at": now,
     }
@@ -388,6 +409,9 @@ def update_person(
             )
         if culture_preferences_notes is not None:
             existing["culture_preferences_notes"] = culture_preferences_notes.strip()
+        existing["candidate_preference_profile_artifact"] = {}
+        existing["candidate_preference_profile_status"] = "none"
+        existing["candidate_preference_profile_generated_at"] = ""
         existing["updated_at"] = _now_iso()
 
         settings = get_settings()
@@ -425,6 +449,49 @@ def update_person(
             )
         if culture_preferences_notes is not None:
             existing["culture_preferences_notes"] = culture_preferences_notes.strip()
+        existing["candidate_preference_profile_artifact"] = {}
+        existing["candidate_preference_profile_status"] = "none"
+        existing["candidate_preference_profile_generated_at"] = ""
+        existing["updated_at"] = _now_iso()
+        _persons[person_id] = existing
+        return existing
+
+
+def update_candidate_preference_profile(
+    person_id: str,
+    *,
+    artifact: dict[str, Any] | None = None,
+    status: str | None = None,
+) -> PersonRecord | None:
+    if _is_firestore_backend():
+        existing = get_person(person_id)
+        if not existing:
+            return None
+        if artifact is not None:
+            existing["candidate_preference_profile_artifact"] = dict(artifact)
+            existing["candidate_preference_profile_generated_at"] = _now_iso()
+        if status is not None:
+            existing["candidate_preference_profile_status"] = status
+            if artifact is None:
+                existing["candidate_preference_profile_generated_at"] = _now_iso()
+        existing["updated_at"] = _now_iso()
+
+        settings = get_settings()
+        client = get_firestore_client(settings)
+        client.collection("persons").document(person_id).set(existing)
+        return existing
+
+    with _store_lock:
+        existing = _persons.get(person_id)
+        if not existing:
+            return None
+        if artifact is not None:
+            existing["candidate_preference_profile_artifact"] = dict(artifact)
+            existing["candidate_preference_profile_generated_at"] = _now_iso()
+        if status is not None:
+            existing["candidate_preference_profile_status"] = status
+            if artifact is None:
+                existing["candidate_preference_profile_generated_at"] = _now_iso()
         existing["updated_at"] = _now_iso()
         _persons[person_id] = existing
         return existing

@@ -1,11 +1,16 @@
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from starlette.responses import StreamingResponse
 
 from app.core.security import SessionData, require_operator_session
+from app.services.candidate_preference_profile_service import build_candidate_preference_profile
 from app.services.person_store import (
     create_person as create_person_record,
     get_person as get_person_record,
     list_persons as list_person_records,
+    update_candidate_preference_profile as update_candidate_preference_profile_record,
     update_person as update_person_record,
 )
 
@@ -33,6 +38,8 @@ class PersonSummary(BaseModel):
     culture_preferences: list[str]
     cultural_fit_preferences: dict[str, CulturalFieldPreference]
     culture_preferences_notes: str
+    candidate_preference_profile_status: str = "none"
+    candidate_preference_profile_generated_at: str = ""
     created_at: str
     updated_at: str
 
@@ -71,6 +78,18 @@ class UpdatePersonRequest(BaseModel):
     culture_preferences: list[str] | None = None
     cultural_fit_preferences: dict[str, CulturalFieldPreference] | None = None
     culture_preferences_notes: str | None = None
+
+
+class CandidatePreferenceProfileEnvelope(BaseModel):
+    artifact: dict[str, Any]
+    status: str
+    generated_at: str
+
+
+def _serialize_sse(event: str, payload: dict[str, Any]) -> str:
+    import json
+
+    return f"event: {event}\ndata: {json.dumps(payload)}\n\n"
 
 
 @router.get("")
@@ -117,6 +136,132 @@ def get_person(
             detail="Person not found",
         )
     return PersonSummary(**person)
+
+
+@router.get("/{person_id}/candidate-preference-profile")
+def get_candidate_preference_profile(
+    person_id: str,
+    _: SessionData = Depends(require_operator_session),
+) -> CandidatePreferenceProfileEnvelope:
+    person = get_person_record(person_id)
+    if not person:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Person not found",
+        )
+    return CandidatePreferenceProfileEnvelope(
+        artifact=dict(person.get("candidate_preference_profile_artifact", {})),
+        status=str(person.get("candidate_preference_profile_status", "none")),
+        generated_at=str(person.get("candidate_preference_profile_generated_at", "")),
+    )
+
+
+@router.post("/{person_id}/candidate-preference-profile/recompute")
+def recompute_candidate_preference_profile(
+    person_id: str,
+    _: SessionData = Depends(require_operator_session),
+) -> CandidatePreferenceProfileEnvelope:
+    person = get_person_record(person_id)
+    if not person:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Person not found",
+        )
+
+    artifact = build_candidate_preference_profile(person)
+    updated = update_candidate_preference_profile_record(
+        person_id,
+        artifact=artifact,
+        status="draft",
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Person not found",
+        )
+    return CandidatePreferenceProfileEnvelope(
+        artifact=dict(updated.get("candidate_preference_profile_artifact", {})),
+        status=str(updated.get("candidate_preference_profile_status", "none")),
+        generated_at=str(updated.get("candidate_preference_profile_generated_at", "")),
+    )
+
+
+@router.post("/{person_id}/candidate-preference-profile/recompute/stream")
+async def recompute_candidate_preference_profile_stream(
+    person_id: str,
+    _: SessionData = Depends(require_operator_session),
+) -> StreamingResponse:
+    async def event_generator():
+        person = get_person_record(person_id)
+        if not person:
+            yield _serialize_sse(
+                "error",
+                {
+                    "error": "Person not found",
+                    "detail": "Person not found",
+                },
+            )
+            return
+        try:
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "stage": "candidate_preference_profile_recompute_started",
+                    "message": "Iniciando recomputo de P0",
+                },
+            )
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "stage": "candidate_preference_profile_building",
+                    "message": "Normalizando perfil comparable",
+                },
+            )
+            artifact = build_candidate_preference_profile(person)
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "stage": "candidate_preference_profile_saving",
+                    "message": "Guardando artefacto P0",
+                },
+            )
+            updated = update_candidate_preference_profile_record(
+                person_id,
+                artifact=artifact,
+                status="draft",
+            )
+            if not updated:
+                yield _serialize_sse(
+                    "error",
+                    {
+                        "error": "Person not found",
+                        "detail": "Person not found",
+                    },
+                )
+                return
+            payload = {
+                "artifact": dict(updated.get("candidate_preference_profile_artifact", {})),
+                "status": str(updated.get("candidate_preference_profile_status", "none")),
+                "generated_at": str(
+                    updated.get("candidate_preference_profile_generated_at", "")
+                ),
+            }
+            yield _serialize_sse("message_complete", payload)
+        except Exception as exc:
+            updated = update_candidate_preference_profile_record(person_id, status="error")
+            generated_at = ""
+            if updated:
+                generated_at = str(updated.get("candidate_preference_profile_generated_at", ""))
+            yield _serialize_sse(
+                "error",
+                {
+                    "error": str(exc),
+                    "detail": str(exc),
+                    "generated_at": generated_at,
+                },
+            )
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.patch("/{person_id}")
