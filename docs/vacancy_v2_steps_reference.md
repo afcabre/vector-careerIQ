@@ -5,6 +5,7 @@ Consolidar en un solo documento la definicion operativa de los Steps de `vacancy
 
 ## Alcance
 - este documento consolida `S1` a `S8`
+- adicionalmente documenta las capas posteriores de presentacion/comparacion planeadas para el rediseño de match
 - `S2` a `S8` ya estaban documentados de forma distribuida
 - `S1` se incluye aqui como precondicion operativa para cerrar la lectura end-to-end
 - cuando exista conflicto, prevalecen:
@@ -17,6 +18,7 @@ Consolidar en un solo documento la definicion operativa de los Steps de `vacancy
 - `S1` no es hoy un artefacto formal de `vacancy_v2`; es la etapa previa de captura del `snapshot_raw_text`
 - los Steps con prompt configurable son: `S2`, `S3`, `S3.1`, `S4`, `S8`
 - los Steps deterministas, sin prompt propio, son: `S3.9`, `S5`, `S6`, `S7`
+- para el rediseño de presentacion final se propone una capa adicional posterior a `S7 v2`: limpieza de perfil comparable, normalizacion de condiciones comparables de vacante, checks deterministas y matriz de presentacion antes del relato final
 
 ## Mapa rapido
 | Step | Nombre | Tipo | Output principal | Prompt key |
@@ -31,6 +33,15 @@ Consolidar en un solo documento la definicion operativa de los Steps de `vacancy
 | `S6` | Analisis de evidencia | programatico | `vacancy_evidence_analysis.v1` | `ninguna` |
 | `S7` | Resumen de alineacion | programatico | `vacancy_alignment_summary.v1` | `ninguna` |
 | `S8` | Reporte final grounded | `LLM-first` | `vacancy_alignment_report.v1` | `task_vacancy_alignment_report` |
+
+## Capas planeadas posteriores a `S7 v2`
+| Capa | Nombre | Tipo | Output principal | Prompt key |
+| --- | --- | --- | --- | --- |
+| `P0` | Limpieza de perfil comparable del candidato | programatico | `candidate_preference_profile.v1` | `ninguna` |
+| `C1` | Normalizacion de condiciones comparables de vacante | mixto/controlado | `vacancy_comparable_conditions.v1` | `por definir si se requiere` |
+| `C2` | Checks deterministas vacante-perfil | programatico | `candidate_preference_checks.v1` | `ninguna` |
+| `P1` | Matriz deterministica de presentacion profesional | programatico | `vacancy_fit_presentation.v1` | `ninguna` |
+| `S8 v2` | Relato final centrado en la persona candidata | `LLM-first` | `vacancy_alignment_report.v2` | `task_vacancy_alignment_report_v2` |
 
 ## S1. Pre-ingesta de vacante
 ### Objetivo
@@ -180,6 +191,16 @@ Resolver el salario como subproblema independiente, porque requiere estructura d
   - `period`
   - `raw_text`
 
+### Evolucion planeada
+Para comparaciones de compensacion mas utiles, se propone una extension minima del contrato de `S3.1` cuando la vacante combine fijo + variable:
+- `has_variable_component`
+- `variable_component_type`
+- `variable_component_note`
+
+Regla planeada:
+- `min/max/currency/period` siguen representando solo la base fija comparable
+- el componente variable se preserva explicitamente y no solo dentro de `raw_text`
+
 ### Regla operativa
 No reclasifica la vacante ni modifica `S3`. Solo normaliza salario cuando existe señal suficiente.
 
@@ -197,6 +218,164 @@ No reclasifica la vacante ni modifica `S3`. Solo normaliza salario cuando existe
 
 ### Contrato principal
 - `vacancy_salary_normalization.v1`
+
+## P0. Limpieza de perfil comparable del candidato
+### Objetivo
+Reducir la superficie de preferencias del candidato a senales realmente comparables o contrastables, eliminando ruido blando o ambiguo antes de los checks deterministas.
+
+### Tipo de ejecucion
+Programatico
+
+### Input
+- perfil estructurado persistido del candidato
+
+### Output
+- contrato propuesto `candidate_preference_profile.v1`
+
+### Senales comparables objetivo
+- ubicacion actual
+- ubicaciones aceptadas
+- aceptacion remota
+- modalidades aceptadas
+- expectativa salarial
+- disponibilidad para viaje o relocalizacion
+- restricciones duras explicitas
+
+### Aclaracion importante
+`P0` no debe absorber capacidades profesionales como:
+- idiomas y nivel
+- certificaciones
+- herramientas o tecnologias
+
+Esas senales pertenecen al fit profesional principal. En especial:
+- `idiomas + nivel` deben agregarse al perfil estructurado del candidato como captura explicita;
+- luego deben alimentar el flujo principal de alineacion profesional, no los preference checks deterministas.
+
+### Senales contrastables, pero no necesariamente deterministicas
+- tipos de empresa preferidos
+- preferencias de entorno que luego puedan contrastarse con senales web de empresa
+
+### Transformaciones prohibidas
+- no inventar preferencias
+- no mantener preferencias narrativas sin regla de comparacion o contraste
+
+### Prompt key
+- `ninguna`
+
+## C1. Normalizacion de condiciones comparables de vacante
+### Objetivo
+Convertir las condiciones observables de la vacante en senales comparables estables antes de cruzarlas con el perfil del candidato.
+
+### Tipo de ejecucion
+Mixto o controlado
+
+### Input
+- `vacancy_dimensions.v2.work_conditions`
+- `vacancy_salary_normalization.v1`
+- `snapshot_raw_text` como apoyo
+
+### Output
+- contrato propuesto `vacancy_comparable_conditions.v1`
+
+### Senales comparables objetivo
+- ubicacion normalizada
+- modalidad normalizada
+- compensacion comparable
+- tipo de contrato cuando exista
+
+### Regla operativa
+La interpretacion puede existir al normalizar, pero el output debe quedar estable. Si la vacante no especifica una condicion con suficiente claridad, debe persistirse como desconocida.
+
+### Caso especial planeado
+Si la vacante expresa `salario fijo + comisiones` o `salario fijo + variable`, la base fija debe quedar comparable y el componente variable debe quedar explicitado, no solo escondido en `raw_text`.
+
+### Prompt key
+- `por definir si se requiere`
+
+## C2. Checks deterministas vacante-perfil
+### Objetivo
+Comparar condiciones comparables de vacante contra preferencias/restricciones comparables del candidato sin volver a usar LLM para decidir el estado final de cada fila.
+
+### Tipo de ejecucion
+Programatico
+
+### Input
+- `candidate_preference_profile.v1`
+- `vacancy_comparable_conditions.v1`
+
+### Output
+- contrato propuesto `candidate_preference_checks.v1`
+
+### Regla operativa
+La comparacion debe operar sobre valores ya normalizados.
+
+Ejemplos:
+- `Bogota D.C.` vacante y `Bogota, Colombia` candidato -> compatible
+- vacante `remote` -> no exigir match de ciudad
+- vacante `onsite` + candidato `remote only` -> conflicto
+- falta de senal suficiente en vacante o perfil -> `Sin informacion`
+
+### Prompt key
+- `ninguna`
+
+## P1. Matriz deterministica de presentacion profesional
+### Objetivo
+Construir la matriz principal de lectura del fit profesional a partir de `S6.5`, sin delegar a `S8` la reconstruccion de filas.
+
+### Tipo de ejecucion
+Programatico
+
+### Input
+- `vacancy_evidence_adjudication.v1`
+
+### Output
+- contrato propuesto `vacancy_fit_presentation.v1`
+
+### Regla operativa
+Debe agrupar como minimo:
+- `Requisitos obligatorios`
+- `Responsabilidades`
+- `Deseables`
+
+Columnas objetivo:
+- `Tipo u origen`
+- `Criterio`
+- `Estado`
+- `Por que`
+
+La evidencia se muestra como detalle desplegable dentro de `Por que`, no como columna ancha separada.
+
+### Prompt key
+- `ninguna`
+
+## S8 v2. Relato final centrado en la persona candidata
+### Objetivo
+Generar el relato final y la recomendacion accionable usando como insumos principales la adjudicacion, la matriz profesional ya ensamblada y los checks de preferencias ya resueltos.
+
+### Tipo de ejecucion
+`LLM-first`
+
+### Input
+- `vacancy_evidence_adjudication.v1`
+- `vacancy_alignment_summary.v2`
+- `vacancy_fit_presentation.v1`
+- `candidate_preference_checks.v1`
+
+### Output
+- `vacancy_alignment_report.v2`
+
+### Regla operativa
+`S8 v2` debe explicar y recomendar. No debe volver a decidir ni reconstruir filas de tablas que ya fueron derivadas previamente.
+
+### Prompt key
+- `task_vacancy_alignment_report_v2`
+
+## Nota de perfil candidato
+Como decision de diseno vigente para el rediseño:
+- `idioma + nivel` debe incorporarse al perfil estructurado del candidato;
+- no forma parte de `P0` ni de `C2`;
+- su contraste pertenece al fit profesional principal;
+- mas adelante podria evaluarse una extension similar para certificaciones y herramientas, pero no forma parte del slice actual.
 
 ## S3.9. Enriquecimiento deterministico
 ### Objetivo
