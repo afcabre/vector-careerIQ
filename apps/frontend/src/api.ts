@@ -1413,6 +1413,7 @@ export async function recomputeOpportunityVacancyAlignmentReportV2Stream(
   const reader = response.body.getReader();
   let pending = "";
   let completedOpportunity: Opportunity | null = null;
+  let lastStage = "";
 
   while (true) {
     const { value, done } = await reader.read();
@@ -1424,7 +1425,8 @@ export async function recomputeOpportunityVacancyAlignmentReportV2Stream(
       if (eventName === "tool_status") {
         const stage = payload.stage;
         if (typeof stage === "string" && stage.trim()) {
-          onStatus(stage.trim());
+          lastStage = stage.trim();
+          onStatus(lastStage);
         }
       } else if (eventName === "message_complete") {
         const opportunity = payload.opportunity;
@@ -1440,7 +1442,8 @@ export async function recomputeOpportunityVacancyAlignmentReportV2Stream(
       if (eventName === "tool_status") {
         const stage = payload.stage;
         if (typeof stage === "string" && stage.trim()) {
-          onStatus(stage.trim());
+          lastStage = stage.trim();
+          onStatus(lastStage);
         }
       } else if (eventName === "message_complete") {
         const opportunity = payload.opportunity;
@@ -1452,7 +1455,10 @@ export async function recomputeOpportunityVacancyAlignmentReportV2Stream(
   }
 
   if (!completedOpportunity) {
-    throw new Error("Vacancy alignment report v2 stream ended without completion payload");
+    const stageSuffix = lastStage ? ` (last stage: ${lastStage})` : "";
+    throw new Error(
+      `Vacancy alignment report v2 stream ended without completion payload${stageSuffix}`
+    );
   }
   return completedOpportunity;
 }

@@ -1805,6 +1805,10 @@ export default function App() {
   ] = useState<Record<string, string>>({});
   const [recomputingVacancyAlignmentSummaryV2Id, setRecomputingVacancyAlignmentSummaryV2Id] =
     useState<string | null>(null);
+  const [
+    vacancyAlignmentReportV2ErrorByOpportunityId,
+    setVacancyAlignmentReportV2ErrorByOpportunityId
+  ] = useState<Record<string, string>>({});
   const [recomputingVacancyAlignmentReportV2Id, setRecomputingVacancyAlignmentReportV2Id] =
     useState<string | null>(null);
   const [recomputingVacancyAlignmentSummaryId, setRecomputingVacancyAlignmentSummaryId] =
@@ -3857,6 +3861,11 @@ export default function App() {
       ...current,
       [item.opportunity_id]: "vacancy_alignment_report_v2_recompute_started"
     }));
+    setVacancyAlignmentReportV2ErrorByOpportunityId((current) => {
+      const next = { ...current };
+      delete next[item.opportunity_id];
+      return next;
+    });
     setErrorMessage(null);
     try {
       await recomputeOpportunityVacancyAlignmentReportV2Stream(
@@ -3884,6 +3893,23 @@ export default function App() {
         error instanceof Error
           ? error.message
           : "No se pudo recalcular Vacancy Alignment Report v2";
+      setVacancyAlignmentReportV2ErrorByOpportunityId((current) => ({
+        ...current,
+        [item.opportunity_id]: message
+      }));
+      try {
+        const items = await listOpportunities(selectedPersonId);
+        setSavedOpportunities(items);
+        if (selectedOpportunityId === item.opportunity_id) {
+          const refreshed = items.find((entry) => entry.opportunity_id === item.opportunity_id);
+          if (refreshed) {
+            setOpportunityStatus(refreshed.status);
+            setOpportunityNotes(refreshed.notes);
+          }
+        }
+      } catch {
+        // Preserve the original report v2 error message if refresh fails.
+      }
       setErrorMessage(message);
     } finally {
       setVacancyAlignmentReportV2StageByOpportunityId((current) => {
@@ -7031,6 +7057,8 @@ export default function App() {
                 vacancyAlignmentReportV2StageByOpportunityId[item.opportunity_id] ?? "";
               const vacancyAlignmentReportV2StageLabel =
                 getVacancyAlignmentReportV2StageLabel(vacancyAlignmentReportV2Stage);
+              const vacancyAlignmentReportV2Error =
+                vacancyAlignmentReportV2ErrorByOpportunityId[item.opportunity_id] ?? "";
               const vacancyAlignmentReportTraces =
                 vacancyAlignmentReportTracesByOpportunityId[item.opportunity_id] ?? [];
               const isLoadingVacancyAlignmentReportTraces =
@@ -8141,6 +8169,10 @@ export default function App() {
                           {recomputingVacancyAlignmentReportV2Id === item.opportunity_id
                           && vacancyAlignmentReportV2StageLabel ? (
                             <p className="metaText">{vacancyAlignmentReportV2StageLabel}</p>
+                          ) : null}
+                          {recomputingVacancyAlignmentReportV2Id !== item.opportunity_id
+                          && vacancyAlignmentReportV2Error ? (
+                            <p className="errorText">{vacancyAlignmentReportV2Error}</p>
                           ) : null}
                         </div>
                         <div className="metaChips vacancyV2HeaderChips">

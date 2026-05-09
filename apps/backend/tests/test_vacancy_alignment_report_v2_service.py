@@ -283,8 +283,8 @@ class VacancyAlignmentReportV2ServiceTests(unittest.TestCase):
             FLOW_TASK_VACANCY_ALIGNMENT_REPORT_V2,
         )
 
-    def test_extract_fails_when_fit_matrix_is_incomplete(self) -> None:
-        llm_response = (
+    def test_extract_fails_when_fit_matrix_repair_is_still_incomplete(self) -> None:
+        initial_response = (
             "{"
             "\"report\":{"
             "\"executive_summary\":{\"fit_level\":\"medio\",\"final_recommendation\":\"No priorizar\",\"summary\":\"Resumen\",\"main_strength\":\"\",\"main_gap_or_risk\":\"\",\"confidence\":\"media\"},"
@@ -300,11 +300,12 @@ class VacancyAlignmentReportV2ServiceTests(unittest.TestCase):
             "\"rendered_markdown\":\"## Resumen ejecutivo\\n\\nTexto\""
             "}"
         )
+        repair_response = "{\"vacancy_fit_matrix\":[]}"
         with patch(
             "app.services.vacancy_alignment_report_v2_service.complete_prompt",
-            return_value=llm_response,
-        ):
-            with self.assertRaises(VacancyAlignmentReportV2BuildError):
+            side_effect=[initial_response, repair_response],
+        ) as mocked_complete:
+            with self.assertRaises(VacancyAlignmentReportV2BuildError) as raised:
                 extract_vacancy_alignment_report_v2(
                     person=_person(),
                     opportunity=_opportunity(),
@@ -313,6 +314,54 @@ class VacancyAlignmentReportV2ServiceTests(unittest.TestCase):
                     vacancy_evidence_analysis_artifact=_analysis(),
                     settings=object(),
                 )
+        self.assertEqual(mocked_complete.call_count, 2)
+        self.assertIn("missing_item_ids=['des_1']", str(raised.exception))
+        self.assertIn("missing_items=['des_1: Certificacion PMP o Scrum']", str(raised.exception))
+
+    def test_extract_repairs_missing_fit_matrix_rows_with_targeted_llm_call(self) -> None:
+        first_response = (
+            "{"
+            "\"report\":{"
+            "\"executive_summary\":{\"fit_level\":\"medio\",\"final_recommendation\":\"No priorizar\",\"summary\":\"Resumen parcial\",\"main_strength\":\"\",\"main_gap_or_risk\":\"\",\"confidence\":\"media\"},"
+            "\"decision_table\":{},"
+            "\"vacancy_fit_matrix\":["
+            "{\"item_id\":\"req_1\",\"criterio\":\"Minimo 5 anos de experiencia profesional\",\"categoria\":\"Experiencia\",\"origen_del_criterio\":\"Vacante obligatoria\",\"prioridad\":\"Importante\",\"estado\":\"🟢 Cumple\",\"lo_que_solicita_la_vacante\":\"Minimo 5 anos de experiencia profesional\",\"evidencia_del_candidato\":\"20 anos de experiencia profesional.\",\"tipo_de_evidencia\":\"directa\",\"fuerza_de_evidencia\":\"alta\",\"descripcion_corta\":\"Directo\",\"riesgo_para_la_postulacion\":\"bajo\",\"fuentes\":[]}"
+            "],"
+            "\"candidate_preference_matrix\":[],"
+            "\"fit_answer\":{\"encaja\":\"sí\",\"respuesta_para_el_candidato\":\"Si\"},"
+            "\"strengths\":[],\"gaps\":[],\"preference_conflicts\":[],\"improvement_actions\":{},\"alerts_and_conflicts\":[],"
+            "\"actionable_conclusion\":{\"final_decision\":\"No priorizar\",\"main_reason\":\"\",\"recommended_next_step\":\"\",\"confidence\":\"media\"}"
+            "},"
+            "\"rendered_markdown\":\"## Resumen ejecutivo\\n\\nTexto parcial\""
+            "}"
+        )
+        matrix_repair_response = (
+            "{"
+            "\"vacancy_fit_matrix\":["
+            "{\"item_id\":\"des_1\",\"criterio\":\"Certificacion PMP o Scrum\",\"categoria\":\"Certificaciones\",\"origen_del_criterio\":\"Vacante deseable\",\"prioridad\":\"Deseable\",\"estado\":\"🔵 Deseable no evidenciado\",\"lo_que_solicita_la_vacante\":\"Certificacion PMP o Scrum\",\"evidencia_del_candidato\":\"No se observa certificacion formal en los snippets.\",\"tipo_de_evidencia\":\"no evidenciada\",\"fuerza_de_evidencia\":\"ninguna\",\"descripcion_corta\":\"Es un deseable no demostrado.\",\"riesgo_para_la_postulacion\":\"bajo\",\"fuentes\":[]}"
+            "]"
+            "}"
+        )
+
+        with patch(
+            "app.services.vacancy_alignment_report_v2_service.complete_prompt",
+            side_effect=[first_response, matrix_repair_response],
+        ) as mocked_complete:
+            contract = extract_vacancy_alignment_report_v2(
+                person=_person(),
+                opportunity=_opportunity(),
+                vacancy_evidence_adjudication_artifact=_adjudication(),
+                vacancy_alignment_summary_v2_artifact=_summary_v2(),
+                vacancy_evidence_analysis_artifact=_analysis(),
+                settings=object(),
+            )
+
+        self.assertEqual(mocked_complete.call_count, 2)
+        self.assertEqual(len(contract["report"]["vacancy_fit_matrix"]), 2)
+        self.assertEqual(
+            contract["report"]["vacancy_fit_matrix"][1]["item_id"],
+            "des_1",
+        )
 
 
 if __name__ == "__main__":

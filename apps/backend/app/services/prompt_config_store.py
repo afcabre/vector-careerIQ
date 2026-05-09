@@ -618,6 +618,7 @@ def _default_configs() -> dict[str, PromptConfigRecord]:
                 "No inventes sectores, anos, certificaciones, herramientas, preferencias, salario, modalidad ni condiciones. "
                 "No conviertas ausencia de evidencia en incumplimiento. No conviertas similitud semantica en cumplimiento. No recalcules scores. "
                 "La matriz `vacancy_fit_matrix` debe incluir todos los criterios evaluados en `vacancy_evidence_adjudication.v1`, salvo `not_applicable` justificado. "
+                "Antes de responder, verifica internamente que `vacancy_fit_matrix` contiene exactamente todos los `item_id` evaluables de `vacancy_evidence_adjudication.v1` y ninguno extra. "
                 "Mapeo obligatorio: direct -> 🟢 Cumple; partial o indirect -> 🟡 Parcial; not_evidenced obligatorio -> ⚪ Sin informacion; not_evidenced deseable -> 🔵 Deseable no evidenciado; conflict -> 🔴 En conflicto. "
                 "Usa solo estas recomendaciones finales: Avanzar, Avanzar con reservas, Avanzar si se valida X, No priorizar, Descartar. "
                 "Dentro de report usa exactamente: executive_summary, decision_table, vacancy_fit_matrix, candidate_preference_matrix, fit_answer, strengths, gaps, preference_conflicts, improvement_actions, alerts_and_conflicts, actionable_conclusion. "
