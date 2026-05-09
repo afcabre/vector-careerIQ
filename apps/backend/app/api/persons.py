@@ -24,6 +24,11 @@ class CulturalFieldPreference(BaseModel):
     criticality: str = Field(default="normal")
 
 
+class LanguageProficiency(BaseModel):
+    language: str = Field(min_length=1)
+    level: str = Field(min_length=1)
+
+
 class PersonSummary(BaseModel):
     person_id: str
     full_name: str
@@ -31,6 +36,9 @@ class PersonSummary(BaseModel):
     location: str
     years_experience: int
     skills: list[str]
+    languages: list[LanguageProficiency]
+    tools_technologies: list[str]
+    certifications: list[str]
     salary_expectation_min: int | None = None
     salary_expectation_max: int | None = None
     salary_currency: str = ""
@@ -54,6 +62,9 @@ class CreatePersonRequest(BaseModel):
     location: str = Field(min_length=1)
     years_experience: int = Field(ge=0, le=80)
     skills: list[str] = Field(min_length=1)
+    languages: list[LanguageProficiency] = Field(default_factory=list)
+    tools_technologies: list[str] = Field(default_factory=list)
+    certifications: list[str] = Field(default_factory=list)
     salary_expectation_min: int | None = Field(default=None, ge=0, le=1_000_000_000)
     salary_expectation_max: int | None = Field(default=None, ge=0, le=1_000_000_000)
     salary_currency: str = Field(default="", max_length=8)
@@ -71,6 +82,9 @@ class UpdatePersonRequest(BaseModel):
     location: str | None = Field(default=None, min_length=1)
     years_experience: int | None = Field(default=None, ge=0, le=80)
     skills: list[str] | None = None
+    languages: list[LanguageProficiency] | None = None
+    tools_technologies: list[str] | None = None
+    certifications: list[str] | None = None
     salary_expectation_min: int | None = Field(default=None, ge=0, le=1_000_000_000)
     salary_expectation_max: int | None = Field(default=None, ge=0, le=1_000_000_000)
     salary_currency: str | None = Field(default=None, max_length=8)
@@ -110,6 +124,9 @@ def create_person(
         location=payload.location,
         years_experience=payload.years_experience,
         skills=payload.skills,
+        languages=[item.model_dump() for item in payload.languages],
+        tools_technologies=payload.tools_technologies,
+        certifications=payload.certifications,
         salary_expectation_min=payload.salary_expectation_min,
         salary_expectation_max=payload.salary_expectation_max,
         salary_currency=payload.salary_currency,
@@ -277,6 +294,13 @@ def update_person(
         location=payload.location,
         years_experience=payload.years_experience,
         skills=payload.skills,
+        languages=(
+            [item.model_dump() for item in payload.languages]
+            if payload.languages is not None
+            else None
+        ),
+        tools_technologies=payload.tools_technologies,
+        certifications=payload.certifications,
         salary_expectation_min=payload.salary_expectation_min,
         salary_expectation_max=payload.salary_expectation_max,
         salary_currency=payload.salary_currency,

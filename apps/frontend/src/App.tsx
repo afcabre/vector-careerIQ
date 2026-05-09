@@ -1743,6 +1743,9 @@ export default function App() {
   const [newPersonLocation, setNewPersonLocation] = useState("");
   const [newPersonYearsExperienceInput, setNewPersonYearsExperienceInput] = useState("");
   const [newPersonSkillsInput, setNewPersonSkillsInput] = useState("");
+  const [newPersonLanguagesInput, setNewPersonLanguagesInput] = useState("");
+  const [newPersonToolsInput, setNewPersonToolsInput] = useState("");
+  const [newPersonCertificationsInput, setNewPersonCertificationsInput] = useState("");
   const [isCreateProfileFormOpen, setIsCreateProfileFormOpen] = useState(false);
   const [isCreatingPerson, setIsCreatingPerson] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -1911,6 +1914,9 @@ export default function App() {
   const [profileLocation, setProfileLocation] = useState("");
   const [profileYearsExperienceInput, setProfileYearsExperienceInput] = useState("");
   const [profileSkillsInput, setProfileSkillsInput] = useState("");
+  const [profileLanguagesInput, setProfileLanguagesInput] = useState("");
+  const [profileToolsInput, setProfileToolsInput] = useState("");
+  const [profileCertificationsInput, setProfileCertificationsInput] = useState("");
   const [profileSalaryMinInput, setProfileSalaryMinInput] = useState("");
   const [profileSalaryMaxInput, setProfileSalaryMaxInput] = useState("");
   const [profileSalaryCurrency, setProfileSalaryCurrency] = useState("");
@@ -2649,6 +2655,9 @@ export default function App() {
       setProfileLocation("");
       setProfileYearsExperienceInput("");
       setProfileSkillsInput("");
+      setProfileLanguagesInput("");
+      setProfileToolsInput("");
+      setProfileCertificationsInput("");
       setProfileSalaryMinInput("");
       setProfileSalaryMaxInput("");
       setProfileSalaryCurrency("");
@@ -2662,6 +2671,13 @@ export default function App() {
     setProfileLocation(selectedPerson.location ?? "");
     setProfileYearsExperienceInput(String(selectedPerson.years_experience ?? 0));
     setProfileSkillsInput((selectedPerson.skills ?? []).join(", "));
+    setProfileLanguagesInput(
+      (selectedPerson.languages ?? [])
+        .map((item) => `${item.language}: ${item.level}`)
+        .join("\n")
+    );
+    setProfileToolsInput((selectedPerson.tools_technologies ?? []).join(", "));
+    setProfileCertificationsInput((selectedPerson.certifications ?? []).join(", "));
     setProfileSalaryMinInput(
       selectedPerson.salary_expectation_min !== null
         ? String(selectedPerson.salary_expectation_min)
@@ -2707,6 +2723,9 @@ export default function App() {
     selectedPerson?.location,
     selectedPerson?.years_experience,
     selectedPerson?.skills,
+    selectedPerson?.languages,
+    selectedPerson?.tools_technologies,
+    selectedPerson?.certifications,
     selectedPerson?.salary_expectation_min,
     selectedPerson?.salary_expectation_max,
     selectedPerson?.salary_currency,
@@ -2800,6 +2819,31 @@ export default function App() {
       .split(/[\n,]/g)
       .map((item) => item.trim())
       .filter(Boolean);
+    const languages = newPersonLanguagesInput
+      .split("\n")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .map((item) => {
+        const separatorIndex = item.indexOf(":");
+        if (separatorIndex === -1) {
+          return null;
+        }
+        const language = item.slice(0, separatorIndex).trim();
+        const level = item.slice(separatorIndex + 1).trim();
+        if (!language || !level) {
+          return null;
+        }
+        return { language, level };
+      })
+      .filter((item): item is { language: string; level: string } => Boolean(item));
+    const toolsTechnologies = newPersonToolsInput
+      .split(/[\n,]/g)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const certifications = newPersonCertificationsInput
+      .split(/[\n,]/g)
+      .map((item) => item.trim())
+      .filter(Boolean);
 
     if (!fullName || !location || targetRoles.length === 0 || skills.length === 0) {
       setErrorMessage(
@@ -2820,7 +2864,10 @@ export default function App() {
         target_roles: targetRoles,
         location,
         years_experience: yearsExperience,
-        skills
+        skills,
+        languages,
+        tools_technologies: toolsTechnologies,
+        certifications
       });
       const items = await listPersons();
       setPeople(items);
@@ -2831,6 +2878,9 @@ export default function App() {
       setNewPersonLocation("");
       setNewPersonYearsExperienceInput("");
       setNewPersonSkillsInput("");
+      setNewPersonLanguagesInput("");
+      setNewPersonToolsInput("");
+      setNewPersonCertificationsInput("");
       setIsCreateProfileFormOpen(false);
     } catch (error) {
       const message =
@@ -4901,6 +4951,31 @@ export default function App() {
       .split(/[\n,]/g)
       .map((item) => item.trim())
       .filter(Boolean);
+    const languages = profileLanguagesInput
+      .split("\n")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .map((item) => {
+        const separatorIndex = item.indexOf(":");
+        if (separatorIndex === -1) {
+          return null;
+        }
+        const language = item.slice(0, separatorIndex).trim();
+        const level = item.slice(separatorIndex + 1).trim();
+        if (!language || !level) {
+          return null;
+        }
+        return { language, level };
+      })
+      .filter((item): item is { language: string; level: string } => Boolean(item));
+    const toolsTechnologies = profileToolsInput
+      .split(/[\n,]/g)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const certifications = profileCertificationsInput
+      .split(/[\n,]/g)
+      .map((item) => item.trim())
+      .filter(Boolean);
 
     if (!fullName || !location || targetRoles.length === 0 || skills.length === 0) {
       setErrorMessage("Perfil incompleto: nombre, ubicacion, roles y skills son obligatorios.");
@@ -4942,6 +5017,9 @@ export default function App() {
         location,
         years_experience: yearsExperience,
         skills,
+        languages,
+        tools_technologies: toolsTechnologies,
+        certifications,
         salary_expectation_min: salaryMin,
         salary_expectation_max: salaryMax,
         salary_currency: salaryCurrency,
@@ -5482,6 +5560,33 @@ export default function App() {
                   onChange={(event) => setNewPersonSkillsInput(event.target.value)}
                   rows={2}
                   value={newPersonSkillsInput}
+                />
+              </label>
+              <label className="field">
+                Idiomas y nivel (una línea por idioma, formato `Idioma: Nivel`)
+                <textarea
+                  disabled={isCreatingPerson}
+                  onChange={(event) => setNewPersonLanguagesInput(event.target.value)}
+                  rows={2}
+                  value={newPersonLanguagesInput}
+                />
+              </label>
+              <label className="field">
+                Herramientas y tecnologías (coma o salto de linea)
+                <textarea
+                  disabled={isCreatingPerson}
+                  onChange={(event) => setNewPersonToolsInput(event.target.value)}
+                  rows={2}
+                  value={newPersonToolsInput}
+                />
+              </label>
+              <label className="field">
+                Certificaciones (coma o salto de linea)
+                <textarea
+                  disabled={isCreatingPerson}
+                  onChange={(event) => setNewPersonCertificationsInput(event.target.value)}
+                  rows={2}
+                  value={newPersonCertificationsInput}
                 />
               </label>
               <div className="cardActions">
@@ -6150,6 +6255,33 @@ export default function App() {
                     onChange={(event) => setProfileSkillsInput(event.target.value)}
                     rows={2}
                     value={profileSkillsInput}
+                  />
+                </label>
+                <label className="field">
+                  Idiomas y nivel (una línea por idioma, formato `Idioma: Nivel`)
+                  <textarea
+                    disabled={isSavingProfile}
+                    onChange={(event) => setProfileLanguagesInput(event.target.value)}
+                    rows={2}
+                    value={profileLanguagesInput}
+                  />
+                </label>
+                <label className="field">
+                  Herramientas y tecnologías (coma o salto de linea)
+                  <textarea
+                    disabled={isSavingProfile}
+                    onChange={(event) => setProfileToolsInput(event.target.value)}
+                    rows={2}
+                    value={profileToolsInput}
+                  />
+                </label>
+                <label className="field">
+                  Certificaciones (coma o salto de linea)
+                  <textarea
+                    disabled={isSavingProfile}
+                    onChange={(event) => setProfileCertificationsInput(event.target.value)}
+                    rows={2}
+                    value={profileCertificationsInput}
                   />
                 </label>
                 <div className="cardActions">

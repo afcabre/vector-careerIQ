@@ -13,6 +13,9 @@ class CandidatePreferenceProfileServiceTests(unittest.TestCase):
                 "location": "Bogota, Colombia",
                 "years_experience": 8,
                 "skills": ["Python", "FastAPI"],
+                "languages": [{"language": "English", "level": "B2"}],
+                "tools_technologies": ["Azure"],
+                "certifications": ["PMP"],
                 "salary_expectation_min": 12000000,
                 "salary_expectation_max": 16000000,
                 "salary_currency": "COP",
@@ -60,7 +63,7 @@ class CandidatePreferenceProfileServiceTests(unittest.TestCase):
                 }
             ],
         )
-        self.assertIn("languages_not_captured_in_structured_profile", artifact["warnings"])
+        self.assertNotIn("languages_not_captured_in_structured_profile", artifact["warnings"])
 
     def test_build_profile_keeps_unknown_when_signals_are_missing(self) -> None:
         artifact = build_candidate_preference_profile(
@@ -71,6 +74,9 @@ class CandidatePreferenceProfileServiceTests(unittest.TestCase):
                 "location": "",
                 "years_experience": 4,
                 "skills": ["SQL"],
+                "languages": [],
+                "tools_technologies": [],
+                "certifications": [],
                 "salary_expectation_min": None,
                 "salary_expectation_max": None,
                 "salary_currency": "",
@@ -91,6 +97,7 @@ class CandidatePreferenceProfileServiceTests(unittest.TestCase):
         self.assertEqual(comparable["accepted_modalities"], [])
         self.assertIn("current_location_missing", artifact["warnings"])
         self.assertIn("salary_expectation_not_captured", artifact["warnings"])
+        self.assertIn("languages_not_captured_in_structured_profile", artifact["warnings"])
 
 
 if __name__ == "__main__":

@@ -74,9 +74,10 @@ def build_candidate_preference_profile(person: PersonRecord) -> CandidatePrefere
             "relocation_willingness_not_captured",
             "travel_willingness_not_captured",
             "hard_constraints_not_captured",
-            "languages_not_captured_in_structured_profile",
         ]
     )
+    if not normalized.get("target_profile", {}).get("languages"):
+        warnings.append("languages_not_captured_in_structured_profile")
 
     artifact = {
         "contract_version": CONTRACT_VERSION_CANDIDATE_PREFERENCE_PROFILE,

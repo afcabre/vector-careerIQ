@@ -12,6 +12,9 @@ export type Person = {
   location: string;
   years_experience: number;
   skills: string[];
+  languages: LanguageProficiency[];
+  tools_technologies: string[];
+  certifications: string[];
   salary_expectation_min: number | null;
   salary_expectation_max: number | null;
   salary_currency: string;
@@ -27,6 +30,11 @@ export type CulturalFieldPreference = {
   enabled: boolean;
   selected_values: string[];
   criticality: "normal" | "high_penalty" | "non_negotiable";
+};
+
+export type LanguageProficiency = {
+  language: string;
+  level: string;
 };
 
 export type ConversationMessage = {
@@ -611,6 +619,9 @@ export async function createPerson(payload: {
   location: string;
   years_experience: number;
   skills: string[];
+  languages?: LanguageProficiency[];
+  tools_technologies?: string[];
+  certifications?: string[];
   salary_expectation_min?: number | null;
   salary_expectation_max?: number | null;
   salary_currency?: string;
@@ -633,6 +644,9 @@ export async function updatePerson(
     location?: string;
     years_experience?: number;
     skills?: string[];
+    languages?: LanguageProficiency[];
+    tools_technologies?: string[];
+    certifications?: string[];
     salary_expectation_min?: number | null;
     salary_expectation_max?: number | null;
     salary_currency?: string;

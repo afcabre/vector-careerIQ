@@ -55,6 +55,11 @@ class CulturalFieldPreferenceRecord(TypedDict):
     criticality: str
 
 
+class LanguageProficiencyRecord(TypedDict):
+    language: str
+    level: str
+
+
 class PersonRecord(TypedDict):
     person_id: str
     full_name: str
@@ -62,6 +67,9 @@ class PersonRecord(TypedDict):
     location: str
     years_experience: int
     skills: list[str]
+    languages: list[LanguageProficiencyRecord]
+    tools_technologies: list[str]
+    certifications: list[str]
     salary_expectation_min: int | None
     salary_expectation_max: int | None
     salary_currency: str
@@ -98,6 +106,9 @@ def _seed_records() -> list[PersonRecord]:
             "location": "Bogota",
             "years_experience": 5,
             "skills": ["UX", "UI", "Figma"],
+            "languages": [],
+            "tools_technologies": [],
+            "certifications": [],
             "salary_expectation_min": None,
             "salary_expectation_max": None,
             "salary_currency": "",
@@ -118,6 +129,9 @@ def _seed_records() -> list[PersonRecord]:
             "location": "Medellin",
             "years_experience": 4,
             "skills": ["SQL", "Python", "Power BI"],
+            "languages": [],
+            "tools_technologies": [],
+            "certifications": [],
             "salary_expectation_min": None,
             "salary_expectation_max": None,
             "salary_currency": "",
@@ -155,6 +169,26 @@ def _dedupe_non_empty(values: list[str]) -> list[str]:
         seen.add(cleaned)
         deduped.append(cleaned)
     return deduped
+
+
+def _sanitize_languages(raw_value: Any) -> list[LanguageProficiencyRecord]:
+    if not isinstance(raw_value, list):
+        return []
+    normalized: list[LanguageProficiencyRecord] = []
+    seen: set[str] = set()
+    for item in raw_value[:20]:
+        if not isinstance(item, dict):
+            continue
+        language = str(item.get("language", "")).strip()
+        level = str(item.get("level", "")).strip()
+        if not language or not level:
+            continue
+        signature = f"{language.casefold()}|{level.casefold()}"
+        if signature in seen:
+            continue
+        seen.add(signature)
+        normalized.append({"language": language, "level": level})
+    return normalized
 
 
 def _sanitize_cultural_field(
@@ -255,6 +289,9 @@ def _normalize_firestore_record(person_id: str, payload: dict | None) -> PersonR
         location=str(source.get("location", "")),
         years_experience=int(source.get("years_experience", 0)),
         skills=[str(item) for item in source.get("skills", [])],
+        languages=_sanitize_languages(source.get("languages", [])),
+        tools_technologies=[str(item) for item in source.get("tools_technologies", [])],
+        certifications=[str(item) for item in source.get("certifications", [])],
         salary_expectation_min=_coerce_optional_int(source.get("salary_expectation_min")),
         salary_expectation_max=_coerce_optional_int(source.get("salary_expectation_max")),
         salary_currency=_sanitize_salary_currency(source.get("salary_currency")),
@@ -321,6 +358,9 @@ def create_person(
     location: str,
     years_experience: int,
     skills: list[str],
+    languages: list[dict[str, Any]] | None = None,
+    tools_technologies: list[str] | None = None,
+    certifications: list[str] | None = None,
     salary_expectation_min: int | None = None,
     salary_expectation_max: int | None = None,
     salary_currency: str | None = None,
@@ -338,6 +378,9 @@ def create_person(
         "location": location,
         "years_experience": years_experience,
         "skills": skills,
+        "languages": _sanitize_languages(languages or []),
+        "tools_technologies": _dedupe_non_empty(tools_technologies or []),
+        "certifications": _dedupe_non_empty(certifications or []),
         "salary_expectation_min": _coerce_optional_int(salary_expectation_min),
         "salary_expectation_max": _coerce_optional_int(salary_expectation_max),
         "salary_currency": _sanitize_salary_currency(salary_currency),
@@ -370,6 +413,9 @@ def update_person(
     location: str | None,
     years_experience: int | None,
     skills: list[str] | None,
+    languages: list[dict[str, Any]] | None,
+    tools_technologies: list[str] | None,
+    certifications: list[str] | None,
     salary_expectation_min: int | None,
     salary_expectation_max: int | None,
     salary_currency: str | None,
@@ -393,6 +439,12 @@ def update_person(
             existing["years_experience"] = years_experience
         if skills is not None:
             existing["skills"] = skills
+        if languages is not None:
+            existing["languages"] = _sanitize_languages(languages)
+        if tools_technologies is not None:
+            existing["tools_technologies"] = _dedupe_non_empty(tools_technologies)
+        if certifications is not None:
+            existing["certifications"] = _dedupe_non_empty(certifications)
         if salary_expectation_min is not None:
             existing["salary_expectation_min"] = _coerce_optional_int(salary_expectation_min)
         if salary_expectation_max is not None:
@@ -433,6 +485,12 @@ def update_person(
             existing["years_experience"] = years_experience
         if skills is not None:
             existing["skills"] = skills
+        if languages is not None:
+            existing["languages"] = _sanitize_languages(languages)
+        if tools_technologies is not None:
+            existing["tools_technologies"] = _dedupe_non_empty(tools_technologies)
+        if certifications is not None:
+            existing["certifications"] = _dedupe_non_empty(certifications)
         if salary_expectation_min is not None:
             existing["salary_expectation_min"] = _coerce_optional_int(salary_expectation_min)
         if salary_expectation_max is not None:

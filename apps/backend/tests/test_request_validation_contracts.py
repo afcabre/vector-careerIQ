@@ -89,8 +89,12 @@ class RequestValidationContractsTests(unittest.TestCase):
             location="Bogota",
             years_experience=5,
             skills=["Python", "FastAPI"],
+            languages=[{"language": "English", "level": "B2"}],
+            tools_technologies=["Azure"],
+            certifications=["PMP"],
         )
         self.assertEqual(ok.years_experience, 5)
+        self.assertEqual(ok.languages[0].language, "English")
 
 
 if __name__ == "__main__":

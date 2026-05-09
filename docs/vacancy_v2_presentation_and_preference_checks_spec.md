@@ -211,6 +211,44 @@ These should remain in profile only if they can later be contrasted against exte
 - abstract red flags that cannot be matched against vacancy/company evidence reliably
 - narrative-only preferences with no clear comparison rule
 
+## Enriched Base Candidate Profile
+
+The candidate model should distinguish between:
+
+1. enriched professional profile;
+2. comparable preference profile (`P0`).
+
+### Enriched professional profile
+This should remain broader than `P0` and should feed:
+- `S6.5`
+- professional-fit reasoning
+- future capability-specific helpers
+
+Recommended fields to keep or add at the base profile level:
+- `target_roles`
+- `skills`
+- `languages`
+- `tools_technologies`
+- `certifications`
+
+### Minimal suggested shapes
+
+```json
+{
+  "languages": [
+    { "language": "English", "level": "B2" },
+    { "language": "Spanish", "level": "native" }
+  ],
+  "tools_technologies": ["Power BI", "Azure", "SAP"],
+  "certifications": ["PMP", "Scrum Fundamentals"]
+}
+```
+
+### Important separation rule
+- `target_roles`, `skills`, `languages`, `tools_technologies` and `certifications` belong to the enriched professional profile;
+- they do not belong to `P0` unless a later helper explicitly needs them;
+- their existence in profile should not force them into deterministic preference checks.
+
 ## Where Languages Fit
 
 Languages and proficiency level are important, but they should not live in the deterministic preference-check layer.
@@ -248,7 +286,7 @@ The same reasoning may later apply to:
 - certifications
 - tools and technologies
 
-But those are not part of the current preference-cleanup slice. For now, only `languages + level` is being explicitly added to the design decision because it is both profile-relevant and frequently requested by vacancies.
+Those fields should be captured in the enriched professional profile, but they are not part of the current `P0` comparison slice.
 
 ## Frontend Presentation Spec
 

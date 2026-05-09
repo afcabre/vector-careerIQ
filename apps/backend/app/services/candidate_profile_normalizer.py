@@ -12,6 +12,11 @@ class SalaryExpectation(TypedDict):
     period: str
 
 
+class LanguageCapability(TypedDict):
+    language: str
+    level: str
+
+
 class CandidatePreference(TypedDict):
     field_id: str
     enabled: bool
@@ -83,6 +88,22 @@ def normalize_candidate_profile(person: PersonRecord) -> CandidateProfileNormali
             "target_roles": _dedupe([str(item) for item in person.get("target_roles", [])]),
             "years_experience": int(person.get("years_experience", 0) or 0),
             "skills": _dedupe([str(item) for item in person.get("skills", [])]),
+            "languages": [
+                LanguageCapability(
+                    language=_clean_text(item.get("language")),
+                    level=_clean_text(item.get("level")),
+                )
+                for item in person.get("languages", [])
+                if isinstance(item, dict)
+                and _clean_text(item.get("language"))
+                and _clean_text(item.get("level"))
+            ],
+            "tools_technologies": _dedupe(
+                [str(item) for item in person.get("tools_technologies", [])]
+            ),
+            "certifications": _dedupe(
+                [str(item) for item in person.get("certifications", [])]
+            ),
         },
         salary_expectation=SalaryExpectation(
             min=person.get("salary_expectation_min"),
@@ -112,6 +133,23 @@ def candidate_profile_context(normalized: CandidateProfileNormalized) -> str:
         f"- Años de experiencia: {target_profile.get('years_experience', 0)}",
         "- Skills base: " + ", ".join(target_profile.get("skills", []) or []),
     ]
+
+    languages = target_profile.get("languages", []) or []
+    if languages:
+        lines.append(
+            "- Idiomas: "
+            + ", ".join(
+                f"{item.get('language', '')} ({item.get('level', '')})" for item in languages
+            )
+        )
+
+    tools_technologies = target_profile.get("tools_technologies", []) or []
+    if tools_technologies:
+        lines.append("- Herramientas y tecnologias: " + ", ".join(tools_technologies))
+
+    certifications = target_profile.get("certifications", []) or []
+    if certifications:
+        lines.append("- Certificaciones: " + ", ".join(certifications))
 
     salary_min = salary.get("min")
     salary_max = salary.get("max")
