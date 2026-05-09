@@ -29,6 +29,7 @@ import {
   analyzeProfileMatch,
   createPerson,
   getAiRuntimeConfig,
+  getCandidatePreferenceProfile,
   getConversation,
   interviewBrief,
   interviewBriefStream,
@@ -64,6 +65,7 @@ import {
   recomputeOpportunityVacancyAlignmentReportV2Stream,
   recomputeOpportunityVacancyAlignmentReportStream,
   recomputeOpportunityVacancySalary,
+  recomputeCandidatePreferenceProfileStream,
   saveOpportunityFromSearch,
   searchOpportunities,
   sendMessage,
@@ -1749,6 +1751,13 @@ export default function App() {
   const [isCreateProfileFormOpen, setIsCreateProfileFormOpen] = useState(false);
   const [isCreatingPerson, setIsCreatingPerson] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [candidatePreferenceProfileArtifact, setCandidatePreferenceProfileArtifact] = useState<Record<string, unknown>>({});
+  const [candidatePreferenceProfileStatus, setCandidatePreferenceProfileStatus] = useState<"none" | "draft" | "approved" | "error">("none");
+  const [candidatePreferenceProfileGeneratedAt, setCandidatePreferenceProfileGeneratedAt] = useState("");
+  const [candidatePreferenceProfileStage, setCandidatePreferenceProfileStage] = useState("");
+  const [candidatePreferenceProfileError, setCandidatePreferenceProfileError] = useState<string | null>(null);
+  const [isLoadingCandidatePreferenceProfile, setIsLoadingCandidatePreferenceProfile] = useState(false);
+  const [isRecomputingCandidatePreferenceProfile, setIsRecomputingCandidatePreferenceProfile] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [isConversationLoading, setIsConversationLoading] = useState(false);
@@ -2599,6 +2608,44 @@ export default function App() {
 
   useEffect(() => {
     setOpportunityDiscoveryMode("search");
+  }, [selectedPersonId]);
+
+  useEffect(() => {
+    if (!selectedPersonId) {
+      setCandidatePreferenceProfileArtifact({});
+      setCandidatePreferenceProfileStatus("none");
+      setCandidatePreferenceProfileGeneratedAt("");
+      setCandidatePreferenceProfileStage("");
+      setCandidatePreferenceProfileError(null);
+      return;
+    }
+    let cancelled = false;
+    setIsLoadingCandidatePreferenceProfile(true);
+    setCandidatePreferenceProfileError(null);
+    void getCandidatePreferenceProfile(selectedPersonId)
+      .then((payload) => {
+        if (cancelled) {
+          return;
+        }
+        setCandidatePreferenceProfileArtifact(payload.artifact ?? {});
+        setCandidatePreferenceProfileStatus(payload.status ?? "none");
+        setCandidatePreferenceProfileGeneratedAt(payload.generated_at ?? "");
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+        const message = error instanceof Error ? error.message : "No se pudo cargar P0";
+        setCandidatePreferenceProfileError(message);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingCandidatePreferenceProfile(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [selectedPersonId]);
 
   useEffect(() => {
@@ -5036,6 +5083,55 @@ export default function App() {
     }
   }
 
+  function getCandidatePreferenceProfileStageLabel(stage: string): string {
+    switch (stage) {
+      case "candidate_preference_profile_recompute_started":
+        return "Iniciando recomputo de P0";
+      case "candidate_preference_profile_building":
+        return "Normalizando perfil comparable";
+      case "candidate_preference_profile_saving":
+        return "Guardando artefacto P0";
+      default:
+        return stage;
+    }
+  }
+
+  async function handleRecomputeCandidatePreferenceProfile() {
+    if (!selectedPersonId || isRecomputingCandidatePreferenceProfile) {
+      return;
+    }
+    setIsRecomputingCandidatePreferenceProfile(true);
+    setCandidatePreferenceProfileError(null);
+    setCandidatePreferenceProfileStage("");
+    setErrorMessage(null);
+    try {
+      const payload = await recomputeCandidatePreferenceProfileStream(
+        selectedPersonId,
+        (stage) => setCandidatePreferenceProfileStage(stage)
+      );
+      setCandidatePreferenceProfileArtifact(payload.artifact ?? {});
+      setCandidatePreferenceProfileStatus(payload.status ?? "draft");
+      setCandidatePreferenceProfileGeneratedAt(payload.generated_at ?? "");
+      const items = await listPersons();
+      setPeople(items);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo recalcular P0";
+      setCandidatePreferenceProfileError(message);
+      setErrorMessage(message);
+      try {
+        const payload = await getCandidatePreferenceProfile(selectedPersonId);
+        setCandidatePreferenceProfileArtifact(payload.artifact ?? {});
+        setCandidatePreferenceProfileStatus(payload.status ?? "none");
+        setCandidatePreferenceProfileGeneratedAt(payload.generated_at ?? "");
+      } catch {
+        // Ignore refresh failure when surfacing the original error.
+      }
+    } finally {
+      setIsRecomputingCandidatePreferenceProfile(false);
+    }
+  }
+
   function handleToggleCulturalOption(fieldId: string, optionValue: string, checked: boolean) {
     setCulturePreferencesState((current) => {
       const existing = current[fieldId] ?? {
@@ -6361,6 +6457,53 @@ export default function App() {
                     {isSavingCulturePreferences ? "Guardando..." : "Guardar preferencias"}
                   </button>
                 </div>
+              </article>
+
+              <article className="manualCard profileSectionCard">
+                <h3 className="subheading subheadingCompact">P0 · Perfil comparable</h3>
+                <p className="metaText">Estado: {candidatePreferenceProfileStatus}</p>
+                <p className="metaText">
+                  Generado:{" "}
+                  {candidatePreferenceProfileGeneratedAt
+                    ? formatAiRunTimestamp(candidatePreferenceProfileGeneratedAt)
+                    : "Sin generar"}
+                </p>
+                {candidatePreferenceProfileStage ? (
+                  <p className="metaText">
+                    {getCandidatePreferenceProfileStageLabel(candidatePreferenceProfileStage)}
+                  </p>
+                ) : null}
+                {candidatePreferenceProfileError ? (
+                  <p className="errorText">{candidatePreferenceProfileError}</p>
+                ) : null}
+                <div className="cardActions">
+                  <button
+                    className="primaryButton buttonCompact"
+                    disabled={
+                      !selectedPersonId
+                      || isLoadingCandidatePreferenceProfile
+                      || isRecomputingCandidatePreferenceProfile
+                    }
+                    onClick={() => void handleRecomputeCandidatePreferenceProfile()}
+                    type="button"
+                  >
+                    {isRecomputingCandidatePreferenceProfile ? "Recalculando..." : "Recalcular P0"}
+                  </button>
+                </div>
+                {isLoadingCandidatePreferenceProfile ? (
+                  <p className="metaText">Cargando artefacto P0...</p>
+                ) : Object.keys(candidatePreferenceProfileArtifact).length > 0 ? (
+                  <details className="payloadDetails">
+                    <summary>Ver JSON P0</summary>
+                    <pre className="payloadPre">
+                      {JSON.stringify(candidatePreferenceProfileArtifact, null, 2)}
+                    </pre>
+                  </details>
+                ) : (
+                  <p className="metaText">
+                    Sin artefacto P0. Requiere recomputo del perfil comparable.
+                  </p>
+                )}
               </article>
             </div>
           </div>

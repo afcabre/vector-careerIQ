@@ -22,6 +22,8 @@ export type Person = {
   culture_preferences: string[];
   cultural_fit_preferences: Record<string, CulturalFieldPreference>;
   culture_preferences_notes: string;
+  candidate_preference_profile_status: "none" | "draft" | "approved" | "error";
+  candidate_preference_profile_generated_at: string;
   created_at: string;
   updated_at: string;
 };
@@ -35,6 +37,12 @@ export type CulturalFieldPreference = {
 export type LanguageProficiency = {
   language: string;
   level: string;
+};
+
+export type CandidatePreferenceProfileEnvelope = {
+  artifact: Record<string, unknown>;
+  status: "none" | "draft" | "approved" | "error";
+  generated_at: string;
 };
 
 export type ConversationMessage = {
@@ -663,6 +671,95 @@ export async function updatePerson(
     body: JSON.stringify(payload)
   });
   return parseResponse<Person>(response);
+}
+
+export async function getCandidatePreferenceProfile(
+  personId: string
+): Promise<CandidatePreferenceProfileEnvelope> {
+  const response = await safeFetch(`${API_BASE}/persons/${personId}/candidate-preference-profile`, {
+    method: "GET",
+    credentials: "include"
+  });
+  return parseResponse<CandidatePreferenceProfileEnvelope>(response);
+}
+
+export async function recomputeCandidatePreferenceProfileStream(
+  personId: string,
+  onStatus: (stage: string) => void
+): Promise<CandidatePreferenceProfileEnvelope> {
+  const response = await safeFetch(
+    `${API_BASE}/persons/${personId}/candidate-preference-profile/recompute/stream`,
+    {
+      method: "POST",
+      credentials: "include"
+    }
+  );
+  if (!response.ok) {
+    let messageText = `Request failed: ${response.status}`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) {
+        messageText = payload.detail;
+      }
+    } catch {
+      // Ignore parsing errors for stream setup failures.
+    }
+    throw new Error(messageText);
+  }
+  if (!response.body) {
+    throw new Error("Streaming response body is empty");
+  }
+
+  const decoder = new TextDecoder();
+  const reader = response.body.getReader();
+  let pending = "";
+  let completedEnvelope: CandidatePreferenceProfileEnvelope | null = null;
+  let lastStage = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+    pending += decoder.decode(value, { stream: true });
+    const consumed = consumeSseBuffer(pending, (eventName, payload) => {
+      if (eventName === "tool_status") {
+        const stage = payload.stage;
+        if (typeof stage === "string" && stage.trim()) {
+          lastStage = stage.trim();
+          onStatus(lastStage);
+        }
+      } else if (eventName === "message_complete") {
+        if (payload && typeof payload === "object") {
+          completedEnvelope = payload as CandidatePreferenceProfileEnvelope;
+        }
+      }
+    });
+    pending = consumed.remainder;
+  }
+  if (pending.trim()) {
+    consumeSseBuffer(`${pending}\n\n`, (eventName, payload) => {
+      if (eventName === "tool_status") {
+        const stage = payload.stage;
+        if (typeof stage === "string" && stage.trim()) {
+          lastStage = stage.trim();
+          onStatus(lastStage);
+        }
+      } else if (eventName === "message_complete") {
+        if (payload && typeof payload === "object") {
+          completedEnvelope = payload as CandidatePreferenceProfileEnvelope;
+        }
+      }
+    });
+  }
+
+  if (!completedEnvelope) {
+    const stageSuffix = lastStage ? ` (last stage: ${lastStage})` : "";
+    throw new Error(
+      `Candidate preference profile stream ended without completion payload${stageSuffix}`
+    );
+  }
+  return completedEnvelope;
 }
 
 export async function listPromptConfigs(): Promise<PromptConfig[]> {
