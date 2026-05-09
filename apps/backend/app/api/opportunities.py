@@ -74,6 +74,10 @@ from app.services.vacancy_comparable_conditions_service import (
     VacancyComparableConditionsBuildError,
     build_vacancy_comparable_conditions,
 )
+from app.services.candidate_preference_checks_service import (
+    CandidatePreferenceChecksBuildError,
+    build_candidate_preference_checks,
+)
 from app.services.vacancy_dimensions_enrichment_service import (
     VacancyDimensionsEnrichmentError,
     enrich_vacancy_dimensions_artifact,
@@ -144,6 +148,9 @@ class OpportunityResponse(BaseModel):
     vacancy_comparable_conditions_artifact: dict[str, Any]
     vacancy_comparable_conditions_status: str
     vacancy_comparable_conditions_generated_at: str
+    candidate_preference_checks_artifact: dict[str, Any]
+    candidate_preference_checks_status: str
+    candidate_preference_checks_generated_at: str
     vacancy_dimensions_enriched_artifact: dict[str, Any]
     vacancy_dimensions_enriched_status: str
     vacancy_dimensions_enriched_generated_at: str
@@ -263,6 +270,8 @@ class UpdateOpportunityRequest(BaseModel):
     vacancy_salary_status: str | None = Field(default=None)
     vacancy_comparable_conditions_artifact: dict[str, Any] | None = Field(default=None)
     vacancy_comparable_conditions_status: str | None = Field(default=None)
+    candidate_preference_checks_artifact: dict[str, Any] | None = Field(default=None)
+    candidate_preference_checks_status: str | None = Field(default=None)
     vacancy_dimensions_enriched_artifact: dict[str, Any] | None = Field(default=None)
     vacancy_dimensions_enriched_status: str | None = Field(default=None)
     vacancy_retrieval_queries_artifact: dict[str, Any] | None = Field(default=None)
@@ -660,6 +669,14 @@ def update_opportunity(
             detail="Invalid vacancy_comparable_conditions_status",
         )
     if (
+        payload.candidate_preference_checks_status is not None
+        and payload.candidate_preference_checks_status not in VACANCY_V2_ARTIFACT_STATUSES
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid candidate_preference_checks_status",
+        )
+    if (
         payload.vacancy_dimensions_enriched_status is not None
         and payload.vacancy_dimensions_enriched_status not in VACANCY_V2_ARTIFACT_STATUSES
     ):
@@ -747,6 +764,8 @@ def update_opportunity(
         vacancy_salary_status=payload.vacancy_salary_status,
         vacancy_comparable_conditions_artifact=payload.vacancy_comparable_conditions_artifact,
         vacancy_comparable_conditions_status=payload.vacancy_comparable_conditions_status,
+        candidate_preference_checks_artifact=payload.candidate_preference_checks_artifact,
+        candidate_preference_checks_status=payload.candidate_preference_checks_status,
         vacancy_dimensions_enriched_artifact=payload.vacancy_dimensions_enriched_artifact,
         vacancy_dimensions_enriched_status=payload.vacancy_dimensions_enriched_status,
         vacancy_retrieval_queries_artifact=payload.vacancy_retrieval_queries_artifact,
@@ -1358,6 +1377,161 @@ async def recompute_vacancy_comparable_conditions_stream(
                 status=None,
                 notes=None,
                 vacancy_comparable_conditions_status="error",
+            )
+            yield _serialize_sse(
+                "error",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "detail": str(exc),
+                },
+            )
+        except Exception as exc:  # pragma: no cover - stream runtime path
+            yield _serialize_sse(
+                "error",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "detail": str(exc),
+                },
+            )
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.post("/{opportunity_id}/candidate-preference-checks/recompute")
+def recompute_candidate_preference_checks(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+) -> OpportunityResponse:
+    person = _require_person(person_id)
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    try:
+        artifact = build_candidate_preference_checks(
+            person=person,
+            opportunity=opportunity,
+            candidate_preference_profile_artifact=person.get("candidate_preference_profile_artifact", {}),
+            vacancy_comparable_conditions_artifact=opportunity.get(
+                "vacancy_comparable_conditions_artifact", {}
+            ),
+        )
+    except CandidatePreferenceChecksBuildError as exc:
+        update_saved_opportunity(
+            person_id=person_id,
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            candidate_preference_checks_status="error",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    updated = update_saved_opportunity(
+        person_id=person_id,
+        opportunity_id=opportunity_id,
+        status=None,
+        notes=None,
+        candidate_preference_checks_artifact=artifact,
+        candidate_preference_checks_status="draft",
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Could not recompute candidate preference checks",
+        )
+    return _to_response(updated)
+
+
+@router.post("/{opportunity_id}/candidate-preference-checks/recompute/stream")
+async def recompute_candidate_preference_checks_stream(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+) -> StreamingResponse:
+    person = _require_person(person_id)
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    async def event_generator():
+        try:
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "candidate_preference_checks_recompute_started",
+                },
+            )
+            await asyncio.sleep(0)
+
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "candidate_preference_checks_building",
+                },
+            )
+            await asyncio.sleep(0)
+
+            artifact = build_candidate_preference_checks(
+                person=person,
+                opportunity=opportunity,
+                candidate_preference_profile_artifact=person.get("candidate_preference_profile_artifact", {}),
+                vacancy_comparable_conditions_artifact=opportunity.get(
+                    "vacancy_comparable_conditions_artifact", {}
+                ),
+            )
+
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "candidate_preference_checks_saving",
+                },
+            )
+            await asyncio.sleep(0)
+
+            updated = update_saved_opportunity(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                status=None,
+                notes=None,
+                candidate_preference_checks_artifact=artifact,
+                candidate_preference_checks_status="draft",
+            )
+            if not updated:
+                raise RuntimeError("Could not recompute candidate preference checks")
+
+            yield _serialize_sse(
+                "message_complete",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "opportunity": updated,
+                },
+            )
+        except CandidatePreferenceChecksBuildError as exc:
+            update_saved_opportunity(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                status=None,
+                notes=None,
+                candidate_preference_checks_status="error",
             )
             yield _serialize_sse(
                 "error",

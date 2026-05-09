@@ -28,6 +28,7 @@ from app.services.vacancy_retrieval_evidence_service import VacancyRetrievalEvid
 from app.services.vacancy_retrieval_queries_service import VacancyRetrievalQueriesExtractionError
 from app.services.vacancy_salary_service import VacancySalaryNormalizationError
 from app.services.vacancy_comparable_conditions_service import VacancyComparableConditionsBuildError
+from app.services.candidate_preference_checks_service import CandidatePreferenceChecksBuildError
 
 
 def _clear_in_memory_state() -> None:
@@ -134,6 +135,54 @@ def _sample_vacancy_comparable_conditions(opportunity_id: str) -> dict[str, Any]
             "value": "indefinite",
             "confidence": "high",
         },
+        "warnings": [],
+    }
+
+
+def _sample_candidate_preference_checks(person_id: str, opportunity_id: str) -> dict[str, Any]:
+    return {
+        "contract_version": "candidate_preference_checks.v1",
+        "vacancy_id": opportunity_id,
+        "person_id": person_id,
+        "generated_at": "2026-04-21T10:02:40Z",
+        "rows": [
+            {
+                "criterion_key": "location",
+                "criterion": "Ubicacion",
+                "state": "🟢 Cumple",
+                "vacancy_value": "Bogota, Colombia",
+                "candidate_value": "Bogota, Colombia",
+                "why": "La ubicacion es compatible.",
+                "confidence": "high",
+            },
+            {
+                "criterion_key": "modality",
+                "criterion": "Modalidad",
+                "state": "🟢 Cumple",
+                "vacancy_value": "Hibrido 4x1",
+                "candidate_value": "hybrid, remote",
+                "why": "La modalidad esta dentro de las aceptadas.",
+                "confidence": "high",
+            },
+            {
+                "criterion_key": "compensation",
+                "criterion": "Compensacion",
+                "state": "🟡 Parcial",
+                "vacancy_value": "12000000 COP mensual",
+                "candidate_value": "10000000 - 14000000 COP monthly",
+                "why": "Existe traslape parcial.",
+                "confidence": "medium",
+            },
+            {
+                "criterion_key": "contract_type",
+                "criterion": "Tipo de contrato",
+                "state": "🟢 Cumple",
+                "vacancy_value": "Contrato indefinido",
+                "candidate_value": "indefinite",
+                "why": "El contrato esta dentro de los aceptados.",
+                "confidence": "high",
+            },
+        ],
         "warnings": [],
     }
 
@@ -718,6 +767,21 @@ class VacancyV2EndpointsTests(unittest.TestCase):
             "Invalid vacancy_comparable_conditions_status",
         )
 
+        with self.assertRaises(HTTPException) as invalid_candidate_preference_checks_status:
+            opportunities_api.update_opportunity(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                payload=opportunities_api.UpdateOpportunityRequest(
+                    candidate_preference_checks_status="invalid"
+                ),
+                _=self.session,
+            )
+        self.assertEqual(invalid_candidate_preference_checks_status.exception.status_code, 422)
+        self.assertEqual(
+            invalid_candidate_preference_checks_status.exception.detail,
+            "Invalid candidate_preference_checks_status",
+        )
+
         with self.assertRaises(HTTPException) as invalid_enriched_status:
             opportunities_api.update_opportunity(
                 person_id="p-001",
@@ -1033,6 +1097,113 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         stored = opportunity_store.find_opportunity("p-001", opportunity_id)
         assert stored is not None
         self.assertEqual(stored["vacancy_comparable_conditions_status"], "error")
+
+    def test_recompute_candidate_preference_checks_success_sets_draft_artifact(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Gerente de Tecnologia",
+            company="Asssiprex",
+            location="Bogota, Colombia",
+            raw_text="Vacante comparable.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_comparable_conditions_artifact=_sample_vacancy_comparable_conditions(opportunity_id),
+            vacancy_comparable_conditions_status="approved",
+        )
+        assert updated is not None
+        person_store.update_candidate_preference_profile(
+            "p-001",
+            artifact={
+                "contract_version": "candidate_preference_profile.v1",
+                "person_id": "p-001",
+                "generated_at": "2026-04-21T10:02:35Z",
+                "comparable_preferences": {
+                    "current_location": "Bogota, Colombia",
+                    "accepted_locations": ["Bogota"],
+                    "accepted_modalities": ["hybrid", "remote"],
+                    "contract_types_accepted": ["indefinite"],
+                    "salary_expectation": {
+                        "min": 10000000,
+                        "max": 14000000,
+                        "currency": "COP",
+                        "period": "monthly",
+                    },
+                    "relocation_willingness": "no",
+                    "travel_willingness": "yes",
+                    "hard_constraints": [],
+                },
+                "warnings": [],
+            },
+            status="approved",
+        )
+        artifact = _sample_candidate_preference_checks("p-001", opportunity_id)
+
+        with patch.object(
+            opportunities_api,
+            "build_candidate_preference_checks",
+            return_value=artifact,
+        ):
+            response = opportunities_api.recompute_candidate_preference_checks(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                _=self.session,
+            )
+
+        self.assertEqual(response.candidate_preference_checks_status, "draft")
+        self.assertEqual(
+            response.candidate_preference_checks_artifact["contract_version"],
+            "candidate_preference_checks.v1",
+        )
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["candidate_preference_checks_status"], "draft")
+
+    def test_recompute_candidate_preference_checks_failure_sets_error_status(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Gerente de Tecnologia",
+            company="Asssiprex",
+            location="Bogota, Colombia",
+            raw_text="Vacante comparable.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_comparable_conditions_artifact=_sample_vacancy_comparable_conditions(opportunity_id),
+            vacancy_comparable_conditions_status="approved",
+        )
+        assert updated is not None
+
+        with patch.object(
+            opportunities_api,
+            "build_candidate_preference_checks",
+            side_effect=CandidatePreferenceChecksBuildError(
+                "C2 requires a valid candidate_preference_profile.v1 artifact."
+            ),
+        ):
+            with self.assertRaises(HTTPException) as ctx:
+                opportunities_api.recompute_candidate_preference_checks(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                )
+
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertIn(
+            "C2 requires a valid candidate_preference_profile.v1 artifact.",
+            str(ctx.exception.detail),
+        )
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["candidate_preference_checks_status"], "error")
 
     def test_recompute_vacancy_dimensions_enriched_success_sets_draft_artifact(self) -> None:
         created = opportunity_store.import_text_opportunity(
@@ -2206,6 +2377,121 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         stored = opportunity_store.find_opportunity("p-001", opportunity_id)
         assert stored is not None
         self.assertEqual(stored["vacancy_comparable_conditions_status"], "error")
+
+    def test_candidate_preference_checks_stream_emits_stages_and_message_complete(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Gerente de Tecnologia",
+            company="Asssiprex",
+            location="Bogota, Colombia",
+            raw_text="Vacante comparable.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_comparable_conditions_artifact=_sample_vacancy_comparable_conditions(opportunity_id),
+            vacancy_comparable_conditions_status="approved",
+        )
+        assert updated is not None
+        person_store.update_candidate_preference_profile(
+            "p-001",
+            artifact={
+                "contract_version": "candidate_preference_profile.v1",
+                "person_id": "p-001",
+                "generated_at": "2026-04-21T10:02:35Z",
+                "comparable_preferences": {
+                    "current_location": "Bogota, Colombia",
+                    "accepted_locations": ["Bogota"],
+                    "accepted_modalities": ["hybrid", "remote"],
+                    "contract_types_accepted": ["indefinite"],
+                    "salary_expectation": {
+                        "min": 10000000,
+                        "max": 14000000,
+                        "currency": "COP",
+                        "period": "monthly",
+                    },
+                    "relocation_willingness": "no",
+                    "travel_willingness": "yes",
+                    "hard_constraints": [],
+                },
+                "warnings": [],
+            },
+            status="approved",
+        )
+        artifact = _sample_candidate_preference_checks("p-001", opportunity_id)
+
+        with patch.object(opportunities_api, "build_candidate_preference_checks", return_value=artifact):
+            response = asyncio.run(
+                opportunities_api.recompute_candidate_preference_checks_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        stages = [payload.get("stage", "") for name, payload in events if name == "tool_status"]
+        self.assertIn("candidate_preference_checks_recompute_started", stages)
+        self.assertIn("candidate_preference_checks_building", stages)
+        self.assertIn("candidate_preference_checks_saving", stages)
+        complete_payload = next(payload for name, payload in events if name == "message_complete")
+        self.assertEqual(
+            complete_payload["opportunity"]["candidate_preference_checks_status"],
+            "draft",
+        )
+
+    def test_candidate_preference_checks_stream_emits_error_and_marks_status(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Gerente de Tecnologia",
+            company="Asssiprex",
+            location="Bogota, Colombia",
+            raw_text="Vacante comparable.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_comparable_conditions_artifact=_sample_vacancy_comparable_conditions(opportunity_id),
+            vacancy_comparable_conditions_status="approved",
+        )
+        assert updated is not None
+
+        with patch.object(
+            opportunities_api,
+            "build_candidate_preference_checks",
+            side_effect=CandidatePreferenceChecksBuildError(
+                "C2 requires a valid candidate_preference_profile.v1 artifact."
+            ),
+        ):
+            response = asyncio.run(
+                opportunities_api.recompute_candidate_preference_checks_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+            events = _parse_sse_events(raw)
+
+        names = [name for name, _ in events]
+        self.assertIn("tool_status", names)
+        self.assertIn("error", names)
+        error_payload = next(payload for name, payload in events if name == "error")
+        self.assertIn(
+            "C2 requires a valid candidate_preference_profile.v1 artifact.",
+            str(error_payload.get("detail", "")),
+        )
+
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["candidate_preference_checks_status"], "error")
 
     def test_vacancy_dimensions_enriched_stream_emits_stages_and_message_complete(self) -> None:
         created = opportunity_store.import_text_opportunity(

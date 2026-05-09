@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `El rediseño de match ya cuenta con P0 operativo en perfil y con C1 backend implementado: la vacante ya puede normalizar condiciones comparables (ubicacion, modalidad, compensacion y tipo de contrato) como artefacto separado, mientras S3.1 preserva componente variable explicito para casos de salario fijo + comisiones/bono`
+- checkpoint_actual: `El rediseño de match ya cuenta con P0, C1 y C2 en backend: la vacante ya normaliza condiciones comparables, S3.1 preserva componente variable explicito y ahora existe un artefacto deterministico de checks vacante-perfil para ubicacion, modalidad, compensacion y tipo de contrato`
 - repo_status: `flujo V1 operativo con analisis, postulacion, chat, CV semantico, admin de prompts y extraccion estructurada de vacantes en forma legacy estable; propuesta v2 desacoplada en branch experimental`
 - ultima_actualizacion: `2026-05-09`
 
@@ -40,6 +40,11 @@
 - slice backend `C1` implementado: nuevo contrato `vacancy_comparable_conditions.v1`, servicio deterministico de normalizacion de `location`, `modality`, `compensation` y `contract_type`, persistencia por oportunidad y endpoints `vacancy-comparable-conditions/recompute` y `recompute/stream`
 - `S3.1` extendido de forma acotada: `vacancy_salary_normalization.v1` ahora preserva `has_variable_component`, `variable_component_type` y `variable_component_note`, con inferencia de respaldo cuando el LLM omite la senal pero el `raw_text` contiene `comisiones` o `bono`
 - validacion tecnica del slice `C1 + S3.1 variable component` en verde: `cd apps/backend && .venv/bin/python -m unittest tests.test_vacancy_comparable_conditions_contract tests.test_vacancy_comparable_conditions_service tests.test_vacancy_salary_contract tests.test_vacancy_salary_service tests.test_vacancy_v2_endpoints` (`71 tests`)
+- slice backend `C2` implementado: nuevo contrato `candidate_preference_checks.v1`, servicio deterministico de comparacion entre `candidate_preference_profile.v1` y `vacancy_comparable_conditions.v1`, persistencia por oportunidad y endpoints `candidate-preference-checks/recompute` y `recompute/stream`
+- reglas iniciales de `C2` cerradas en codigo: ubicacion, modalidad, compensacion y tipo de contrato se comparan sin LLM; relocalizacion influye en la fila de ubicacion y `travel_willingness` / `hard_constraints` quedan advertidos como captura disponible pero cobertura todavia pendiente
+- validacion tecnica del slice `C2` en verde: `cd apps/backend && .venv/bin/python -m unittest tests.test_candidate_preference_checks_contract tests.test_candidate_preference_checks_service tests.test_vacancy_v2_endpoints` (`66 tests`)
+- slice frontend experimental extendido a `C1 + C2`: `Vacancy V2` ahora expone `Vacancy Comparable Conditions` y `Candidate Preference Checks` con `status`, `generated_at`, recompute por SSE, aprobacion manual `draft/approved` y JSON read-only por oportunidad
+- validacion tecnica del slice frontend `C1 + C2`: `cd apps/frontend && npm run build` en verde
 - `Sprint 1` del rediseño de match iniciado en backend: `S3` ahora refuerza preservacion de contexto minimo en items atomizados, `S4` refuerza queries probatorias, los defaults de retrieval quedan en `retrieval_queries_per_item=4` y `top_k_semantic_per_criterion=6`, y `S8` ya persiste traza completa de request/response sin truncacion forzada por flow
 - nuevo slice backend de `S6.5` implementado: contrato `vacancy_evidence_adjudication.v1`, flow `task_vacancy_evidence_adjudication`, servicio grounded LLM-first, persistencia de artefacto/status/generated_at por oportunidad y endpoints `recompute` / `recompute/stream`
 - validacion tecnica del slice `S6.5` en verde: `cd apps/backend && .venv/bin/python -m unittest tests.test_vacancy_evidence_adjudication_contract tests.test_vacancy_evidence_adjudication_service tests.test_vacancy_v2_endpoints` (`47 tests`)
