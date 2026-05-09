@@ -6,8 +6,8 @@ from typing import Any, TypedDict
 CONTRACT_VERSION_CANDIDATE_PREFERENCE_PROFILE = "candidate_preference_profile.v1"
 PERSON_ARTIFACT_STATUSES = {"none", "draft", "approved", "error"}
 MODALITY_VALUES = {"onsite", "hybrid", "remote"}
-CRITICALITY_VALUES = {"normal", "high_penalty", "non_negotiable"}
-UNKNOWN_COMPATIBILITY_VALUES = {"unknown", "not_captured"}
+CONTRACT_TYPE_VALUES = {"indefinite", "fixed_term", "service_contract"}
+WILLINGNESS_VALUES = {"unknown", "yes", "no"}
 
 
 class SalaryExpectationPayload(TypedDict):
@@ -21,17 +21,11 @@ class ComparablePreferencesPayload(TypedDict):
     current_location: str
     accepted_locations: list[str]
     accepted_modalities: list[str]
-    remote_accepted: bool | None
+    contract_types_accepted: list[str]
     salary_expectation: SalaryExpectationPayload
     relocation_willingness: str
     travel_willingness: str
     hard_constraints: list[str]
-
-
-class CompanyPreferencePayload(TypedDict):
-    field_id: str
-    selected_values: list[str]
-    criticality: str
 
 
 class CandidatePreferenceProfileContract(TypedDict):
@@ -39,7 +33,6 @@ class CandidatePreferenceProfileContract(TypedDict):
     person_id: str
     generated_at: str
     comparable_preferences: ComparablePreferencesPayload
-    contrastable_company_preferences: list[CompanyPreferencePayload]
     warnings: list[str]
 
 
@@ -110,7 +103,7 @@ def _empty_comparable_preferences() -> ComparablePreferencesPayload:
         "current_location": "",
         "accepted_locations": [],
         "accepted_modalities": [],
-        "remote_accepted": None,
+        "contract_types_accepted": [],
         "salary_expectation": _empty_salary_expectation(),
         "relocation_willingness": "unknown",
         "travel_willingness": "unknown",
@@ -121,8 +114,6 @@ def _empty_comparable_preferences() -> ComparablePreferencesPayload:
 def _normalize_comparable_preferences(raw: Any) -> ComparablePreferencesPayload:
     if not isinstance(raw, dict):
         return _empty_comparable_preferences()
-    remote_accepted_raw = raw.get("remote_accepted")
-    remote_accepted = remote_accepted_raw if isinstance(remote_accepted_raw, bool) else None
     relocation = _clean_text(raw.get("relocation_willingness"), max_chars=24).lower()
     travel = _clean_text(raw.get("travel_willingness"), max_chars=24).lower()
     return {
@@ -138,12 +129,15 @@ def _normalize_comparable_preferences(raw: Any) -> ComparablePreferencesPayload:
             max_items=8,
             max_chars=16,
         ),
-        "remote_accepted": remote_accepted,
-        "salary_expectation": _normalize_salary_expectation(raw.get("salary_expectation")),
-        "relocation_willingness": (
-            relocation if relocation in UNKNOWN_COMPATIBILITY_VALUES else "unknown"
+        "contract_types_accepted": _normalize_string_list(
+            raw.get("contract_types_accepted"),
+            allowed=CONTRACT_TYPE_VALUES,
+            max_items=8,
+            max_chars=24,
         ),
-        "travel_willingness": travel if travel in UNKNOWN_COMPATIBILITY_VALUES else "unknown",
+        "salary_expectation": _normalize_salary_expectation(raw.get("salary_expectation")),
+        "relocation_willingness": relocation if relocation in WILLINGNESS_VALUES else "unknown",
+        "travel_willingness": travel if travel in WILLINGNESS_VALUES else "unknown",
         "hard_constraints": _normalize_string_list(
             raw.get("hard_constraints"),
             max_items=20,
@@ -152,54 +146,12 @@ def _normalize_comparable_preferences(raw: Any) -> ComparablePreferencesPayload:
     }
 
 
-def _normalize_company_preference(raw: Any) -> CompanyPreferencePayload | None:
-    if not isinstance(raw, dict):
-        return None
-    criticality = _clean_text(raw.get("criticality"), max_chars=24)
-    item = {
-        "field_id": _clean_text(raw.get("field_id"), max_chars=64),
-        "selected_values": _normalize_string_list(
-            raw.get("selected_values"),
-            max_items=10,
-            max_chars=64,
-        ),
-        "criticality": criticality if criticality in CRITICALITY_VALUES else "normal",
-    }
-    if not item["field_id"]:
-        return None
-    return item
-
-
-def _normalize_company_preferences(raw: Any) -> list[CompanyPreferencePayload]:
-    if not isinstance(raw, list):
-        return []
-    items: list[CompanyPreferencePayload] = []
-    seen: set[str] = set()
-    for value in raw:
-        normalized = _normalize_company_preference(value)
-        if not normalized:
-            continue
-        signature = "|".join(
-            [
-                normalized["field_id"].casefold(),
-                ",".join(item.casefold() for item in normalized["selected_values"]),
-                normalized["criticality"].casefold(),
-            ]
-        )
-        if signature in seen:
-            continue
-        seen.add(signature)
-        items.append(normalized)
-    return items
-
-
 def empty_candidate_preference_profile_contract() -> CandidatePreferenceProfileContract:
     return {
         "contract_version": CONTRACT_VERSION_CANDIDATE_PREFERENCE_PROFILE,
         "person_id": "",
         "generated_at": "",
         "comparable_preferences": _empty_comparable_preferences(),
-        "contrastable_company_preferences": [],
         "warnings": [],
     }
 
@@ -215,9 +167,6 @@ def normalize_candidate_preference_profile_contract(raw: Any) -> CandidatePrefer
     base["generated_at"] = _clean_text(source.get("generated_at"), max_chars=64)
     base["comparable_preferences"] = _normalize_comparable_preferences(
         source.get("comparable_preferences")
-    )
-    base["contrastable_company_preferences"] = _normalize_company_preferences(
-        source.get("contrastable_company_preferences")
     )
     base["warnings"] = _normalize_string_list(
         source.get("warnings"),

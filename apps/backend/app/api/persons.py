@@ -39,6 +39,12 @@ class PersonSummary(BaseModel):
     languages: list[LanguageProficiency]
     tools_technologies: list[str]
     certifications: list[str]
+    accepted_locations: list[str]
+    accepted_modalities: list[str]
+    contract_types_accepted: list[str]
+    relocation_willingness: str = "unknown"
+    travel_willingness: str = "unknown"
+    hard_constraints: list[str]
     salary_expectation_min: int | None = None
     salary_expectation_max: int | None = None
     salary_currency: str = ""
@@ -65,6 +71,12 @@ class CreatePersonRequest(BaseModel):
     languages: list[LanguageProficiency] = Field(default_factory=list)
     tools_technologies: list[str] = Field(default_factory=list)
     certifications: list[str] = Field(default_factory=list)
+    accepted_locations: list[str] = Field(default_factory=list)
+    accepted_modalities: list[str] = Field(default_factory=list)
+    contract_types_accepted: list[str] = Field(default_factory=list)
+    relocation_willingness: str = Field(default="unknown")
+    travel_willingness: str = Field(default="unknown")
+    hard_constraints: list[str] = Field(default_factory=list)
     salary_expectation_min: int | None = Field(default=None, ge=0, le=1_000_000_000)
     salary_expectation_max: int | None = Field(default=None, ge=0, le=1_000_000_000)
     salary_currency: str = Field(default="", max_length=8)
@@ -85,6 +97,12 @@ class UpdatePersonRequest(BaseModel):
     languages: list[LanguageProficiency] | None = None
     tools_technologies: list[str] | None = None
     certifications: list[str] | None = None
+    accepted_locations: list[str] | None = None
+    accepted_modalities: list[str] | None = None
+    contract_types_accepted: list[str] | None = None
+    relocation_willingness: str | None = None
+    travel_willingness: str | None = None
+    hard_constraints: list[str] | None = None
     salary_expectation_min: int | None = Field(default=None, ge=0, le=1_000_000_000)
     salary_expectation_max: int | None = Field(default=None, ge=0, le=1_000_000_000)
     salary_currency: str | None = Field(default=None, max_length=8)
@@ -127,6 +145,12 @@ def create_person(
         languages=[item.model_dump() for item in payload.languages],
         tools_technologies=payload.tools_technologies,
         certifications=payload.certifications,
+        accepted_locations=payload.accepted_locations,
+        accepted_modalities=payload.accepted_modalities,
+        contract_types_accepted=payload.contract_types_accepted,
+        relocation_willingness=payload.relocation_willingness,
+        travel_willingness=payload.travel_willingness,
+        hard_constraints=payload.hard_constraints,
         salary_expectation_min=payload.salary_expectation_min,
         salary_expectation_max=payload.salary_expectation_max,
         salary_currency=payload.salary_currency,
@@ -301,6 +325,12 @@ def update_person(
         ),
         tools_technologies=payload.tools_technologies,
         certifications=payload.certifications,
+        accepted_locations=payload.accepted_locations,
+        accepted_modalities=payload.accepted_modalities,
+        contract_types_accepted=payload.contract_types_accepted,
+        relocation_willingness=payload.relocation_willingness,
+        travel_willingness=payload.travel_willingness,
+        hard_constraints=payload.hard_constraints,
         salary_expectation_min=payload.salary_expectation_min,
         salary_expectation_max=payload.salary_expectation_max,
         salary_currency=payload.salary_currency,

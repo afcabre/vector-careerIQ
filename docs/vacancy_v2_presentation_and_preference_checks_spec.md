@@ -190,26 +190,33 @@ It should consume a reduced profile containing only:
 ### Comparable deterministic signals
 - current location
 - accepted locations
-- remote acceptance
 - accepted modalities
 - salary expectation
-- relocation or travel willingness
+- accepted contract types
+- relocation willingness
+- travel willingness
 - explicit hard constraints
 
 These are the signals that `P0` should reduce and normalize for deterministic preference checks.
-
-### Contrastable company-signal preferences
-These should remain in profile only if they can later be contrasted against external company signals:
-- preferred company types
-- regulated vs non-regulated environment preference, when explicit
-- leadership-style preference only if framed in observable terms
-- collaboration model preference only if framed in observable terms
 
 ### Remove from deterministic preference checks
 - vague motivators
 - broad culture aspirations without observable signals
 - abstract red flags that cannot be matched against vacancy/company evidence reliably
 - narrative-only preferences with no clear comparison rule
+- company/culture traits that depend on external research rather than vacancy-side comparable conditions
+
+### Explicit simplification for `P0`
+`P0` should not include fields like:
+- `company_scale`
+- `organizational_moment`
+- `cultural_formality`
+- `work_intensity`
+- `environment_predictability`
+- `organization_structure_level`
+- `schedule_flexibility`
+
+Those signals belong, if at all, to the `cultural/company fit` module and not to the deterministic vacancy-alignment preference layer.
 
 ## Enriched Base Candidate Profile
 
@@ -248,6 +255,24 @@ Recommended fields to keep or add at the base profile level:
 - `target_roles`, `skills`, `languages`, `tools_technologies` and `certifications` belong to the enriched professional profile;
 - they do not belong to `P0` unless a later helper explicitly needs them;
 - their existence in profile should not force them into deterministic preference checks.
+
+### Candidate preference fields to capture explicitly
+To make `P0` useful, the profile should capture these inputs explicitly:
+- `accepted_locations`
+- `accepted_modalities`
+- `contract_types_accepted`
+- `relocation_willingness`
+- `travel_willingness`
+- `hard_constraints`
+
+Recommended controlled values:
+- `accepted_modalities`: `onsite`, `hybrid`, `remote`
+- `contract_types_accepted`: `indefinite`, `fixed_term`, `service_contract`
+
+Interpretation rule:
+- if none are selected, the preference remains unspecified / unknown;
+- no separate `remote_accepted` field should be captured;
+- remote acceptance is inferred from whether `remote` is included inside `accepted_modalities`.
 
 ## Where Languages Fit
 

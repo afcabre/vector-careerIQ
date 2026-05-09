@@ -15,6 +15,12 @@ export type Person = {
   languages: LanguageProficiency[];
   tools_technologies: string[];
   certifications: string[];
+  accepted_locations: string[];
+  accepted_modalities: string[];
+  contract_types_accepted: string[];
+  relocation_willingness: string;
+  travel_willingness: string;
+  hard_constraints: string[];
   salary_expectation_min: number | null;
   salary_expectation_max: number | null;
   salary_currency: string;
@@ -630,6 +636,12 @@ export async function createPerson(payload: {
   languages?: LanguageProficiency[];
   tools_technologies?: string[];
   certifications?: string[];
+  accepted_locations?: string[];
+  accepted_modalities?: string[];
+  contract_types_accepted?: string[];
+  relocation_willingness?: string;
+  travel_willingness?: string;
+  hard_constraints?: string[];
   salary_expectation_min?: number | null;
   salary_expectation_max?: number | null;
   salary_currency?: string;
@@ -655,6 +667,12 @@ export async function updatePerson(
     languages?: LanguageProficiency[];
     tools_technologies?: string[];
     certifications?: string[];
+    accepted_locations?: string[];
+    accepted_modalities?: string[];
+    contract_types_accepted?: string[];
+    relocation_willingness?: string;
+    travel_willingness?: string;
+    hard_constraints?: string[];
     salary_expectation_min?: number | null;
     salary_expectation_max?: number | null;
     salary_currency?: string;

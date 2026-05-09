@@ -18,24 +18,17 @@ class CandidatePreferenceProfileContractTests(unittest.TestCase):
                     "current_location": " Bogota ",
                     "accepted_locations": [" Bogota ", "Bogota"],
                     "accepted_modalities": ["remote", "remote", "hybrid", "invalid"],
-                    "remote_accepted": True,
+                    "contract_types_accepted": ["indefinite", "indefinite", "fixed_term", "invalid"],
                     "salary_expectation": {
                         "min": "12000000",
                         "max": None,
                         "currency": "cop",
                         "period": "monthly",
                     },
-                    "relocation_willingness": "not_captured",
+                    "relocation_willingness": "yes",
                     "travel_willingness": "unknown",
                     "hard_constraints": ["Remote only", "Remote only"],
                 },
-                "contrastable_company_preferences": [
-                    {
-                        "field_id": "company_scale",
-                        "selected_values": ["multinational", "multinational"],
-                        "criticality": "high_penalty",
-                    }
-                ],
                 "warnings": ["accepted_locations_not_captured", "accepted_locations_not_captured"],
             }
         )
@@ -45,6 +38,14 @@ class CandidatePreferenceProfileContractTests(unittest.TestCase):
         self.assertEqual(
             normalized["comparable_preferences"]["accepted_modalities"],
             ["remote", "hybrid"],
+        )
+        self.assertEqual(
+            normalized["comparable_preferences"]["contract_types_accepted"],
+            ["indefinite", "fixed_term"],
+        )
+        self.assertEqual(
+            normalized["comparable_preferences"]["relocation_willingness"],
+            "yes",
         )
         self.assertEqual(normalized["comparable_preferences"]["salary_expectation"]["currency"], "COP")
         self.assertEqual(normalized["warnings"], ["accepted_locations_not_captured"])

@@ -92,6 +92,12 @@ class RequestValidationContractsTests(unittest.TestCase):
             languages=[{"language": "English", "level": "B2"}],
             tools_technologies=["Azure"],
             certifications=["PMP"],
+            accepted_locations=["Bogota", "Medellin"],
+            accepted_modalities=["remote", "hybrid"],
+            contract_types_accepted=["indefinite"],
+            relocation_willingness="yes",
+            travel_willingness="unknown",
+            hard_constraints=["No night shifts"],
         )
         self.assertEqual(ok.years_experience, 5)
         self.assertEqual(ok.languages[0].language, "English")

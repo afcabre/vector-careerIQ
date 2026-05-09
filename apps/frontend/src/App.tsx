@@ -177,6 +177,21 @@ const SALARY_PERIODS = [
   { value: "monthly", label: "Mensual" },
   { value: "annual", label: "Anual" }
 ] as const;
+const PROFILE_MODALITY_OPTIONS = [
+  { value: "onsite", label: "Presencial" },
+  { value: "hybrid", label: "Híbrido" },
+  { value: "remote", label: "Remoto" }
+] as const;
+const PROFILE_CONTRACT_TYPE_OPTIONS = [
+  { value: "indefinite", label: "Indefinido" },
+  { value: "fixed_term", label: "Término fijo" },
+  { value: "service_contract", label: "Service contract" }
+] as const;
+const PROFILE_WILLINGNESS_OPTIONS = [
+  { value: "unknown", label: "No especificado" },
+  { value: "yes", label: "Sí" },
+  { value: "no", label: "No" }
+] as const;
 
 const AI_RUN_ACTION_LABELS: Record<string, string> = {
   analyze_profile_match: "Analizar perfil-vacante",
@@ -1748,6 +1763,12 @@ export default function App() {
   const [newPersonLanguagesInput, setNewPersonLanguagesInput] = useState("");
   const [newPersonToolsInput, setNewPersonToolsInput] = useState("");
   const [newPersonCertificationsInput, setNewPersonCertificationsInput] = useState("");
+  const [newPersonAcceptedLocationsInput, setNewPersonAcceptedLocationsInput] = useState("");
+  const [newPersonAcceptedModalities, setNewPersonAcceptedModalities] = useState<string[]>([]);
+  const [newPersonContractTypesAccepted, setNewPersonContractTypesAccepted] = useState<string[]>([]);
+  const [newPersonRelocationWillingness, setNewPersonRelocationWillingness] = useState("unknown");
+  const [newPersonTravelWillingness, setNewPersonTravelWillingness] = useState("unknown");
+  const [newPersonHardConstraintsInput, setNewPersonHardConstraintsInput] = useState("");
   const [isCreateProfileFormOpen, setIsCreateProfileFormOpen] = useState(false);
   const [isCreatingPerson, setIsCreatingPerson] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -1926,6 +1947,12 @@ export default function App() {
   const [profileLanguagesInput, setProfileLanguagesInput] = useState("");
   const [profileToolsInput, setProfileToolsInput] = useState("");
   const [profileCertificationsInput, setProfileCertificationsInput] = useState("");
+  const [profileAcceptedLocationsInput, setProfileAcceptedLocationsInput] = useState("");
+  const [profileAcceptedModalities, setProfileAcceptedModalities] = useState<string[]>([]);
+  const [profileContractTypesAccepted, setProfileContractTypesAccepted] = useState<string[]>([]);
+  const [profileRelocationWillingness, setProfileRelocationWillingness] = useState("unknown");
+  const [profileTravelWillingness, setProfileTravelWillingness] = useState("unknown");
+  const [profileHardConstraintsInput, setProfileHardConstraintsInput] = useState("");
   const [profileSalaryMinInput, setProfileSalaryMinInput] = useState("");
   const [profileSalaryMaxInput, setProfileSalaryMaxInput] = useState("");
   const [profileSalaryCurrency, setProfileSalaryCurrency] = useState("");
@@ -2705,6 +2732,12 @@ export default function App() {
       setProfileLanguagesInput("");
       setProfileToolsInput("");
       setProfileCertificationsInput("");
+      setProfileAcceptedLocationsInput("");
+      setProfileAcceptedModalities([]);
+      setProfileContractTypesAccepted([]);
+      setProfileRelocationWillingness("unknown");
+      setProfileTravelWillingness("unknown");
+      setProfileHardConstraintsInput("");
       setProfileSalaryMinInput("");
       setProfileSalaryMaxInput("");
       setProfileSalaryCurrency("");
@@ -2725,6 +2758,12 @@ export default function App() {
     );
     setProfileToolsInput((selectedPerson.tools_technologies ?? []).join(", "));
     setProfileCertificationsInput((selectedPerson.certifications ?? []).join(", "));
+    setProfileAcceptedLocationsInput((selectedPerson.accepted_locations ?? []).join(", "));
+    setProfileAcceptedModalities(selectedPerson.accepted_modalities ?? []);
+    setProfileContractTypesAccepted(selectedPerson.contract_types_accepted ?? []);
+    setProfileRelocationWillingness(selectedPerson.relocation_willingness ?? "unknown");
+    setProfileTravelWillingness(selectedPerson.travel_willingness ?? "unknown");
+    setProfileHardConstraintsInput((selectedPerson.hard_constraints ?? []).join(", "));
     setProfileSalaryMinInput(
       selectedPerson.salary_expectation_min !== null
         ? String(selectedPerson.salary_expectation_min)
@@ -2773,6 +2812,12 @@ export default function App() {
     selectedPerson?.languages,
     selectedPerson?.tools_technologies,
     selectedPerson?.certifications,
+    selectedPerson?.accepted_locations,
+    selectedPerson?.accepted_modalities,
+    selectedPerson?.contract_types_accepted,
+    selectedPerson?.relocation_willingness,
+    selectedPerson?.travel_willingness,
+    selectedPerson?.hard_constraints,
     selectedPerson?.salary_expectation_min,
     selectedPerson?.salary_expectation_max,
     selectedPerson?.salary_currency,
@@ -2891,6 +2936,14 @@ export default function App() {
       .split(/[\n,]/g)
       .map((item) => item.trim())
       .filter(Boolean);
+    const acceptedLocations = newPersonAcceptedLocationsInput
+      .split(/[\n,]/g)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const hardConstraints = newPersonHardConstraintsInput
+      .split(/[\n,]/g)
+      .map((item) => item.trim())
+      .filter(Boolean);
 
     if (!fullName || !location || targetRoles.length === 0 || skills.length === 0) {
       setErrorMessage(
@@ -2914,7 +2967,13 @@ export default function App() {
         skills,
         languages,
         tools_technologies: toolsTechnologies,
-        certifications
+        certifications,
+        accepted_locations: acceptedLocations,
+        accepted_modalities: newPersonAcceptedModalities,
+        contract_types_accepted: newPersonContractTypesAccepted,
+        relocation_willingness: newPersonRelocationWillingness,
+        travel_willingness: newPersonTravelWillingness,
+        hard_constraints: hardConstraints
       });
       const items = await listPersons();
       setPeople(items);
@@ -2928,6 +2987,12 @@ export default function App() {
       setNewPersonLanguagesInput("");
       setNewPersonToolsInput("");
       setNewPersonCertificationsInput("");
+      setNewPersonAcceptedLocationsInput("");
+      setNewPersonAcceptedModalities([]);
+      setNewPersonContractTypesAccepted([]);
+      setNewPersonRelocationWillingness("unknown");
+      setNewPersonTravelWillingness("unknown");
+      setNewPersonHardConstraintsInput("");
       setIsCreateProfileFormOpen(false);
     } catch (error) {
       const message =
@@ -5023,6 +5088,14 @@ export default function App() {
       .split(/[\n,]/g)
       .map((item) => item.trim())
       .filter(Boolean);
+    const acceptedLocations = profileAcceptedLocationsInput
+      .split(/[\n,]/g)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    const hardConstraints = profileHardConstraintsInput
+      .split(/[\n,]/g)
+      .map((item) => item.trim())
+      .filter(Boolean);
 
     if (!fullName || !location || targetRoles.length === 0 || skills.length === 0) {
       setErrorMessage("Perfil incompleto: nombre, ubicacion, roles y skills son obligatorios.");
@@ -5067,6 +5140,12 @@ export default function App() {
         languages,
         tools_technologies: toolsTechnologies,
         certifications,
+        accepted_locations: acceptedLocations,
+        accepted_modalities: profileAcceptedModalities,
+        contract_types_accepted: profileContractTypesAccepted,
+        relocation_willingness: profileRelocationWillingness,
+        travel_willingness: profileTravelWillingness,
+        hard_constraints: hardConstraints,
         salary_expectation_min: salaryMin,
         salary_expectation_max: salaryMax,
         salary_currency: salaryCurrency,
@@ -5081,6 +5160,16 @@ export default function App() {
     } finally {
       setIsSavingProfile(false);
     }
+  }
+
+  function toggleSelectionValue(
+    current: string[],
+    value: string,
+    checked: boolean
+  ): string[] {
+    return checked
+      ? Array.from(new Set([...current, value]))
+      : current.filter((item) => item !== value);
   }
 
   function getCandidatePreferenceProfileStageLabel(stage: string): string {
@@ -5683,6 +5772,96 @@ export default function App() {
                   onChange={(event) => setNewPersonCertificationsInput(event.target.value)}
                   rows={2}
                   value={newPersonCertificationsInput}
+                />
+              </label>
+              <label className="field">
+                Ubicaciones aceptadas (coma o salto de linea)
+                <textarea
+                  disabled={isCreatingPerson}
+                  onChange={(event) => setNewPersonAcceptedLocationsInput(event.target.value)}
+                  rows={2}
+                  value={newPersonAcceptedLocationsInput}
+                />
+              </label>
+              <div className="manualRow">
+                <label className="field">
+                  Modalidades aceptadas
+                  <div className="optionList optionListCompact">
+                    {PROFILE_MODALITY_OPTIONS.map((option) => (
+                      <label className="checkboxRow checkboxRowCompact" key={`new-${option.value}`}>
+                        <input
+                          checked={newPersonAcceptedModalities.includes(option.value)}
+                          disabled={isCreatingPerson}
+                          onChange={(event) =>
+                            setNewPersonAcceptedModalities((current) =>
+                              toggleSelectionValue(current, option.value, event.target.checked)
+                            )
+                          }
+                          type="checkbox"
+                        />
+                        <span>{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </label>
+                <label className="field">
+                  Tipos de contrato aceptados
+                  <div className="optionList optionListCompact">
+                    {PROFILE_CONTRACT_TYPE_OPTIONS.map((option) => (
+                      <label className="checkboxRow checkboxRowCompact" key={`new-contract-${option.value}`}>
+                        <input
+                          checked={newPersonContractTypesAccepted.includes(option.value)}
+                          disabled={isCreatingPerson}
+                          onChange={(event) =>
+                            setNewPersonContractTypesAccepted((current) =>
+                              toggleSelectionValue(current, option.value, event.target.checked)
+                            )
+                          }
+                          type="checkbox"
+                        />
+                        <span>{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </label>
+              </div>
+              <div className="manualRow">
+                <label className="field">
+                  Disponibilidad para relocalización
+                  <select
+                    disabled={isCreatingPerson}
+                    onChange={(event) => setNewPersonRelocationWillingness(event.target.value)}
+                    value={newPersonRelocationWillingness}
+                  >
+                    {PROFILE_WILLINGNESS_OPTIONS.map((option) => (
+                      <option key={`new-relocation-${option.value}`} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  Disponibilidad para viaje
+                  <select
+                    disabled={isCreatingPerson}
+                    onChange={(event) => setNewPersonTravelWillingness(event.target.value)}
+                    value={newPersonTravelWillingness}
+                  >
+                    {PROFILE_WILLINGNESS_OPTIONS.map((option) => (
+                      <option key={`new-travel-${option.value}`} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <label className="field">
+                Restricciones duras (coma o salto de linea)
+                <textarea
+                  disabled={isCreatingPerson}
+                  onChange={(event) => setNewPersonHardConstraintsInput(event.target.value)}
+                  rows={2}
+                  value={newPersonHardConstraintsInput}
                 />
               </label>
               <div className="cardActions">
@@ -6378,6 +6557,96 @@ export default function App() {
                     onChange={(event) => setProfileCertificationsInput(event.target.value)}
                     rows={2}
                     value={profileCertificationsInput}
+                  />
+                </label>
+                <label className="field">
+                  Ubicaciones aceptadas (coma o salto de linea)
+                  <textarea
+                    disabled={isSavingProfile}
+                    onChange={(event) => setProfileAcceptedLocationsInput(event.target.value)}
+                    rows={2}
+                    value={profileAcceptedLocationsInput}
+                  />
+                </label>
+                <div className="manualRow">
+                  <label className="field">
+                    Modalidades aceptadas
+                    <div className="optionList optionListCompact">
+                      {PROFILE_MODALITY_OPTIONS.map((option) => (
+                        <label className="checkboxRow checkboxRowCompact" key={`profile-${option.value}`}>
+                          <input
+                            checked={profileAcceptedModalities.includes(option.value)}
+                            disabled={isSavingProfile}
+                            onChange={(event) =>
+                              setProfileAcceptedModalities((current) =>
+                                toggleSelectionValue(current, option.value, event.target.checked)
+                              )
+                            }
+                            type="checkbox"
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </label>
+                  <label className="field">
+                    Tipos de contrato aceptados
+                    <div className="optionList optionListCompact">
+                      {PROFILE_CONTRACT_TYPE_OPTIONS.map((option) => (
+                        <label className="checkboxRow checkboxRowCompact" key={`profile-contract-${option.value}`}>
+                          <input
+                            checked={profileContractTypesAccepted.includes(option.value)}
+                            disabled={isSavingProfile}
+                            onChange={(event) =>
+                              setProfileContractTypesAccepted((current) =>
+                                toggleSelectionValue(current, option.value, event.target.checked)
+                              )
+                            }
+                            type="checkbox"
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </label>
+                </div>
+                <div className="manualRow">
+                  <label className="field">
+                    Disponibilidad para relocalización
+                    <select
+                      disabled={isSavingProfile}
+                      onChange={(event) => setProfileRelocationWillingness(event.target.value)}
+                      value={profileRelocationWillingness}
+                    >
+                      {PROFILE_WILLINGNESS_OPTIONS.map((option) => (
+                        <option key={`profile-relocation-${option.value}`} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    Disponibilidad para viaje
+                    <select
+                      disabled={isSavingProfile}
+                      onChange={(event) => setProfileTravelWillingness(event.target.value)}
+                      value={profileTravelWillingness}
+                    >
+                      {PROFILE_WILLINGNESS_OPTIONS.map((option) => (
+                        <option key={`profile-travel-${option.value}`} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <label className="field">
+                  Restricciones duras (coma o salto de linea)
+                  <textarea
+                    disabled={isSavingProfile}
+                    onChange={(event) => setProfileHardConstraintsInput(event.target.value)}
+                    rows={2}
+                    value={profileHardConstraintsInput}
                   />
                 </label>
                 <div className="cardActions">

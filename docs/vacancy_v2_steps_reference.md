@@ -235,10 +235,11 @@ Programatico
 ### Senales comparables objetivo
 - ubicacion actual
 - ubicaciones aceptadas
-- aceptacion remota
 - modalidades aceptadas
 - expectativa salarial
-- disponibilidad para viaje o relocalizacion
+- tipos de contrato aceptados
+- disponibilidad para relocalizacion
+- disponibilidad para viaje
 - restricciones duras explicitas
 
 ### Aclaracion importante
@@ -251,13 +252,22 @@ Esas senales pertenecen al fit profesional principal. En especial:
 - `idiomas + nivel` deben agregarse al perfil estructurado del candidato como captura explicita;
 - luego deben alimentar el flujo principal de alineacion profesional, no los preference checks deterministas.
 
-### Senales contrastables, pero no necesariamente deterministicas
-- tipos de empresa preferidos
-- preferencias de entorno que luego puedan contrastarse con senales web de empresa
-
 ### Transformaciones prohibidas
 - no inventar preferencias
 - no mantener preferencias narrativas sin regla de comparacion o contraste
+- no incluir en `P0` senales de company/culture fit que dependen de investigacion externa
+
+### Regla de simplificacion
+`P0` no debe incluir:
+- `company_scale`
+- `organizational_moment`
+- `cultural_formality`
+- `work_intensity`
+- `environment_predictability`
+- `organization_structure_level`
+- `schedule_flexibility`
+
+Esas senales quedan fuera del artefacto comparable y, si se usan, pertenecen al modulo `cultural/company fit`.
 
 ### Prompt key
 - `ninguna`

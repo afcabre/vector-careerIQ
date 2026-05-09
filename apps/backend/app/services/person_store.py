@@ -10,6 +10,9 @@ from app.services.firestore_client import get_firestore_client
 CRITICALITY_VALUES = {"normal", "high_penalty", "non_negotiable"}
 SALARY_PERIOD_VALUES = {"monthly", "annual"}
 SALARY_CURRENCY_VALUES = {"COP", "USD", "EUR"}
+PROFILE_MODALITY_VALUES = {"onsite", "hybrid", "remote"}
+PROFILE_CONTRACT_TYPE_VALUES = {"indefinite", "fixed_term", "service_contract"}
+PROFILE_WILLINGNESS_VALUES = {"unknown", "yes", "no"}
 CULTURAL_FIELD_OPTIONS: dict[str, set[str]] = {
     "work_modality": {"onsite", "hybrid", "remote"},
     "schedule_flexibility": {
@@ -70,6 +73,12 @@ class PersonRecord(TypedDict):
     languages: list[LanguageProficiencyRecord]
     tools_technologies: list[str]
     certifications: list[str]
+    accepted_locations: list[str]
+    accepted_modalities: list[str]
+    contract_types_accepted: list[str]
+    relocation_willingness: str
+    travel_willingness: str
+    hard_constraints: list[str]
     salary_expectation_min: int | None
     salary_expectation_max: int | None
     salary_currency: str
@@ -109,6 +118,12 @@ def _seed_records() -> list[PersonRecord]:
             "languages": [],
             "tools_technologies": [],
             "certifications": [],
+            "accepted_locations": [],
+            "accepted_modalities": [],
+            "contract_types_accepted": [],
+            "relocation_willingness": "unknown",
+            "travel_willingness": "unknown",
+            "hard_constraints": [],
             "salary_expectation_min": None,
             "salary_expectation_max": None,
             "salary_currency": "",
@@ -132,6 +147,12 @@ def _seed_records() -> list[PersonRecord]:
             "languages": [],
             "tools_technologies": [],
             "certifications": [],
+            "accepted_locations": [],
+            "accepted_modalities": [],
+            "contract_types_accepted": [],
+            "relocation_willingness": "unknown",
+            "travel_willingness": "unknown",
+            "hard_constraints": [],
             "salary_expectation_min": None,
             "salary_expectation_max": None,
             "salary_currency": "",
@@ -189,6 +210,30 @@ def _sanitize_languages(raw_value: Any) -> list[LanguageProficiencyRecord]:
         seen.add(signature)
         normalized.append({"language": language, "level": level})
     return normalized
+
+
+def _sanitize_allowed_values(
+    raw_value: Any,
+    *,
+    allowed: set[str],
+    max_items: int = 20,
+) -> list[str]:
+    if not isinstance(raw_value, list):
+        return []
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in raw_value[:max_items]:
+        value = str(item).strip()
+        if not value or value not in allowed or value in seen:
+            continue
+        seen.add(value)
+        normalized.append(value)
+    return normalized
+
+
+def _sanitize_willingness(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    return text if text in PROFILE_WILLINGNESS_VALUES else "unknown"
 
 
 def _sanitize_cultural_field(
@@ -292,6 +337,26 @@ def _normalize_firestore_record(person_id: str, payload: dict | None) -> PersonR
         languages=_sanitize_languages(source.get("languages", [])),
         tools_technologies=[str(item) for item in source.get("tools_technologies", [])],
         certifications=[str(item) for item in source.get("certifications", [])],
+        accepted_locations=[
+            str(item).strip()
+            for item in source.get("accepted_locations", [])
+            if str(item).strip()
+        ],
+        accepted_modalities=_sanitize_allowed_values(
+            source.get("accepted_modalities", []),
+            allowed=PROFILE_MODALITY_VALUES,
+            max_items=8,
+        ),
+        contract_types_accepted=_sanitize_allowed_values(
+            source.get("contract_types_accepted", []),
+            allowed=PROFILE_CONTRACT_TYPE_VALUES,
+            max_items=8,
+        ),
+        relocation_willingness=_sanitize_willingness(source.get("relocation_willingness")),
+        travel_willingness=_sanitize_willingness(source.get("travel_willingness")),
+        hard_constraints=[
+            str(item).strip() for item in source.get("hard_constraints", []) if str(item).strip()
+        ],
         salary_expectation_min=_coerce_optional_int(source.get("salary_expectation_min")),
         salary_expectation_max=_coerce_optional_int(source.get("salary_expectation_max")),
         salary_currency=_sanitize_salary_currency(source.get("salary_currency")),
@@ -361,6 +426,12 @@ def create_person(
     languages: list[dict[str, Any]] | None = None,
     tools_technologies: list[str] | None = None,
     certifications: list[str] | None = None,
+    accepted_locations: list[str] | None = None,
+    accepted_modalities: list[str] | None = None,
+    contract_types_accepted: list[str] | None = None,
+    relocation_willingness: str | None = None,
+    travel_willingness: str | None = None,
+    hard_constraints: list[str] | None = None,
     salary_expectation_min: int | None = None,
     salary_expectation_max: int | None = None,
     salary_currency: str | None = None,
@@ -381,6 +452,20 @@ def create_person(
         "languages": _sanitize_languages(languages or []),
         "tools_technologies": _dedupe_non_empty(tools_technologies or []),
         "certifications": _dedupe_non_empty(certifications or []),
+        "accepted_locations": _dedupe_non_empty(accepted_locations or []),
+        "accepted_modalities": _sanitize_allowed_values(
+            accepted_modalities or [],
+            allowed=PROFILE_MODALITY_VALUES,
+            max_items=8,
+        ),
+        "contract_types_accepted": _sanitize_allowed_values(
+            contract_types_accepted or [],
+            allowed=PROFILE_CONTRACT_TYPE_VALUES,
+            max_items=8,
+        ),
+        "relocation_willingness": _sanitize_willingness(relocation_willingness),
+        "travel_willingness": _sanitize_willingness(travel_willingness),
+        "hard_constraints": _dedupe_non_empty(hard_constraints or []),
         "salary_expectation_min": _coerce_optional_int(salary_expectation_min),
         "salary_expectation_max": _coerce_optional_int(salary_expectation_max),
         "salary_currency": _sanitize_salary_currency(salary_currency),
@@ -416,6 +501,12 @@ def update_person(
     languages: list[dict[str, Any]] | None,
     tools_technologies: list[str] | None,
     certifications: list[str] | None,
+    accepted_locations: list[str] | None,
+    accepted_modalities: list[str] | None,
+    contract_types_accepted: list[str] | None,
+    relocation_willingness: str | None,
+    travel_willingness: str | None,
+    hard_constraints: list[str] | None,
     salary_expectation_min: int | None,
     salary_expectation_max: int | None,
     salary_currency: str | None,
@@ -445,6 +536,26 @@ def update_person(
             existing["tools_technologies"] = _dedupe_non_empty(tools_technologies)
         if certifications is not None:
             existing["certifications"] = _dedupe_non_empty(certifications)
+        if accepted_locations is not None:
+            existing["accepted_locations"] = _dedupe_non_empty(accepted_locations)
+        if accepted_modalities is not None:
+            existing["accepted_modalities"] = _sanitize_allowed_values(
+                accepted_modalities,
+                allowed=PROFILE_MODALITY_VALUES,
+                max_items=8,
+            )
+        if contract_types_accepted is not None:
+            existing["contract_types_accepted"] = _sanitize_allowed_values(
+                contract_types_accepted,
+                allowed=PROFILE_CONTRACT_TYPE_VALUES,
+                max_items=8,
+            )
+        if relocation_willingness is not None:
+            existing["relocation_willingness"] = _sanitize_willingness(relocation_willingness)
+        if travel_willingness is not None:
+            existing["travel_willingness"] = _sanitize_willingness(travel_willingness)
+        if hard_constraints is not None:
+            existing["hard_constraints"] = _dedupe_non_empty(hard_constraints)
         if salary_expectation_min is not None:
             existing["salary_expectation_min"] = _coerce_optional_int(salary_expectation_min)
         if salary_expectation_max is not None:
@@ -491,6 +602,26 @@ def update_person(
             existing["tools_technologies"] = _dedupe_non_empty(tools_technologies)
         if certifications is not None:
             existing["certifications"] = _dedupe_non_empty(certifications)
+        if accepted_locations is not None:
+            existing["accepted_locations"] = _dedupe_non_empty(accepted_locations)
+        if accepted_modalities is not None:
+            existing["accepted_modalities"] = _sanitize_allowed_values(
+                accepted_modalities,
+                allowed=PROFILE_MODALITY_VALUES,
+                max_items=8,
+            )
+        if contract_types_accepted is not None:
+            existing["contract_types_accepted"] = _sanitize_allowed_values(
+                contract_types_accepted,
+                allowed=PROFILE_CONTRACT_TYPE_VALUES,
+                max_items=8,
+            )
+        if relocation_willingness is not None:
+            existing["relocation_willingness"] = _sanitize_willingness(relocation_willingness)
+        if travel_willingness is not None:
+            existing["travel_willingness"] = _sanitize_willingness(travel_willingness)
+        if hard_constraints is not None:
+            existing["hard_constraints"] = _dedupe_non_empty(hard_constraints)
         if salary_expectation_min is not None:
             existing["salary_expectation_min"] = _coerce_optional_int(salary_expectation_min)
         if salary_expectation_max is not None:

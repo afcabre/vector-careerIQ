@@ -4,7 +4,7 @@ from app.services.candidate_preference_profile_service import build_candidate_pr
 
 
 class CandidatePreferenceProfileServiceTests(unittest.TestCase):
-    def test_build_profile_derives_comparable_and_contrastable_signals(self) -> None:
+    def test_build_profile_derives_explicit_comparable_signals(self) -> None:
         artifact = build_candidate_preference_profile(
             {
                 "person_id": "p-001",
@@ -16,28 +16,18 @@ class CandidatePreferenceProfileServiceTests(unittest.TestCase):
                 "languages": [{"language": "English", "level": "B2"}],
                 "tools_technologies": ["Azure"],
                 "certifications": ["PMP"],
+                "accepted_locations": ["Bogota", "Medellin"],
+                "accepted_modalities": ["remote", "hybrid"],
+                "contract_types_accepted": ["indefinite", "fixed_term"],
+                "relocation_willingness": "yes",
+                "travel_willingness": "no",
+                "hard_constraints": ["No night shifts"],
                 "salary_expectation_min": 12000000,
                 "salary_expectation_max": 16000000,
                 "salary_currency": "COP",
                 "salary_period": "monthly",
                 "culture_preferences": [],
-                "cultural_fit_preferences": {
-                    "work_modality": {
-                        "enabled": True,
-                        "selected_values": ["remote", "hybrid"],
-                        "criticality": "high_penalty",
-                    },
-                    "company_scale": {
-                        "enabled": True,
-                        "selected_values": ["multinational"],
-                        "criticality": "normal",
-                    },
-                    "organizational_moment": {
-                        "enabled": False,
-                        "selected_values": ["transformation"],
-                        "criticality": "normal",
-                    },
-                },
+                "cultural_fit_preferences": {},
                 "culture_preferences_notes": "",
                 "candidate_preference_profile_artifact": {},
                 "candidate_preference_profile_status": "none",
@@ -49,21 +39,16 @@ class CandidatePreferenceProfileServiceTests(unittest.TestCase):
 
         comparable = artifact["comparable_preferences"]
         self.assertEqual(comparable["current_location"], "Bogota, Colombia")
-        self.assertEqual(comparable["accepted_locations"], [])
+        self.assertEqual(comparable["accepted_locations"], ["Bogota", "Medellin"])
         self.assertEqual(comparable["accepted_modalities"], ["remote", "hybrid"])
-        self.assertTrue(comparable["remote_accepted"])
+        self.assertEqual(comparable["contract_types_accepted"], ["indefinite", "fixed_term"])
+        self.assertEqual(comparable["relocation_willingness"], "yes")
+        self.assertEqual(comparable["travel_willingness"], "no")
+        self.assertEqual(comparable["hard_constraints"], ["No night shifts"])
         self.assertEqual(comparable["salary_expectation"]["min"], 12000000)
-        self.assertEqual(
-            artifact["contrastable_company_preferences"],
-            [
-                {
-                    "field_id": "company_scale",
-                    "selected_values": ["multinational"],
-                    "criticality": "normal",
-                }
-            ],
-        )
         self.assertNotIn("languages_not_captured_in_structured_profile", artifact["warnings"])
+        self.assertNotIn("accepted_locations_not_captured", artifact["warnings"])
+        self.assertNotIn("contract_types_accepted_not_captured", artifact["warnings"])
 
     def test_build_profile_keeps_unknown_when_signals_are_missing(self) -> None:
         artifact = build_candidate_preference_profile(
@@ -77,6 +62,12 @@ class CandidatePreferenceProfileServiceTests(unittest.TestCase):
                 "languages": [],
                 "tools_technologies": [],
                 "certifications": [],
+                "accepted_locations": [],
+                "accepted_modalities": [],
+                "contract_types_accepted": [],
+                "relocation_willingness": "unknown",
+                "travel_willingness": "unknown",
+                "hard_constraints": [],
                 "salary_expectation_min": None,
                 "salary_expectation_max": None,
                 "salary_currency": "",
@@ -93,9 +84,12 @@ class CandidatePreferenceProfileServiceTests(unittest.TestCase):
         )
 
         comparable = artifact["comparable_preferences"]
-        self.assertIsNone(comparable["remote_accepted"])
         self.assertEqual(comparable["accepted_modalities"], [])
+        self.assertEqual(comparable["contract_types_accepted"], [])
         self.assertIn("current_location_missing", artifact["warnings"])
+        self.assertIn("accepted_locations_not_captured", artifact["warnings"])
+        self.assertIn("accepted_modalities_not_captured", artifact["warnings"])
+        self.assertIn("contract_types_accepted_not_captured", artifact["warnings"])
         self.assertIn("salary_expectation_not_captured", artifact["warnings"])
         self.assertIn("languages_not_captured_in_structured_profile", artifact["warnings"])
 
