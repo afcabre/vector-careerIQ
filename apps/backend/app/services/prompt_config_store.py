@@ -25,6 +25,7 @@ FLOW_TASK_VACANCY_SALARY_NORMALIZE = "task_vacancy_salary_normalize"
 FLOW_TASK_VACANCY_RETRIEVAL_QUERIES_EXTRACT = "task_vacancy_retrieval_queries_extract"
 FLOW_TASK_VACANCY_EVIDENCE_ADJUDICATION = "task_vacancy_evidence_adjudication"
 FLOW_TASK_VACANCY_ALIGNMENT_REPORT = "task_vacancy_alignment_report"
+FLOW_TASK_VACANCY_ALIGNMENT_REPORT_V2 = "task_vacancy_alignment_report_v2"
 FLOW_TASK_PREPARE_GUIDANCE = "task_prepare_guidance"
 FLOW_TASK_PREPARE_COVER_LETTER = "task_prepare_cover_letter"
 FLOW_TASK_PREPARE_EXPERIENCE_SUMMARY = "task_prepare_experience_summary"
@@ -136,6 +137,14 @@ def _required_placeholders(flow_key: str) -> set[str]:
         return {
             "person_context",
             "opportunity_context",
+            "alignment_summary_json",
+            "evidence_analysis_json",
+        }
+    if flow_key == FLOW_TASK_VACANCY_ALIGNMENT_REPORT_V2:
+        return {
+            "person_context",
+            "opportunity_context",
+            "evidence_adjudication_json",
             "alignment_summary_json",
             "evidence_analysis_json",
         }
@@ -587,6 +596,37 @@ def _default_configs() -> dict[str, PromptConfigRecord]:
                 "Vacante: {opportunity_context}. "
                 "Entrada vacancy_alignment_summary.v1: {alignment_summary_json}. "
                 "Entrada vacancy_evidence_analysis.v1: {evidence_analysis_json}"
+            ),
+            "target_sources": [],
+            "is_active": True,
+            "updated_by": "system",
+            "created_at": now,
+            "updated_at": now,
+        },
+        {
+            "config_id": f"pc-{FLOW_TASK_VACANCY_ALIGNMENT_REPORT_V2}",
+            "scope": "global",
+            "flow_key": FLOW_TASK_VACANCY_ALIGNMENT_REPORT_V2,
+            "template_text": (
+                "Actua como analista senior de alineacion candidato-vacante, orientado a ayudar al candidato y/o a su tutor a decidir si conviene priorizar esta vacante. "
+                "Responde SOLO JSON valido conforme a vacancy_alignment_report.v2. "
+                "No escribas texto fuera del JSON. Debes producir exactamente dos claves raiz: report, rendered_markdown. "
+                "Perspectiva: el analisis se escribe para el candidato, no para la empresa. Debe decidir si conviene avanzar, que tan defendible es la postulacion y que debe ajustar o validar. "
+                "Usa `vacancy_evidence_adjudication.v1` como insumo principal para determinar cumplimiento, parcialidad, evidencia indirecta, ausencia de evidencia o conflicto. "
+                "Usa `vacancy_alignment_summary.v2` como resumen cuantitativo auxiliar. Usa `vacancy_evidence_analysis.v1` solo como respaldo, no como conclusion. "
+                "No inventes sectores, anos, certificaciones, herramientas, preferencias, salario, modalidad ni condiciones. "
+                "No conviertas ausencia de evidencia en incumplimiento. No conviertas similitud semantica en cumplimiento. No recalcules scores. "
+                "La matriz `vacancy_fit_matrix` debe incluir todos los criterios evaluados en `vacancy_evidence_adjudication.v1`, salvo `not_applicable` justificado. "
+                "Mapeo obligatorio: direct -> 🟢 Cumple; partial o indirect -> 🟡 Parcial; not_evidenced obligatorio -> ⚪ Sin informacion; not_evidenced deseable -> 🔵 Deseable no evidenciado; conflict -> 🔴 En conflicto. "
+                "Usa solo estas recomendaciones finales: Avanzar, Avanzar con reservas, Avanzar si se valida X, No priorizar, Descartar. "
+                "Dentro de report usa exactamente: executive_summary, decision_table, vacancy_fit_matrix, candidate_preference_matrix, fit_answer, strengths, gaps, preference_conflicts, improvement_actions, alerts_and_conflicts, actionable_conclusion. "
+                "rendered_markdown debe reflejar el mismo contenido del JSON y usar este orden: "
+                "## Resumen ejecutivo, ## Matriz de alineacion, ### Ajuste frente a la vacante, ### Ajuste frente a preferencias y condiciones del candidato, ## 1. ¿Encaja con la vacante?, ## 2. ¿Que tiene a favor?, ## 3. ¿Que le falta o no esta demostrado?, ## 4. ¿Que choca con sus preferencias o condiciones?, ## 5. ¿Que deberia ajustar o mejorar para aumentar su fit?, ## Alertas y conflictos, ## Conclusion accionable. "
+                "Persona: {person_context}. "
+                "Vacante: {opportunity_context}. "
+                "Entrada vacancy_evidence_adjudication.v1: {evidence_adjudication_json}. "
+                "Entrada vacancy_alignment_summary.v2: {alignment_summary_json}. "
+                "Entrada vacancy_evidence_analysis.v1: {evidence_analysis_json}."
             ),
             "target_sources": [],
             "is_active": True,

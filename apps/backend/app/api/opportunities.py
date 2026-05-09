@@ -102,6 +102,10 @@ from app.services.vacancy_alignment_report_service import (
     VacancyAlignmentReportBuildError,
     extract_vacancy_alignment_report,
 )
+from app.services.vacancy_alignment_report_v2_service import (
+    VacancyAlignmentReportV2BuildError,
+    extract_vacancy_alignment_report_v2,
+)
 
 
 router = APIRouter()
@@ -151,6 +155,9 @@ class OpportunityResponse(BaseModel):
     vacancy_alignment_summary_v2_artifact: dict[str, Any]
     vacancy_alignment_summary_v2_status: str
     vacancy_alignment_summary_v2_generated_at: str
+    vacancy_alignment_report_v2_artifact: dict[str, Any]
+    vacancy_alignment_report_v2_status: str
+    vacancy_alignment_report_v2_generated_at: str
     vacancy_alignment_summary_artifact: dict[str, Any]
     vacancy_alignment_summary_status: str
     vacancy_alignment_summary_generated_at: str
@@ -259,6 +266,8 @@ class UpdateOpportunityRequest(BaseModel):
     vacancy_evidence_adjudication_status: str | None = Field(default=None)
     vacancy_alignment_summary_v2_artifact: dict[str, Any] | None = Field(default=None)
     vacancy_alignment_summary_v2_status: str | None = Field(default=None)
+    vacancy_alignment_report_v2_artifact: dict[str, Any] | None = Field(default=None)
+    vacancy_alignment_report_v2_status: str | None = Field(default=None)
     vacancy_alignment_summary_artifact: dict[str, Any] | None = Field(default=None)
     vacancy_alignment_summary_status: str | None = Field(default=None)
     vacancy_alignment_report_artifact: dict[str, Any] | None = Field(default=None)
@@ -682,6 +691,14 @@ def update_opportunity(
             detail="Invalid vacancy_alignment_summary_v2_status",
         )
     if (
+        payload.vacancy_alignment_report_v2_status is not None
+        and payload.vacancy_alignment_report_v2_status not in VACANCY_V2_ARTIFACT_STATUSES
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid vacancy_alignment_report_v2_status",
+        )
+    if (
         payload.vacancy_alignment_summary_status is not None
         and payload.vacancy_alignment_summary_status not in VACANCY_V2_ARTIFACT_STATUSES
     ):
@@ -723,6 +740,8 @@ def update_opportunity(
         vacancy_evidence_adjudication_status=payload.vacancy_evidence_adjudication_status,
         vacancy_alignment_summary_v2_artifact=payload.vacancy_alignment_summary_v2_artifact,
         vacancy_alignment_summary_v2_status=payload.vacancy_alignment_summary_v2_status,
+        vacancy_alignment_report_v2_artifact=payload.vacancy_alignment_report_v2_artifact,
+        vacancy_alignment_report_v2_status=payload.vacancy_alignment_report_v2_status,
         vacancy_alignment_summary_artifact=payload.vacancy_alignment_summary_artifact,
         vacancy_alignment_summary_status=payload.vacancy_alignment_summary_status,
         vacancy_alignment_report_artifact=payload.vacancy_alignment_report_artifact,
@@ -2133,6 +2152,179 @@ async def recompute_vacancy_alignment_summary_v2_stream(
                 status=None,
                 notes=None,
                 vacancy_alignment_summary_v2_status="error",
+            )
+            yield _serialize_sse(
+                "error",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "detail": str(exc),
+                },
+            )
+        except Exception as exc:  # pragma: no cover - stream runtime path
+            yield _serialize_sse(
+                "error",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "detail": str(exc),
+                },
+            )
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.post("/{opportunity_id}/vacancy-alignment-report-v2/recompute")
+def recompute_vacancy_alignment_report_v2(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+    settings: Settings = Depends(get_settings),
+) -> OpportunityResponse:
+    person = _require_person(person_id)
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    try:
+        artifact = extract_vacancy_alignment_report_v2(
+            person=person,
+            opportunity=opportunity,
+            vacancy_evidence_adjudication_artifact=opportunity.get(
+                "vacancy_evidence_adjudication_artifact",
+                {},
+            ),
+            vacancy_alignment_summary_v2_artifact=opportunity.get(
+                "vacancy_alignment_summary_v2_artifact",
+                {},
+            ),
+            vacancy_evidence_analysis_artifact=opportunity.get(
+                "vacancy_evidence_analysis_artifact",
+                {},
+            ),
+            settings=settings,
+        )
+    except VacancyAlignmentReportV2BuildError as exc:
+        update_saved_opportunity(
+            person_id=person_id,
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_alignment_report_v2_status="error",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    updated = update_saved_opportunity(
+        person_id=person_id,
+        opportunity_id=opportunity_id,
+        status=None,
+        notes=None,
+        vacancy_alignment_report_v2_artifact=artifact,
+        vacancy_alignment_report_v2_status="draft",
+    )
+    if not updated:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Could not recompute vacancy alignment report v2",
+        )
+    return _to_response(updated)
+
+
+@router.post("/{opportunity_id}/vacancy-alignment-report-v2/recompute/stream")
+async def recompute_vacancy_alignment_report_v2_stream(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+    settings: Settings = Depends(get_settings),
+) -> StreamingResponse:
+    person = _require_person(person_id)
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+
+    async def event_generator():
+        try:
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "vacancy_alignment_report_v2_recompute_started",
+                },
+            )
+            await asyncio.sleep(0)
+
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "vacancy_alignment_report_v2_extracting",
+                },
+            )
+            await asyncio.sleep(0)
+
+            artifact = extract_vacancy_alignment_report_v2(
+                person=person,
+                opportunity=opportunity,
+                vacancy_evidence_adjudication_artifact=opportunity.get(
+                    "vacancy_evidence_adjudication_artifact",
+                    {},
+                ),
+                vacancy_alignment_summary_v2_artifact=opportunity.get(
+                    "vacancy_alignment_summary_v2_artifact",
+                    {},
+                ),
+                vacancy_evidence_analysis_artifact=opportunity.get(
+                    "vacancy_evidence_analysis_artifact",
+                    {},
+                ),
+                settings=settings,
+            )
+
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "vacancy_alignment_report_v2_saving",
+                },
+            )
+            await asyncio.sleep(0)
+
+            updated = update_saved_opportunity(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                status=None,
+                notes=None,
+                vacancy_alignment_report_v2_artifact=artifact,
+                vacancy_alignment_report_v2_status="draft",
+            )
+            if not updated:
+                raise RuntimeError("Could not recompute vacancy alignment report v2")
+
+            yield _serialize_sse(
+                "message_complete",
+                {
+                    "opportunity": updated,
+                },
+            )
+        except VacancyAlignmentReportV2BuildError as exc:
+            update_saved_opportunity(
+                person_id=person_id,
+                opportunity_id=opportunity_id,
+                status=None,
+                notes=None,
+                vacancy_alignment_report_v2_status="error",
             )
             yield _serialize_sse(
                 "error",

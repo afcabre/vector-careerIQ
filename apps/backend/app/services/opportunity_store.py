@@ -74,6 +74,9 @@ class OpportunityRecord(TypedDict):
     vacancy_alignment_summary_v2_artifact: dict[str, Any]
     vacancy_alignment_summary_v2_status: str
     vacancy_alignment_summary_v2_generated_at: str
+    vacancy_alignment_report_v2_artifact: dict[str, Any]
+    vacancy_alignment_report_v2_status: str
+    vacancy_alignment_report_v2_generated_at: str
     vacancy_alignment_summary_artifact: dict[str, Any]
     vacancy_alignment_summary_status: str
     vacancy_alignment_summary_generated_at: str
@@ -147,6 +150,9 @@ def _normalize(payload: dict | None) -> OpportunityRecord:
         "vacancy_alignment_summary_v2_artifact": dict(source.get("vacancy_alignment_summary_v2_artifact", {})),
         "vacancy_alignment_summary_v2_status": str(source.get("vacancy_alignment_summary_v2_status", "none")),
         "vacancy_alignment_summary_v2_generated_at": str(source.get("vacancy_alignment_summary_v2_generated_at", "")),
+        "vacancy_alignment_report_v2_artifact": dict(source.get("vacancy_alignment_report_v2_artifact", {})),
+        "vacancy_alignment_report_v2_status": str(source.get("vacancy_alignment_report_v2_status", "none")),
+        "vacancy_alignment_report_v2_generated_at": str(source.get("vacancy_alignment_report_v2_generated_at", "")),
         "vacancy_alignment_summary_artifact": dict(source.get("vacancy_alignment_summary_artifact", {})),
         "vacancy_alignment_summary_status": str(source.get("vacancy_alignment_summary_status", "none")),
         "vacancy_alignment_summary_generated_at": str(source.get("vacancy_alignment_summary_generated_at", "")),
@@ -274,6 +280,9 @@ def create_opportunity(
         "vacancy_alignment_summary_v2_artifact": {},
         "vacancy_alignment_summary_v2_status": "none",
         "vacancy_alignment_summary_v2_generated_at": "",
+        "vacancy_alignment_report_v2_artifact": {},
+        "vacancy_alignment_report_v2_status": "none",
+        "vacancy_alignment_report_v2_generated_at": "",
         "vacancy_alignment_summary_artifact": {},
         "vacancy_alignment_summary_status": "none",
         "vacancy_alignment_summary_generated_at": "",
@@ -399,6 +408,8 @@ def update_opportunity(
     vacancy_evidence_adjudication_status: str | None = None,
     vacancy_alignment_summary_v2_artifact: dict[str, Any] | None = None,
     vacancy_alignment_summary_v2_status: str | None = None,
+    vacancy_alignment_report_v2_artifact: dict[str, Any] | None = None,
+    vacancy_alignment_report_v2_status: str | None = None,
     vacancy_alignment_summary_artifact: dict[str, Any] | None = None,
     vacancy_alignment_summary_status: str | None = None,
     vacancy_alignment_report_artifact: dict[str, Any] | None = None,
@@ -525,6 +536,17 @@ def update_opportunity(
         existing["vacancy_alignment_summary_v2_status"] = vacancy_alignment_summary_v2_status
         if vacancy_alignment_summary_v2_artifact is None:
             existing["vacancy_alignment_summary_v2_generated_at"] = _now_iso()
+
+    if vacancy_alignment_report_v2_artifact is not None:
+        existing["vacancy_alignment_report_v2_artifact"] = dict(vacancy_alignment_report_v2_artifact)
+        existing["vacancy_alignment_report_v2_generated_at"] = _now_iso()
+
+    if vacancy_alignment_report_v2_status is not None:
+        if vacancy_alignment_report_v2_status not in VACANCY_V2_ARTIFACT_STATUSES:
+            return None
+        existing["vacancy_alignment_report_v2_status"] = vacancy_alignment_report_v2_status
+        if vacancy_alignment_report_v2_artifact is None:
+            existing["vacancy_alignment_report_v2_generated_at"] = _now_iso()
 
     if vacancy_alignment_summary_artifact is not None:
         existing["vacancy_alignment_summary_artifact"] = dict(vacancy_alignment_summary_artifact)
