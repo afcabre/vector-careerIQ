@@ -1781,6 +1781,10 @@ export default function App() {
     useState<string | null>(null);
   const [recomputingVacancyEvidenceAdjudicationId, setRecomputingVacancyEvidenceAdjudicationId] =
     useState<string | null>(null);
+  const [
+    vacancyEvidenceAdjudicationErrorByOpportunityId,
+    setVacancyEvidenceAdjudicationErrorByOpportunityId
+  ] = useState<Record<string, string>>({});
   const [recomputingVacancyAlignmentSummaryV2Id, setRecomputingVacancyAlignmentSummaryV2Id] =
     useState<string | null>(null);
   const [recomputingVacancyAlignmentSummaryId, setRecomputingVacancyAlignmentSummaryId] =
@@ -3686,6 +3690,11 @@ export default function App() {
       ...current,
       [item.opportunity_id]: "vacancy_evidence_adjudication_recompute_started"
     }));
+    setVacancyEvidenceAdjudicationErrorByOpportunityId((current) => {
+      const next = { ...current };
+      delete next[item.opportunity_id];
+      return next;
+    });
     setErrorMessage(null);
     try {
       await recomputeOpportunityVacancyEvidenceAdjudicationStream(
@@ -3713,6 +3722,23 @@ export default function App() {
         error instanceof Error
           ? error.message
           : "No se pudo recalcular Vacancy Evidence Adjudication";
+      setVacancyEvidenceAdjudicationErrorByOpportunityId((current) => ({
+        ...current,
+        [item.opportunity_id]: message
+      }));
+      try {
+        const items = await listOpportunities(selectedPersonId);
+        setSavedOpportunities(items);
+        if (selectedOpportunityId === item.opportunity_id) {
+          const refreshed = items.find((entry) => entry.opportunity_id === item.opportunity_id);
+          if (refreshed) {
+            setOpportunityStatus(refreshed.status);
+            setOpportunityNotes(refreshed.notes);
+          }
+        }
+      } catch {
+        // Preserve the original adjudication error message if the refresh fails.
+      }
       setErrorMessage(message);
     } finally {
       setVacancyEvidenceAdjudicationStageByOpportunityId((current) => {
@@ -6911,6 +6937,8 @@ export default function App() {
                 vacancyEvidenceAdjudicationStageByOpportunityId[item.opportunity_id] ?? "";
               const vacancyEvidenceAdjudicationStageLabel =
                 getVacancyEvidenceAdjudicationStageLabel(vacancyEvidenceAdjudicationStage);
+              const vacancyEvidenceAdjudicationError =
+                vacancyEvidenceAdjudicationErrorByOpportunityId[item.opportunity_id] ?? "";
               const vacancyAlignmentSummaryV2Stage =
                 vacancyAlignmentSummaryV2StageByOpportunityId[item.opportunity_id] ?? "";
               const vacancyAlignmentSummaryV2StageLabel =
@@ -7874,6 +7902,10 @@ export default function App() {
                           {recomputingVacancyEvidenceAdjudicationId === item.opportunity_id
                           && vacancyEvidenceAdjudicationStageLabel ? (
                             <p className="metaText">{vacancyEvidenceAdjudicationStageLabel}</p>
+                          ) : null}
+                          {recomputingVacancyEvidenceAdjudicationId !== item.opportunity_id
+                          && vacancyEvidenceAdjudicationError ? (
+                            <p className="errorText">{vacancyEvidenceAdjudicationError}</p>
                           ) : null}
                         </div>
                         <div className="metaChips vacancyV2HeaderChips">
