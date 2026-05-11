@@ -67,6 +67,7 @@ import {
   recomputeOpportunityVacancySalary,
   recomputeOpportunityVacancyComparableConditionsStream,
   recomputeOpportunityCandidatePreferenceChecksStream,
+  recomputeOpportunityVacancyFitPresentationStream,
   recomputeCandidatePreferenceProfileStream,
   saveOpportunityFromSearch,
   searchOpportunities,
@@ -1035,6 +1036,23 @@ function getCandidatePreferenceChecksStageLabel(stage: string): string {
   return `SSE activo: ${stage}`;
 }
 
+function getVacancyFitPresentationStageLabel(stage: string): string {
+  const normalized = stage.trim().toLowerCase();
+  if (!normalized) {
+    return "";
+  }
+  if (normalized === "vacancy_fit_presentation_recompute_started") {
+    return "SSE activo: iniciando matriz profesional";
+  }
+  if (normalized === "vacancy_fit_presentation_building") {
+    return "SSE activo: armando matriz deterministica";
+  }
+  if (normalized === "vacancy_fit_presentation_saving") {
+    return "SSE activo: guardando P1";
+  }
+  return `SSE activo: ${stage}`;
+}
+
 function getVacancyV2GateChipClassName(gatePassed: boolean): string {
   return gatePassed
     ? "vacancyV2StatusChip vacancyV2StatusChipApproved"
@@ -1863,6 +1881,8 @@ export default function App() {
     useState<string | null>(null);
   const [recomputingCandidatePreferenceChecksId, setRecomputingCandidatePreferenceChecksId] =
     useState<string | null>(null);
+  const [recomputingVacancyFitPresentationId, setRecomputingVacancyFitPresentationId] =
+    useState<string | null>(null);
   const [recomputingVacancyDimensionsEnrichedId, setRecomputingVacancyDimensionsEnrichedId] = useState<string | null>(null);
   const [recomputingVacancyRetrievalQueriesId, setRecomputingVacancyRetrievalQueriesId] =
     useState<string | null>(null);
@@ -1942,6 +1962,10 @@ export default function App() {
   const [
     candidatePreferenceChecksStageByOpportunityId,
     setCandidatePreferenceChecksStageByOpportunityId
+  ] = useState<Record<string, string>>({});
+  const [
+    vacancyFitPresentationStageByOpportunityId,
+    setVacancyFitPresentationStageByOpportunityId
   ] = useState<Record<string, string>>({});
   const [vacancyAlignmentSummaryV2StageByOpportunityId, setVacancyAlignmentSummaryV2StageByOpportunityId] =
     useState<Record<string, string>>({});
@@ -4080,6 +4104,53 @@ export default function App() {
     }
   }
 
+  async function handleRecomputeVacancyFitPresentation(item: Opportunity) {
+    if (!selectedPersonId || recomputingVacancyFitPresentationId) {
+      return;
+    }
+    setRecomputingVacancyFitPresentationId(item.opportunity_id);
+    setVacancyFitPresentationStageByOpportunityId((current) => ({
+      ...current,
+      [item.opportunity_id]: "vacancy_fit_presentation_recompute_started"
+    }));
+    setErrorMessage(null);
+    try {
+      await recomputeOpportunityVacancyFitPresentationStream(
+        selectedPersonId,
+        item.opportunity_id,
+        (stage) => {
+          setVacancyFitPresentationStageByOpportunityId((current) => ({
+            ...current,
+            [item.opportunity_id]: stage
+          }));
+        }
+      );
+      const items = await listOpportunities(selectedPersonId);
+      setSavedOpportunities(items);
+      if (selectedOpportunityId === item.opportunity_id) {
+        const refreshed = items.find((entry) => entry.opportunity_id === item.opportunity_id);
+        if (refreshed) {
+          setOpportunityStatus(refreshed.status);
+          setOpportunityNotes(refreshed.notes);
+        }
+      }
+      setToastMessage("Vacancy Fit Presentation recalculado");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "No se pudo recalcular Vacancy Fit Presentation";
+      setErrorMessage(message);
+    } finally {
+      setVacancyFitPresentationStageByOpportunityId((current) => {
+        const next = { ...current };
+        delete next[item.opportunity_id];
+        return next;
+      });
+      setRecomputingVacancyFitPresentationId(null);
+    }
+  }
+
   async function handleRecomputeVacancyAlignmentSummaryV2(item: Opportunity) {
     if (!selectedPersonId || recomputingVacancyAlignmentSummaryV2Id) {
       return;
@@ -4352,6 +4423,7 @@ export default function App() {
       | "vacancy_salary"
       | "vacancy_comparable_conditions"
       | "candidate_preference_checks"
+      | "vacancy_fit_presentation"
       | "vacancy_dimensions_enriched"
       | "vacancy_retrieval_queries"
       | "vacancy_retrieval_evidence"
@@ -4389,6 +4461,10 @@ export default function App() {
       } else if (artifact === "candidate_preference_checks") {
         await updateOpportunity(selectedPersonId, item.opportunity_id, {
           candidate_preference_checks_status: status,
+        });
+      } else if (artifact === "vacancy_fit_presentation") {
+        await updateOpportunity(selectedPersonId, item.opportunity_id, {
+          vacancy_fit_presentation_status: status,
         });
       } else if (artifact === "vacancy_dimensions_enriched") {
         await updateOpportunity(selectedPersonId, item.opportunity_id, {
@@ -7633,6 +7709,8 @@ export default function App() {
                 Object.keys(item.vacancy_comparable_conditions_artifact ?? {}).length > 0;
               const hasCandidatePreferenceChecksArtifact =
                 Object.keys(item.candidate_preference_checks_artifact ?? {}).length > 0;
+              const hasVacancyFitPresentationArtifact =
+                Object.keys(item.vacancy_fit_presentation_artifact ?? {}).length > 0;
               const hasVacancyDimensionsEnrichedArtifact =
                 Object.keys(item.vacancy_dimensions_enriched_artifact ?? {}).length > 0;
               const hasVacancyRetrievalQueriesArtifact =
@@ -7661,6 +7739,9 @@ export default function App() {
               );
               const candidatePreferenceChecksStatusLabel = getVacancyV2StatusLabel(
                 item.candidate_preference_checks_status
+              );
+              const vacancyFitPresentationStatusLabel = getVacancyV2StatusLabel(
+                item.vacancy_fit_presentation_status
               );
               const vacancyDimensionsEnrichedStatusLabel = getVacancyV2StatusLabel(
                 item.vacancy_dimensions_enriched_status
@@ -7704,6 +7785,9 @@ export default function App() {
               const candidatePreferenceChecksGeneratedAt = item.candidate_preference_checks_generated_at
                 ? formatAiRunTimestamp(item.candidate_preference_checks_generated_at)
                 : "Sin generar";
+              const vacancyFitPresentationGeneratedAt = item.vacancy_fit_presentation_generated_at
+                ? formatAiRunTimestamp(item.vacancy_fit_presentation_generated_at)
+                : "Sin generar";
               const vacancyDimensionsEnrichedGeneratedAt = item.vacancy_dimensions_enriched_generated_at
                 ? formatAiRunTimestamp(item.vacancy_dimensions_enriched_generated_at)
                 : "Sin generar";
@@ -7741,6 +7825,8 @@ export default function App() {
                 updatingVacancyV2StatusKey === `vacancy_comparable_conditions:${item.opportunity_id}`;
               const isUpdatingCandidatePreferenceChecksStatus =
                 updatingVacancyV2StatusKey === `candidate_preference_checks:${item.opportunity_id}`;
+              const isUpdatingVacancyFitPresentationStatus =
+                updatingVacancyV2StatusKey === `vacancy_fit_presentation:${item.opportunity_id}`;
               const isUpdatingVacancyDimensionsEnrichedStatus =
                 updatingVacancyV2StatusKey === `vacancy_dimensions_enriched:${item.opportunity_id}`;
               const isUpdatingVacancyRetrievalQueriesStatus =
@@ -7771,6 +7857,10 @@ export default function App() {
                 candidatePreferenceChecksStageByOpportunityId[item.opportunity_id] ?? "";
               const candidatePreferenceChecksStageLabel =
                 getCandidatePreferenceChecksStageLabel(candidatePreferenceChecksStage);
+              const vacancyFitPresentationStage =
+                vacancyFitPresentationStageByOpportunityId[item.opportunity_id] ?? "";
+              const vacancyFitPresentationStageLabel =
+                getVacancyFitPresentationStageLabel(vacancyFitPresentationStage);
               const vacancyEvidenceAdjudicationError =
                 vacancyEvidenceAdjudicationErrorByOpportunityId[item.opportunity_id] ?? "";
               const vacancyAlignmentSummaryV2Stage =
@@ -8952,6 +9042,79 @@ export default function App() {
                       ) : (
                         <p className="metaText">
                           Sin artefacto S6.5. Requiere S3.9 y S6 validos para adjudicar evidencia grounded.
+                        </p>
+                      )}
+                    </section>
+
+                    <section className="vacancyV2Section">
+                      <div className="vacancyV2SectionHeader">
+                        <div>
+                          <p className="metaText vacancyV2SectionTitle">
+                            P1 · Vacancy Fit Presentation
+                          </p>
+                          <p className="metaText">Generado: {vacancyFitPresentationGeneratedAt}</p>
+                          {recomputingVacancyFitPresentationId === item.opportunity_id
+                          && vacancyFitPresentationStageLabel ? (
+                            <p className="metaText">{vacancyFitPresentationStageLabel}</p>
+                          ) : null}
+                        </div>
+                        <div className="metaChips vacancyV2HeaderChips">
+                          <span
+                            className={`metaChip ${getVacancyV2StatusClassName(item.vacancy_fit_presentation_status)}`}
+                          >
+                            {vacancyFitPresentationStatusLabel}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="cardActions">
+                        <button
+                          className="vacancyProfileQuickActionButton"
+                          disabled={
+                            !hasVacancyEvidenceAdjudicationArtifact
+                            || recomputingVacancyFitPresentationId === item.opportunity_id
+                          }
+                          onClick={() => void handleRecomputeVacancyFitPresentation(item)}
+                          type="button"
+                        >
+                          {recomputingVacancyFitPresentationId === item.opportunity_id
+                            ? "Recalculando..."
+                            : "Recalcular P1"}
+                        </button>
+                        {hasVacancyFitPresentationArtifact ? (
+                          <button
+                            className="vacancyProfileQuickActionButton"
+                            disabled={isUpdatingVacancyFitPresentationStatus}
+                            onClick={() =>
+                              void handleSetVacancyV2Status(
+                                item,
+                                "vacancy_fit_presentation",
+                                item.vacancy_fit_presentation_status === "approved"
+                                  ? "draft"
+                                  : "approved"
+                              )}
+                            type="button"
+                          >
+                            {isUpdatingVacancyFitPresentationStatus
+                              ? "Actualizando..."
+                              : item.vacancy_fit_presentation_status === "approved"
+                                ? "Marcar borrador"
+                                : "Aprobar P1"}
+                          </button>
+                        ) : null}
+                      </div>
+                      {hasVacancyFitPresentationArtifact ? (
+                        <label className="field">
+                          JSON P1
+                          <textarea
+                            className="vacancyV2JsonTextarea"
+                            readOnly
+                            rows={16}
+                            value={safePrettyJson(item.vacancy_fit_presentation_artifact)}
+                          />
+                        </label>
+                      ) : (
+                        <p className="metaText">
+                          Sin artefacto P1. Requiere S6.5 valido para derivar la matriz profesional deterministica.
                         </p>
                       )}
                     </section>
