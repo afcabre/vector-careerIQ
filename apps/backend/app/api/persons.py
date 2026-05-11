@@ -176,7 +176,13 @@ def get_person(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Person not found",
         )
-    return PersonSummary(**person)
+    artifact = build_candidate_preference_profile(person)
+    refreshed = update_candidate_preference_profile_record(
+        person_id,
+        artifact=artifact,
+        status="draft",
+    )
+    return PersonSummary(**(refreshed or person))
 
 
 @router.get("/{person_id}/candidate-preference-profile")
@@ -351,4 +357,10 @@ def update_person(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Person not found",
         )
-    return PersonSummary(**person)
+    artifact = build_candidate_preference_profile(person)
+    refreshed = update_candidate_preference_profile_record(
+        person_id,
+        artifact=artifact,
+        status="draft",
+    )
+    return PersonSummary(**(refreshed or person))

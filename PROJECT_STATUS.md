@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `El rediseño de match ya cuenta con P0, C1, C2 y P1 operativos; S8 v2 ya consume la matriz profesional y la matriz de preferencias como estructuras autoritativas, dejando al LLM concentrado en la narrativa final`
+- checkpoint_actual: `El rediseño de match ya cuenta con P0, C1, C2 y P1 operativos; S8 v2 ya consume la matriz profesional y la matriz de preferencias como estructuras autoritativas, y el slice correctivo actual endurece refresco de P0, recorta S6.5 al fit profesional y obliga a S8 a completar narrativa util`
 - repo_status: `flujo V1 operativo con analisis, postulacion, chat, CV semantico, admin de prompts y extraccion estructurada de vacantes en forma legacy estable; propuesta v2 desacoplada en branch experimental`
 - ultima_actualizacion: `2026-05-11`
 
@@ -66,6 +66,11 @@
 - validacion estructural vigente en `S8 v2`: `vacancy_fit_matrix` y `candidate_preference_matrix` se derivan deterministicamente desde `P1 + C2`, de modo que el reporte final deja de depender de que el LLM complete u omita filas
 - validacion tecnica del refactor `S8 v2 -> P1 + C2` en verde: `cd apps/backend && .venv/bin/python -m unittest tests.test_vacancy_alignment_report_v2_service tests.test_vacancy_v2_endpoints` (`67 tests`)
 - correccion adicional aplicada en `S8 v2`: la validacion de completitud de `vacancy_fit_matrix` ahora se mide contra los `item_id` presentes en `P1`, no contra todo el universo adjudicado de `S6.5`; con esto dejan de exigirse en la tabla principal los grupos excluidos por diseno (`work_conditions`, `benefits`, `about_the_company`)
+- slice correctivo adicional aplicado sobre perfil y narrativa: editar el perfil del candidato ahora recompone `candidate_preference_profile.v1` automaticamente y deja `P0` en `draft` sin requerir recompute manual para ver cambios recientes en modalidades, ubicaciones, salario o contratos aceptados
+- `S6.5` ya no adjudica grupos contextuales contra el CV (`work_conditions`, `benefits`, `about_the_company`); esos grupos quedan explicitamente fuera del scope profesional del paso y se registran como warnings cuando existan en la vacante
+- `S8 v2` endurecido para preferencias: el prompt y el fallback ahora tratan `candidate_preference_checks.v1` como autoridad dura para ubicacion, modalidad, compensacion y tipo de contrato, evitando frases tipo `no evidenciado en el CV` cuando `C2` ya resolvio la comparacion
+- `S8 v2` endurecido para calidad minima: si la primera respuesta deja vacias secciones narrativas clave (`executive_summary`, `decision_table`, `fit_answer`, `actionable_conclusion`), backend hace un retry guiado; si aun siguen vacias, el reporte falla explicitamente en vez de aceptar markdown bonito con JSON pobre
+- validacion tecnica del slice correctivo `P0 + S6.5 + S8` en verde: `cd apps/backend && .venv/bin/python -m unittest tests.test_candidate_preference_profile_api tests.test_vacancy_evidence_adjudication_service tests.test_vacancy_alignment_report_v2_service tests.test_vacancy_v2_endpoints` (`78 tests`)
 - plan de implementacion y tareas de seguimiento volcados a Notion en `Engineering Projects Hub`
 - mecanica operativa de ejecucion y fuente de verdad formalizada en `AGENTS.md`
 - protocolo iterativo de implementacion agregado en `.specify/instructions/Implementation-Worker-Protocol.md`

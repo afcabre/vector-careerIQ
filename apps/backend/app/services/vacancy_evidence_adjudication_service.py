@@ -23,7 +23,12 @@ from app.services.vacancy_evidence_adjudication_contract import (
     ADJUDICATION_GROUPS,
     CONTRACT_VERSION_VACANCY_EVIDENCE_ADJUDICATION,
     GROUP_CODE_BY_GROUP,
+    GROUP_ABOUT_THE_COMPANY,
+    GROUP_BENEFITS,
     GROUP_DESIRABLE_CRITERIA,
+    GROUP_REQUIRED_CRITERIA,
+    GROUP_RESPONSIBILITIES,
+    GROUP_WORK_CONDITIONS,
     PRIORITY_CONTEXTUAL,
     PRIORITY_DESIRABLE,
     PRIORITY_IMPORTANT,
@@ -42,6 +47,18 @@ from app.services.vacancy_v2_runtime_config import get_vacancy_v2_runtime_config
 
 class VacancyEvidenceAdjudicationBuildError(RuntimeError):
     pass
+
+
+PROFESSIONAL_ADJUDICATION_GROUPS = (
+    GROUP_RESPONSIBILITIES,
+    GROUP_REQUIRED_CRITERIA,
+    GROUP_DESIRABLE_CRITERIA,
+)
+EXCLUDED_CONTEXTUAL_ADJUDICATION_GROUPS = (
+    GROUP_WORK_CONDITIONS,
+    GROUP_BENEFITS,
+    GROUP_ABOUT_THE_COMPANY,
+)
 
 
 def _now_iso() -> str:
@@ -82,7 +99,7 @@ def _iter_expected_items(
     normalized = normalize_vacancy_dimensions_enriched_contract(vacancy_dimensions_enriched_artifact)
     items: list[dict[str, Any]] = []
     payload = normalized["vacancy_dimensions"]
-    for group in ADJUDICATION_GROUPS:
+    for group in PROFESSIONAL_ADJUDICATION_GROUPS:
         for item in payload[group]:
             raw_text = str(item.get("raw_text", "")).strip()
             item_id = str(item.get("item_id", "")).strip()
@@ -111,7 +128,7 @@ def _build_analysis_index(
 ) -> dict[str, dict[str, Any]]:
     payload = vacancy_evidence_analysis_artifact["analysis"]
     indexed: dict[str, dict[str, Any]] = {}
-    for group in ADJUDICATION_GROUPS:
+    for group in PROFESSIONAL_ADJUDICATION_GROUPS:
         for item in payload[group]:
             signature = _analysis_signature(
                 item_id=item["item_id"],
@@ -227,6 +244,17 @@ def _filter_evidence_analysis_artifact(
             for group in ADJUDICATION_GROUPS
         },
     }
+
+
+def _excluded_contextual_group_warnings(
+    vacancy_dimensions_enriched_artifact: dict[str, Any],
+) -> list[str]:
+    payload = vacancy_dimensions_enriched_artifact["vacancy_dimensions"]
+    warnings: list[str] = []
+    for group in EXCLUDED_CONTEXTUAL_ADJUDICATION_GROUPS:
+        if payload[group]:
+            warnings.append(f"{group}_excluded_from_step_6_5")
+    return warnings
 
 
 def _build_prompt_inputs(
@@ -514,6 +542,7 @@ def build_vacancy_evidence_adjudication(
     artifact["generated_at"] = generated_at
     artifact["items"] = ordered_items
     artifact["warnings"] = list(normalized["warnings"])
+    artifact["warnings"].extend(_excluded_contextual_group_warnings(normalized_dimensions))
     if retry_used:
         artifact["warnings"].append(
             "Step 6.5 required a retry because the initial LLM response omitted one or more items."

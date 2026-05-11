@@ -312,7 +312,7 @@ class VacancyAlignmentReportV2ServiceTests(unittest.TestCase):
             "{"
             "\"report\":{"
             "\"executive_summary\":{\"fit_level\":\"medio\",\"final_recommendation\":\"No priorizar\",\"summary\":\"Resumen\",\"main_strength\":\"\",\"main_gap_or_risk\":\"\",\"confidence\":\"media\"},"
-            "\"decision_table\":{},"
+            "\"decision_table\":{\"alineacion_general\":{\"resultado\":\"🟡 Parcial\",\"descripcion_corta\":\"Resumen\"},\"recomendacion\":{\"resultado\":\"No priorizar\",\"descripcion_corta\":\"No priorizar por ahora.\"}},"
             "\"vacancy_fit_matrix\":["
             "{\"item_id\":\"req_1\",\"criterio\":\"Minimo 5 anos de experiencia profesional\",\"categoria\":\"Experiencia\",\"origen_del_criterio\":\"Vacante obligatoria\",\"prioridad\":\"Importante\",\"estado\":\"🟢 Cumple\",\"lo_que_solicita_la_vacante\":\"Minimo 5 anos de experiencia profesional\",\"evidencia_del_candidato\":\"20 anos de experiencia profesional.\",\"tipo_de_evidencia\":\"directa\",\"fuerza_de_evidencia\":\"alta\",\"descripcion_corta\":\"Directo\",\"riesgo_para_la_postulacion\":\"bajo\",\"fuentes\":[]},"
             "{\"item_id\":\"des_1\",\"criterio\":\"Certificacion PMP o Scrum\",\"categoria\":\"Certificaciones\",\"origen_del_criterio\":\"Vacante deseable\",\"prioridad\":\"Deseable\",\"estado\":\"🔵 Deseable no evidenciado\",\"lo_que_solicita_la_vacante\":\"Certificacion PMP o Scrum\",\"evidencia_del_candidato\":\"No se observa certificacion formal.\",\"tipo_de_evidencia\":\"no evidenciada\",\"fuerza_de_evidencia\":\"ninguna\",\"descripcion_corta\":\"No evidenciado\",\"riesgo_para_la_postulacion\":\"bajo\",\"fuentes\":[]}"
@@ -364,7 +364,7 @@ class VacancyAlignmentReportV2ServiceTests(unittest.TestCase):
             "{"
             "\"report\":{"
             "\"executive_summary\":{\"fit_level\":\"medio\",\"final_recommendation\":\"No priorizar\",\"summary\":\"Resumen parcial\",\"main_strength\":\"\",\"main_gap_or_risk\":\"\",\"confidence\":\"media\"},"
-            "\"decision_table\":{},"
+            "\"decision_table\":{\"alineacion_general\":{\"resultado\":\"🟡 Parcial\",\"descripcion_corta\":\"Resumen parcial\"},\"recomendacion\":{\"resultado\":\"No priorizar\",\"descripcion_corta\":\"No priorizar por ahora.\"}},"
             "\"vacancy_fit_matrix\":["
             "{\"item_id\":\"invented\",\"criterio\":\"Fila inventada\",\"categoria\":\"Experiencia\",\"origen_del_criterio\":\"Vacante obligatoria\",\"prioridad\":\"Importante\",\"estado\":\"🟢 Cumple\",\"lo_que_solicita_la_vacante\":\"Fila inventada\",\"evidencia_del_candidato\":\"Inventada\",\"tipo_de_evidencia\":\"directa\",\"fuerza_de_evidencia\":\"alta\",\"descripcion_corta\":\"Inventada\",\"riesgo_para_la_postulacion\":\"bajo\",\"fuentes\":[]}"
             "],"
@@ -400,6 +400,94 @@ class VacancyAlignmentReportV2ServiceTests(unittest.TestCase):
         self.assertEqual(
             contract["report"]["candidate_preference_matrix"][0]["criterio"],
             "Ubicacion",
+        )
+
+    def test_extract_retries_when_required_narrative_sections_are_empty(self) -> None:
+        empty_narrative_response = (
+            "{"
+            "\"report\":{"
+            "\"executive_summary\":{\"fit_level\":\"\",\"final_recommendation\":\"\",\"summary\":\"\",\"main_strength\":\"\",\"main_gap_or_risk\":\"\",\"confidence\":\"\"},"
+            "\"decision_table\":{},"
+            "\"vacancy_fit_matrix\":[],"
+            "\"candidate_preference_matrix\":[],"
+            "\"fit_answer\":{\"encaja\":\"\",\"respuesta_para_el_candidato\":\"\"},"
+            "\"strengths\":[],\"gaps\":[],\"preference_conflicts\":[],\"improvement_actions\":{},\"alerts_and_conflicts\":[],"
+            "\"actionable_conclusion\":{\"final_decision\":\"\",\"main_reason\":\"\",\"recommended_next_step\":\"\",\"confidence\":\"\"}"
+            "},"
+            "\"rendered_markdown\":\"## Resumen ejecutivo\\n\\nTexto pobre\""
+            "}"
+        )
+        complete_response = (
+            "{"
+            "\"report\":{"
+            "\"executive_summary\":{\"fit_level\":\"medio_alto\",\"final_recommendation\":\"Avanzar con reservas\",\"summary\":\"Buen ajuste general.\",\"main_strength\":\"Experiencia suficiente.\",\"main_gap_or_risk\":\"Deseable abierto.\",\"confidence\":\"media\"},"
+            "\"decision_table\":{\"alineacion_general\":{\"resultado\":\"🟡 Parcial\",\"descripcion_corta\":\"Buen ajuste con una alerta menor.\"},\"recomendacion\":{\"resultado\":\"Avanzar con reservas\",\"descripcion_corta\":\"Avanzar validando el deseable.\"}},"
+            "\"vacancy_fit_matrix\":[],"
+            "\"candidate_preference_matrix\":[],"
+            "\"fit_answer\":{\"encaja\":\"sí\",\"respuesta_para_el_candidato\":\"La vacante es defendible.\"},"
+            "\"strengths\":[],\"gaps\":[],\"preference_conflicts\":[],\"improvement_actions\":{},\"alerts_and_conflicts\":[],"
+            "\"actionable_conclusion\":{\"final_decision\":\"Avanzar con reservas\",\"main_reason\":\"El ajuste base es bueno.\",\"recommended_next_step\":\"Validar el peso real del deseable.\",\"confidence\":\"media\"}"
+            "},"
+            "\"rendered_markdown\":\"## Resumen ejecutivo\\n\\nBuen ajuste general.\""
+            "}"
+        )
+
+        with patch(
+            "app.services.vacancy_alignment_report_v2_service.complete_prompt",
+            side_effect=[empty_narrative_response, complete_response],
+        ) as mocked_complete:
+            contract = extract_vacancy_alignment_report_v2(
+                person=_person(),
+                opportunity=_opportunity(),
+                vacancy_evidence_adjudication_artifact=_adjudication(),
+                vacancy_alignment_summary_v2_artifact=_summary_v2(),
+                vacancy_evidence_analysis_artifact=_analysis(),
+                vacancy_fit_presentation_artifact=_fit_presentation(),
+                candidate_preference_checks_artifact=_preference_checks(),
+                settings=object(),
+            )
+
+        self.assertEqual(mocked_complete.call_count, 2)
+        self.assertEqual(
+            contract["report"]["executive_summary"]["final_recommendation"],
+            "Avanzar con reservas",
+        )
+
+    def test_extract_fails_when_required_narrative_sections_remain_empty_after_retry(self) -> None:
+        empty_narrative_response = (
+            "{"
+            "\"report\":{"
+            "\"executive_summary\":{\"fit_level\":\"\",\"final_recommendation\":\"\",\"summary\":\"\",\"main_strength\":\"\",\"main_gap_or_risk\":\"\",\"confidence\":\"\"},"
+            "\"decision_table\":{},"
+            "\"vacancy_fit_matrix\":[],"
+            "\"candidate_preference_matrix\":[],"
+            "\"fit_answer\":{\"encaja\":\"\",\"respuesta_para_el_candidato\":\"\"},"
+            "\"strengths\":[],\"gaps\":[],\"preference_conflicts\":[],\"improvement_actions\":{},\"alerts_and_conflicts\":[],"
+            "\"actionable_conclusion\":{\"final_decision\":\"\",\"main_reason\":\"\",\"recommended_next_step\":\"\",\"confidence\":\"\"}"
+            "},"
+            "\"rendered_markdown\":\"## Resumen ejecutivo\\n\\nTexto pobre\""
+            "}"
+        )
+
+        with patch(
+            "app.services.vacancy_alignment_report_v2_service.complete_prompt",
+            side_effect=[empty_narrative_response, empty_narrative_response],
+        ):
+            with self.assertRaises(VacancyAlignmentReportV2BuildError) as raised:
+                extract_vacancy_alignment_report_v2(
+                    person=_person(),
+                    opportunity=_opportunity(),
+                    vacancy_evidence_adjudication_artifact=_adjudication(),
+                    vacancy_alignment_summary_v2_artifact=_summary_v2(),
+                    vacancy_evidence_analysis_artifact=_analysis(),
+                    vacancy_fit_presentation_artifact=_fit_presentation(),
+                    candidate_preference_checks_artifact=_preference_checks(),
+                    settings=object(),
+                )
+
+        self.assertIn(
+            "executive_summary",
+            str(raised.exception),
         )
 
 

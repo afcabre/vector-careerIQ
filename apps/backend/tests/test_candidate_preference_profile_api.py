@@ -48,6 +48,32 @@ class CandidatePreferenceProfileApiTests(unittest.TestCase):
             persons_api.recompute_candidate_preference_profile("p-missing", self.session)
         self.assertEqual(error.exception.status_code, 404)
 
+    def test_update_person_recomputes_candidate_preference_profile(self) -> None:
+        response = persons_api.update_person(
+            "p-001",
+            persons_api.UpdatePersonRequest(
+                accepted_locations=["Bogotá D.C."],
+                accepted_modalities=["hybrid", "remote"],
+                contract_types_accepted=["indefinite", "service_contract"],
+                salary_expectation_min=16000000,
+                salary_currency="COP",
+                salary_period="monthly",
+            ),
+            self.session,
+        )
+
+        self.assertEqual(response.candidate_preference_profile_status, "draft")
+        fetched = persons_api.get_candidate_preference_profile("p-001", self.session)
+        self.assertEqual(fetched.status, "draft")
+        self.assertEqual(
+            fetched.artifact["comparable_preferences"]["accepted_modalities"],
+            ["hybrid", "remote"],
+        )
+        self.assertEqual(
+            fetched.artifact["comparable_preferences"]["contract_types_accepted"],
+            ["indefinite", "service_contract"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

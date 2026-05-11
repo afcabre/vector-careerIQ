@@ -289,6 +289,93 @@ class VacancyEvidenceAdjudicationServiceTests(unittest.TestCase):
             FLOW_TASK_VACANCY_EVIDENCE_ADJUDICATION,
         )
 
+    def test_build_excludes_contextual_groups_from_adjudication_scope(self) -> None:
+        dimensions = _dimensions_enriched()
+        dimensions["vacancy_dimensions"]["work_conditions"] = [
+            {
+                "raw_text": "Modalidad hibrida 4x1",
+                "item_id": "cond_1",
+                "item_index": 0,
+                "group_code": "cond",
+            }
+        ]
+        dimensions["vacancy_dimensions"]["about_the_company"] = [
+            {
+                "raw_text": "Empresa en crecimiento con alta exigencia",
+                "item_id": "about_1",
+                "item_index": 0,
+                "group_code": "about",
+            }
+        ]
+        analysis = _evidence_analysis()
+        analysis["analysis"]["work_conditions"] = [
+            {
+                "item_id": "cond_1",
+                "item_index": 0,
+                "group_code": "cond",
+                "raw_text": "Modalidad hibrida 4x1",
+                "item_status": "no_evidence",
+                "best_score": 0.0,
+                "raw_match_count": 0,
+                "accepted_match_count": 0,
+                "discarded_match_count": 0,
+                "distinct_query_hits": 0,
+                "best_evidence": [],
+                "accepted_matches": [],
+                "discarded_matches": [],
+            }
+        ]
+        analysis["analysis"]["about_the_company"] = [
+            {
+                "item_id": "about_1",
+                "item_index": 0,
+                "group_code": "about",
+                "raw_text": "Empresa en crecimiento con alta exigencia",
+                "item_status": "no_evidence",
+                "best_score": 0.0,
+                "raw_match_count": 0,
+                "accepted_match_count": 0,
+                "discarded_match_count": 0,
+                "distinct_query_hits": 0,
+                "best_evidence": [],
+                "accepted_matches": [],
+                "discarded_matches": [],
+            }
+        ]
+        normalized_items = _normalized_dimension_items()
+        responsibility = normalized_items["responsibility"]
+        required = normalized_items["required"]
+        llm_response = (
+            "{"
+            "\"items\":["
+            f"{{\"item_id\":\"{responsibility['item_id']}\",\"item_index\":{responsibility['item_index']},\"group\":\"responsibilities\",\"group_code\":\"resp\",\"raw_text\":\"Liderar area de servicios digitales\",\"criterion_type\":\"leadership\",\"priority\":\"important\",\"alignment_status\":\"partial\",\"evidence_strength\":\"medium\",\"proof_summary\":\"Resumen\",\"best_supporting_evidence\":[],\"weak_or_discarded_evidence\":[],\"limitations\":[],\"candidate_risk\":\"low\",\"cv_improvement_opportunity\":\"\",\"confidence\":\"medium\"}},"
+            f"{{\"item_id\":\"{required['item_id']}\",\"item_index\":{required['item_index']},\"group\":\"required_criteria\",\"group_code\":\"req\",\"raw_text\":\"Minimo 5 anos de experiencia profesional\",\"criterion_type\":\"years_experience\",\"priority\":\"important\",\"alignment_status\":\"direct\",\"evidence_strength\":\"high\",\"proof_summary\":\"Resumen\",\"best_supporting_evidence\":[],\"weak_or_discarded_evidence\":[],\"limitations\":[],\"candidate_risk\":\"low\",\"cv_improvement_opportunity\":\"\",\"confidence\":\"high\"}}"
+            "],"
+            "\"warnings\":[]"
+            "}"
+        )
+
+        with patch(
+            "app.services.vacancy_evidence_adjudication_service.complete_prompt",
+            return_value=llm_response,
+        ) as mocked_complete:
+            contract = build_vacancy_evidence_adjudication(
+                person=_person(),
+                opportunity=_opportunity(),
+                vacancy_dimensions_enriched_artifact=dimensions,
+                vacancy_evidence_analysis_artifact=analysis,
+                settings=object(),
+            )
+
+        self.assertEqual(mocked_complete.call_count, 1)
+        self.assertEqual(len(contract["items"]), 2)
+        self.assertTrue(
+            any("work_conditions_excluded_from_step_6_5" == warning for warning in contract["warnings"])
+        )
+        self.assertTrue(
+            any("about_the_company_excluded_from_step_6_5" == warning for warning in contract["warnings"])
+        )
+
     def test_build_retries_missing_items_and_merges_retry_output(self) -> None:
         normalized_items = _normalized_dimension_items()
         responsibility = normalized_items["responsibility"]

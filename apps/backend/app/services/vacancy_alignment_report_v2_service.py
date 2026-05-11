@@ -76,6 +76,69 @@ def _has_meaningful_report(contract: VacancyAlignmentReportV2Contract) -> bool:
     )
 
 
+def _has_meaningful_executive_summary(report: dict[str, Any]) -> bool:
+    payload = report["executive_summary"]
+    return any(
+        [
+            bool(payload["fit_level"]),
+            bool(payload["final_recommendation"]),
+            bool(payload["summary"]),
+            bool(payload["main_strength"]),
+            bool(payload["main_gap_or_risk"]),
+            bool(payload["confidence"]),
+        ]
+    )
+
+
+def _has_meaningful_decision_table(report: dict[str, Any]) -> bool:
+    decision_table = report["decision_table"]
+    for key in (
+        "alineacion_general",
+        "fit_objetivo",
+        "fit_preferencial",
+        "requisitos_criticos_cumplidos",
+        "bloqueadores",
+        "alertas_relevantes",
+        "potencial_mejora_fit",
+        "recomendacion",
+    ):
+        entry = decision_table[key]
+        if entry["resultado"] or entry["descripcion_corta"]:
+            return True
+    return False
+
+
+def _has_meaningful_fit_answer(report: dict[str, Any]) -> bool:
+    payload = report["fit_answer"]
+    return bool(payload["encaja"] or payload["respuesta_para_el_candidato"])
+
+
+def _has_meaningful_actionable_conclusion(report: dict[str, Any]) -> bool:
+    payload = report["actionable_conclusion"]
+    return any(
+        [
+            bool(payload["final_decision"]),
+            bool(payload["main_reason"]),
+            bool(payload["recommended_next_step"]),
+            bool(payload["confidence"]),
+        ]
+    )
+
+
+def _missing_required_narrative_sections(report_contract: VacancyAlignmentReportV2Contract) -> list[str]:
+    report = report_contract["report"]
+    missing: list[str] = []
+    if not _has_meaningful_executive_summary(report):
+        missing.append("executive_summary")
+    if not _has_meaningful_decision_table(report):
+        missing.append("decision_table")
+    if not _has_meaningful_fit_answer(report):
+        missing.append("fit_answer")
+    if not _has_meaningful_actionable_conclusion(report):
+        missing.append("actionable_conclusion")
+    return missing
+
+
 def _priority_es_from_type_label(type_label: str) -> str:
     normalized = str(type_label or "").strip().casefold()
     if normalized == "deseable":
@@ -467,6 +530,9 @@ def _run_report_completion(
         "No escribas texto fuera del JSON. Debes producir exactamente dos claves raiz: report, rendered_markdown. "
         "Usa vacancy_evidence_adjudication.v1 como insumo principal. Usa vacancy_alignment_summary.v2 como resumen auxiliar. Usa vacancy_evidence_analysis.v1 solo como respaldo. "
         "Usa vacancy_fit_presentation.v1 como matriz profesional autoritativa y candidate_preference_checks.v1 como matriz de preferencias autoritativa. "
+        "Cuando hables de ubicacion, modalidad, compensacion o tipo de contrato, candidate_preference_checks.v1 es la fuente de verdad. "
+        "No digas que falta evidencia en el CV o en el perfil para esas condiciones si candidate_preference_checks.v1 ya resolvio la comparacion. "
+        "No menciones preferencias culturales blandas o campos fuera de candidate_preference_checks.v1 al redactar el ajuste preferencial. "
         "No inventes informacion, no infles el perfil, no omitas criterios evaluados y no recalcules scores. "
         "vacancy_fit_matrix debe reflejar exactamente los rows de vacancy_fit_presentation.v1. "
         "candidate_preference_matrix debe reflejar exactamente los rows de candidate_preference_checks.v1. "
@@ -619,6 +685,37 @@ def extract_vacancy_alignment_report_v2(
         normalized_preference_checks
     )
     normalized = normalize_vacancy_alignment_report_v2_contract(normalized)
+    missing_narrative_sections = _missing_required_narrative_sections(normalized)
+    if missing_narrative_sections:
+        retry_hint = (
+            "Completa obligatoriamente las secciones narrativas faltantes en JSON: "
+            + ", ".join(missing_narrative_sections)
+            + ". Usa candidate_preference_checks.v1 como autoridad dura para cualquier afirmacion sobre ubicacion, modalidad, compensacion y tipo de contrato. "
+            + "No declares 'no evidenciado en el CV' para preferencias si candidate_preference_checks.v1 ya devolvio un estado."
+        )
+        normalized = _run_report_completion(
+            person=person,
+            opportunity=opportunity,
+            person_id=person_id,
+            person_context=person_context,
+            opportunity_context=opportunity_context,
+            evidence_adjudication_json=evidence_adjudication_json,
+            alignment_summary_json=alignment_summary_json,
+            evidence_analysis_json=evidence_analysis_json,
+            fit_presentation_json=fit_presentation_json,
+            preference_checks_json=preference_checks_json,
+            settings=settings,
+            llm_temperature=llm_temperature,
+            phase_label="Step 8 v2 retry",
+            retry_hint=retry_hint,
+        )
+        normalized["report"]["vacancy_fit_matrix"] = _deterministic_fit_matrix_from_presentation(
+            normalized_fit_presentation
+        )
+        normalized["report"]["candidate_preference_matrix"] = _deterministic_preference_matrix(
+            normalized_preference_checks
+        )
+        normalized = normalize_vacancy_alignment_report_v2_contract(normalized)
     normalized["vacancy_id"] = vacancy_id
     normalized["person_id"] = person_id
     normalized["generated_at"] = generated_at
@@ -636,6 +733,12 @@ def extract_vacancy_alignment_report_v2(
         normalized_fit_presentation,
     )
     _validate_recommendations(normalized)
+    missing_narrative_sections = _missing_required_narrative_sections(normalized)
+    if missing_narrative_sections:
+        raise VacancyAlignmentReportV2BuildError(
+            "Step 8 v2 report omitted required narrative sections after retry: "
+            + ", ".join(missing_narrative_sections)
+        )
 
     if _has_meaningful_report(normalized):
         return normalized
