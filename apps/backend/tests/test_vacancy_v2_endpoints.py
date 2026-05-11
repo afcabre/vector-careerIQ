@@ -1865,6 +1865,10 @@ class VacancyV2EndpointsTests(unittest.TestCase):
             vacancy_evidence_adjudication_status="approved",
             vacancy_alignment_summary_v2_artifact=_sample_vacancy_alignment_summary_v2(opportunity_id),
             vacancy_alignment_summary_v2_status="approved",
+            vacancy_fit_presentation_artifact=_sample_vacancy_fit_presentation(opportunity_id),
+            vacancy_fit_presentation_status="approved",
+            candidate_preference_checks_artifact=_sample_candidate_preference_checks("p-001", opportunity_id),
+            candidate_preference_checks_status="approved",
         )
         assert updated is not None
         report_artifact = _sample_vacancy_alignment_report_v2(opportunity_id)
@@ -1910,6 +1914,10 @@ class VacancyV2EndpointsTests(unittest.TestCase):
             vacancy_evidence_adjudication_status="approved",
             vacancy_alignment_summary_v2_artifact=_sample_vacancy_alignment_summary_v2(opportunity_id),
             vacancy_alignment_summary_v2_status="approved",
+            vacancy_fit_presentation_artifact=_sample_vacancy_fit_presentation(opportunity_id),
+            vacancy_fit_presentation_status="approved",
+            candidate_preference_checks_artifact=_sample_candidate_preference_checks("p-001", opportunity_id),
+            candidate_preference_checks_status="approved",
         )
         assert updated is not None
 
@@ -3313,6 +3321,10 @@ class VacancyV2EndpointsTests(unittest.TestCase):
             vacancy_evidence_adjudication_status="approved",
             vacancy_alignment_summary_v2_artifact=_sample_vacancy_alignment_summary_v2(opportunity_id),
             vacancy_alignment_summary_v2_status="approved",
+            vacancy_fit_presentation_artifact=_sample_vacancy_fit_presentation(opportunity_id),
+            vacancy_fit_presentation_status="approved",
+            candidate_preference_checks_artifact=_sample_candidate_preference_checks("p-001", opportunity_id),
+            candidate_preference_checks_status="approved",
         )
         assert updated is not None
         report_artifact = _sample_vacancy_alignment_report_v2(opportunity_id)
@@ -3363,6 +3375,10 @@ class VacancyV2EndpointsTests(unittest.TestCase):
             vacancy_evidence_adjudication_status="approved",
             vacancy_alignment_summary_v2_artifact=_sample_vacancy_alignment_summary_v2(opportunity_id),
             vacancy_alignment_summary_v2_status="approved",
+            vacancy_fit_presentation_artifact=_sample_vacancy_fit_presentation(opportunity_id),
+            vacancy_fit_presentation_status="approved",
+            candidate_preference_checks_artifact=_sample_candidate_preference_checks("p-001", opportunity_id),
+            candidate_preference_checks_status="approved",
         )
         assert updated is not None
 

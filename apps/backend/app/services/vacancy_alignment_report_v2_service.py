@@ -27,6 +27,14 @@ from app.services.vacancy_alignment_summary_v2_contract import (
     is_vacancy_alignment_summary_v2_contract,
     normalize_vacancy_alignment_summary_v2_contract,
 )
+from app.services.vacancy_fit_presentation_contract import (
+    is_vacancy_fit_presentation_contract,
+    normalize_vacancy_fit_presentation_contract,
+)
+from app.services.candidate_preference_checks_contract import (
+    is_candidate_preference_checks_contract,
+    normalize_candidate_preference_checks_contract,
+)
 from app.services.vacancy_evidence_adjudication_contract import (
     ALIGNMENT_STATUS_CONFLICT,
     ALIGNMENT_STATUS_DIRECT,
@@ -68,21 +76,182 @@ def _has_meaningful_report(contract: VacancyAlignmentReportV2Contract) -> bool:
     )
 
 
-def _evaluable_item_ids(contract: VacancyEvidenceAdjudicationContract) -> set[str]:
-    item_ids: set[str] = set()
-    for item in contract["items"]:
-        if item["alignment_status"] == ALIGNMENT_STATUS_NOT_APPLICABLE:
+def _priority_es_from_type_label(type_label: str) -> str:
+    normalized = str(type_label or "").strip().casefold()
+    if normalized == "deseable":
+        return "Deseable"
+    return "Importante"
+
+
+def _origin_es_from_group(group: str) -> str:
+    if group == "required_criteria":
+        return "Vacante obligatoria"
+    if group == "desirable_criteria":
+        return "Vacante deseable"
+    if group == "responsibilities":
+        return "Responsabilidad"
+    return "Vacante condicion"
+
+
+def _category_es_from_group(group: str) -> str:
+    if group == "responsibilities":
+        return "Responsabilidades"
+    if group == "desirable_criteria":
+        return "Conocimientos"
+    return "Experiencia"
+
+
+def _tipo_evidencia_es_from_state(state: str) -> str:
+    if state == "🟢 Cumple":
+        return "directa"
+    if state == "🟡 Parcial":
+        return "parcial"
+    if state == "🔴 En conflicto":
+        return "conflicto"
+    return "no evidenciada"
+
+
+def _fuerza_evidencia_es_from_confidence(confidence: str, evidence_count: int) -> str:
+    if evidence_count <= 0:
+        return "ninguna"
+    normalized = str(confidence or "").strip().casefold()
+    if normalized == "high":
+        return "alta"
+    if normalized == "medium":
+        return "media"
+    if normalized == "low":
+        return "baja"
+    return "media"
+
+
+def _riesgo_postulacion_es(candidate_risk: str) -> str:
+    normalized = str(candidate_risk or "").strip().casefold()
+    if normalized == "none":
+        return "ninguno"
+    if normalized == "low":
+        return "bajo"
+    if normalized == "medium":
+        return "medio"
+    if normalized == "high":
+        return "alto"
+    return "medio"
+
+
+def _evidencia_candidato_from_row(row: dict[str, Any]) -> str:
+    evidence = row.get("evidence")
+    if isinstance(evidence, list):
+        snippets = [
+            str(item.get("snippet", "")).strip()
+            for item in evidence
+            if isinstance(item, dict) and str(item.get("snippet", "")).strip()
+        ]
+        if snippets:
+            return " | ".join(snippets[:3])
+    return str(row.get("why", "")).strip()
+
+
+def _fuentes_from_row(row: dict[str, Any]) -> list[str]:
+    evidence = row.get("evidence")
+    if not isinstance(evidence, list):
+        return []
+    sources: list[str] = []
+    seen: set[str] = set()
+    for item in evidence:
+        if not isinstance(item, dict):
             continue
-        if item["item_id"]:
-            item_ids.add(item["item_id"])
+        source_ref = str(item.get("source_ref", "")).strip()
+        if not source_ref:
+            continue
+        signature = source_ref.casefold()
+        if signature in seen:
+            continue
+        seen.add(signature)
+        sources.append(source_ref)
+    return sources
+
+
+def _deterministic_fit_matrix_from_presentation(
+    vacancy_fit_presentation_artifact: dict[str, Any],
+) -> list[dict[str, Any]]:
+    presentation = normalize_vacancy_fit_presentation_contract(vacancy_fit_presentation_artifact)
+    rows: list[dict[str, Any]] = []
+    for group in ("required_criteria", "responsibilities", "desirable_criteria"):
+        for row in presentation["groups"][group]:
+            rows.append(
+                {
+                    "item_id": row["item_id"],
+                    "criterio": row["criterion"],
+                    "categoria": _category_es_from_group(row["group"]),
+                    "origen_del_criterio": _origin_es_from_group(row["group"]),
+                    "prioridad": _priority_es_from_type_label(row["type_label"]),
+                    "estado": row["state"],
+                    "lo_que_solicita_la_vacante": row["criterion"],
+                    "evidencia_del_candidato": _evidencia_candidato_from_row(row),
+                    "tipo_de_evidencia": _tipo_evidencia_es_from_state(row["state"]),
+                    "fuerza_de_evidencia": _fuerza_evidencia_es_from_confidence(
+                        row["confidence"],
+                        int(row["evidence_count"]),
+                    ),
+                    "descripcion_corta": row["why"],
+                    "riesgo_para_la_postulacion": _riesgo_postulacion_es(row["candidate_risk"]),
+                    "fuentes": _fuentes_from_row(row),
+                }
+            )
+    return rows
+
+
+def _preference_category_es(criterion_key: str) -> str:
+    return {
+        "location": "Ubicación",
+        "modality": "Modalidad",
+        "compensation": "Compensación",
+        "contract_type": "Condiciones laborales",
+    }.get(criterion_key, "Otro")
+
+
+def _deterministic_preference_matrix(
+    candidate_preference_checks_artifact: dict[str, Any],
+) -> list[dict[str, Any]]:
+    checks = normalize_candidate_preference_checks_contract(candidate_preference_checks_artifact)
+    rows: list[dict[str, Any]] = []
+    for row in checks["rows"]:
+        rows.append(
+            {
+                "criterio": row["criterion"],
+                "categoria": _preference_category_es(row["criterion_key"]),
+                "origen_del_criterio": "Preferencia del candidato",
+                "estado": row["state"],
+                "lo_que_ofrece_o_define_la_vacante": row["vacancy_value"],
+                "preferencia_o_condicion_del_candidato": row["candidate_value"],
+                "descripcion_corta": row["why"],
+                "validacion_recomendada": (
+                    "Validar con reclutador si el detalle final cambia esta condicion."
+                    if row["state"] in {"🟡 Parcial", "⚪ Sin informacion"}
+                    else ""
+                ),
+            }
+        )
+    return rows
+
+
+def _expected_fit_matrix_item_ids_from_presentation(
+    vacancy_fit_presentation_artifact: dict[str, Any],
+) -> set[str]:
+    presentation = normalize_vacancy_fit_presentation_contract(vacancy_fit_presentation_artifact)
+    item_ids: set[str] = set()
+    for group in ("required_criteria", "responsibilities", "desirable_criteria"):
+        for row in presentation["groups"][group]:
+            item_id = str(row.get("item_id", "")).strip()
+            if item_id:
+                item_ids.add(item_id)
     return item_ids
 
 
 def _fit_matrix_diff(
     report_contract: VacancyAlignmentReportV2Contract,
-    adjudication_contract: VacancyEvidenceAdjudicationContract,
+    vacancy_fit_presentation_artifact: dict[str, Any],
 ) -> tuple[list[str], list[str]]:
-    expected_item_ids = _evaluable_item_ids(adjudication_contract)
+    expected_item_ids = _expected_fit_matrix_item_ids_from_presentation(vacancy_fit_presentation_artifact)
     actual_rows = report_contract["report"]["vacancy_fit_matrix"]
     actual_item_ids = {row["item_id"] for row in actual_rows if row["item_id"]}
     missing = sorted(expected_item_ids - actual_item_ids)
@@ -120,13 +289,19 @@ def _format_fit_matrix_completeness_detail(
     *,
     missing_item_ids: list[str],
     extra_item_ids: list[str],
-    adjudication_contract: VacancyEvidenceAdjudicationContract,
+    vacancy_fit_presentation_artifact: dict[str, Any],
 ) -> str:
-    adjudication_index = _build_adjudication_index(adjudication_contract)
+    presentation = normalize_vacancy_fit_presentation_contract(vacancy_fit_presentation_artifact)
+    presentation_index: dict[str, dict[str, Any]] = {}
+    for group in ("required_criteria", "responsibilities", "desirable_criteria"):
+        for row in presentation["groups"][group]:
+            item_id = str(row.get("item_id", "")).strip()
+            if item_id:
+                presentation_index[item_id] = row
     missing_descriptions = [
-        _describe_adjudication_item(adjudication_index[item_id])
+        f"{item_id}: {str(presentation_index[item_id].get('criterion', '')).strip()}"
         for item_id in missing_item_ids
-        if item_id in adjudication_index
+        if item_id in presentation_index
     ]
     detail_parts = [
         f"missing_item_ids={missing_item_ids}",
@@ -140,12 +315,13 @@ def _format_fit_matrix_completeness_detail(
 def _validate_fit_matrix(
     report_contract: VacancyAlignmentReportV2Contract,
     adjudication_contract: VacancyEvidenceAdjudicationContract,
+    vacancy_fit_presentation_artifact: dict[str, Any],
 ) -> None:
-    missing, extra = _fit_matrix_diff(report_contract, adjudication_contract)
+    missing, extra = _fit_matrix_diff(report_contract, vacancy_fit_presentation_artifact)
     if missing or extra:
         raise VacancyAlignmentReportV2BuildError(
             "Step 8 v2 report matrix completeness check failed."
-            f" {_format_fit_matrix_completeness_detail(missing_item_ids=missing, extra_item_ids=extra, adjudication_contract=adjudication_contract)}"
+            f" {_format_fit_matrix_completeness_detail(missing_item_ids=missing, extra_item_ids=extra, vacancy_fit_presentation_artifact=vacancy_fit_presentation_artifact)}"
         )
 
     adjudication_index = _build_adjudication_index(adjudication_contract)
@@ -278,6 +454,8 @@ def _run_report_completion(
     evidence_adjudication_json: str,
     alignment_summary_json: str,
     evidence_analysis_json: str,
+    fit_presentation_json: str,
+    preference_checks_json: str,
     settings: Any,
     llm_temperature: float,
     phase_label: str,
@@ -288,15 +466,18 @@ def _run_report_completion(
         "Responde SOLO JSON valido conforme a vacancy_alignment_report.v2. "
         "No escribas texto fuera del JSON. Debes producir exactamente dos claves raiz: report, rendered_markdown. "
         "Usa vacancy_evidence_adjudication.v1 como insumo principal. Usa vacancy_alignment_summary.v2 como resumen auxiliar. Usa vacancy_evidence_analysis.v1 solo como respaldo. "
+        "Usa vacancy_fit_presentation.v1 como matriz profesional autoritativa y candidate_preference_checks.v1 como matriz de preferencias autoritativa. "
         "No inventes informacion, no infles el perfil, no omitas criterios evaluados y no recalcules scores. "
-        "vacancy_fit_matrix debe incluir todos los criterios evaluados excepto not_applicable. "
-        "Antes de responder, verifica internamente que vacancy_fit_matrix contiene exactamente todos los item_id evaluables de vacancy_evidence_adjudication.v1 y ninguno extra. "
+        "vacancy_fit_matrix debe reflejar exactamente los rows de vacancy_fit_presentation.v1. "
+        "candidate_preference_matrix debe reflejar exactamente los rows de candidate_preference_checks.v1. "
         "Mapeo obligatorio: direct -> 🟢 Cumple; partial/indirect -> 🟡 Parcial; not_evidenced obligatorio -> ⚪ Sin informacion; not_evidenced deseable -> 🔵 Deseable no evidenciado; conflict -> 🔴 En conflicto. "
         "Usa solo estas recomendaciones: Avanzar, Avanzar con reservas, Avanzar si se valida X, No priorizar, Descartar. "
         "Persona: {person_context}. Vacante: {opportunity_context}. "
         "Entrada vacancy_evidence_adjudication.v1: {evidence_adjudication_json}. "
         "Entrada vacancy_alignment_summary.v2: {alignment_summary_json}. "
         "Entrada vacancy_evidence_analysis.v1: {evidence_analysis_json}. "
+        "Entrada vacancy_fit_presentation.v1: {fit_presentation_json}. "
+        "Entrada candidate_preference_checks.v1: {preference_checks_json}. "
         "Instruccion adicional de completitud: {retry_hint}."
     )
     user_prompt = build_prompt_text(
@@ -307,6 +488,8 @@ def _run_report_completion(
             "evidence_adjudication_json": evidence_adjudication_json,
             "alignment_summary_json": alignment_summary_json,
             "evidence_analysis_json": evidence_analysis_json,
+            "fit_presentation_json": fit_presentation_json,
+            "preference_checks_json": preference_checks_json,
             "retry_hint": retry_hint,
         },
         fallback=fallback_user_prompt,
@@ -345,6 +528,8 @@ def extract_vacancy_alignment_report_v2(
     vacancy_evidence_adjudication_artifact: dict[str, Any],
     vacancy_alignment_summary_v2_artifact: dict[str, Any],
     vacancy_evidence_analysis_artifact: dict[str, Any],
+    vacancy_fit_presentation_artifact: dict[str, Any],
+    candidate_preference_checks_artifact: dict[str, Any],
     settings: Any,
 ) -> VacancyAlignmentReportV2Contract:
     if not isinstance(vacancy_evidence_adjudication_artifact, dict) or not is_vacancy_evidence_adjudication_contract(
@@ -365,6 +550,18 @@ def extract_vacancy_alignment_report_v2(
         raise VacancyAlignmentReportV2BuildError(
             "Step 8 v2 requires a valid vacancy_evidence_analysis.v1 artifact."
         )
+    if not isinstance(vacancy_fit_presentation_artifact, dict) or not is_vacancy_fit_presentation_contract(
+        vacancy_fit_presentation_artifact
+    ):
+        raise VacancyAlignmentReportV2BuildError(
+            "Step 8 v2 requires a valid vacancy_fit_presentation.v1 artifact."
+        )
+    if not isinstance(candidate_preference_checks_artifact, dict) or not is_candidate_preference_checks_contract(
+        candidate_preference_checks_artifact
+    ):
+        raise VacancyAlignmentReportV2BuildError(
+            "Step 8 v2 requires a valid candidate_preference_checks.v1 artifact."
+        )
 
     normalized_adjudication = normalize_vacancy_evidence_adjudication_contract(
         vacancy_evidence_adjudication_artifact
@@ -374,6 +571,12 @@ def extract_vacancy_alignment_report_v2(
     )
     normalized_analysis = normalize_vacancy_evidence_analysis_contract(
         vacancy_evidence_analysis_artifact
+    )
+    normalized_fit_presentation = normalize_vacancy_fit_presentation_contract(
+        vacancy_fit_presentation_artifact
+    )
+    normalized_preference_checks = normalize_candidate_preference_checks_contract(
+        candidate_preference_checks_artifact
     )
 
     person_id = str(person.get("person_id", "")).strip() or str(opportunity.get("person_id", "")).strip()
@@ -390,6 +593,8 @@ def extract_vacancy_alignment_report_v2(
     evidence_adjudication_json = json.dumps(normalized_adjudication, ensure_ascii=False)
     alignment_summary_json = json.dumps(normalized_summary, ensure_ascii=False)
     evidence_analysis_json = json.dumps(normalized_analysis, ensure_ascii=False)
+    fit_presentation_json = json.dumps(normalized_fit_presentation, ensure_ascii=False)
+    preference_checks_json = json.dumps(normalized_preference_checks, ensure_ascii=False)
     runtime_config = get_vacancy_v2_runtime_config(settings)
     llm_temperature = float(runtime_config["step3"]["llm_temperature"])
     normalized = _run_report_completion(
@@ -401,10 +606,19 @@ def extract_vacancy_alignment_report_v2(
         evidence_adjudication_json=evidence_adjudication_json,
         alignment_summary_json=alignment_summary_json,
         evidence_analysis_json=evidence_analysis_json,
+        fit_presentation_json=fit_presentation_json,
+        preference_checks_json=preference_checks_json,
         settings=settings,
         llm_temperature=llm_temperature,
         phase_label="Step 8 v2",
     )
+    normalized["report"]["vacancy_fit_matrix"] = _deterministic_fit_matrix_from_presentation(
+        normalized_fit_presentation
+    )
+    normalized["report"]["candidate_preference_matrix"] = _deterministic_preference_matrix(
+        normalized_preference_checks
+    )
+    normalized = normalize_vacancy_alignment_report_v2_contract(normalized)
     normalized["vacancy_id"] = vacancy_id
     normalized["person_id"] = person_id
     normalized["generated_at"] = generated_at
@@ -412,41 +626,15 @@ def extract_vacancy_alignment_report_v2(
         "evidence_adjudication_version": normalized_adjudication["contract_version"],
         "alignment_summary_version": normalized_summary["contract_version"],
         "evidence_analysis_version": normalized_analysis["contract_version"],
+        "fit_presentation_version": normalized_fit_presentation["contract_version"],
+        "preference_checks_version": normalized_preference_checks["contract_version"],
     }
 
-    missing_item_ids, extra_item_ids = _fit_matrix_diff(normalized, normalized_adjudication)
-    if missing_item_ids or extra_item_ids:
-        adjudication_index = _build_adjudication_index(normalized_adjudication)
-        missing_items = [
-            adjudication_index[item_id]
-            for item_id in missing_item_ids
-            if item_id in adjudication_index
-        ]
-        repaired_rows = _run_fit_matrix_repair_completion(
-            person=person,
-            opportunity=opportunity,
-            person_id=person_id,
-            person_context=person_context,
-            opportunity_context=opportunity_context,
-            missing_items=missing_items,
-            settings=settings,
-            llm_temperature=llm_temperature,
-        )
-        normalized = _merge_fit_matrix_rows(
-            report_contract=normalized,
-            adjudication_contract=normalized_adjudication,
-            repaired_rows=repaired_rows,
-        )
-        normalized["vacancy_id"] = vacancy_id
-        normalized["person_id"] = person_id
-        normalized["generated_at"] = generated_at
-        normalized["source_artifacts"] = {
-            "evidence_adjudication_version": normalized_adjudication["contract_version"],
-            "alignment_summary_version": normalized_summary["contract_version"],
-            "evidence_analysis_version": normalized_analysis["contract_version"],
-        }
-
-    _validate_fit_matrix(normalized, normalized_adjudication)
+    _validate_fit_matrix(
+        normalized,
+        normalized_adjudication,
+        normalized_fit_presentation,
+    )
     _validate_recommendations(normalized)
 
     if _has_meaningful_report(normalized):

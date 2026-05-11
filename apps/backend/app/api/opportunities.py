@@ -2715,6 +2715,14 @@ def recompute_vacancy_alignment_report_v2(
                 "vacancy_evidence_analysis_artifact",
                 {},
             ),
+            vacancy_fit_presentation_artifact=opportunity.get(
+                "vacancy_fit_presentation_artifact",
+                {},
+            ),
+            candidate_preference_checks_artifact=opportunity.get(
+                "candidate_preference_checks_artifact",
+                {},
+            ),
             settings=settings,
         )
     except VacancyAlignmentReportV2BuildError as exc:
@@ -2796,6 +2804,14 @@ async def recompute_vacancy_alignment_report_v2_stream(
                 ),
                 vacancy_evidence_analysis_artifact=opportunity.get(
                     "vacancy_evidence_analysis_artifact",
+                    {},
+                ),
+                vacancy_fit_presentation_artifact=opportunity.get(
+                    "vacancy_fit_presentation_artifact",
+                    {},
+                ),
+                candidate_preference_checks_artifact=opportunity.get(
+                    "candidate_preference_checks_artifact",
                     {},
                 ),
                 settings=settings,

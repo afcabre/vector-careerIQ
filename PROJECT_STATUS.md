@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `El rediseño de match ya cuenta con P0, C1 y C2 en backend: la vacante ya normaliza condiciones comparables, S3.1 preserva componente variable explicito y ahora existe un artefacto deterministico de checks vacante-perfil para ubicacion, modalidad, compensacion y tipo de contrato`
+- checkpoint_actual: `El rediseño de match ya cuenta con P0, C1, C2 y P1 operativos; S8 v2 ya consume la matriz profesional y la matriz de preferencias como estructuras autoritativas, dejando al LLM concentrado en la narrativa final`
 - repo_status: `flujo V1 operativo con analisis, postulacion, chat, CV semantico, admin de prompts y extraccion estructurada de vacantes en forma legacy estable; propuesta v2 desacoplada en branch experimental`
 - ultima_actualizacion: `2026-05-11`
 
@@ -61,10 +61,10 @@
 - ajuste UX/debug aplicado a `S6.5` en frontend: si la adjudicacion grounded falla por SSE, la tarjeta ahora muestra el detalle inline junto al step y refresca la oportunidad para reflejar el estado `error` persistido en backend
 - slice frontend experimental extendido a `S8 v2`: panel `Vacancy V2` ahora expone `Vacancy Alignment Report Grounded` con `status`, `generated_at`, recompute por SSE, aprobacion manual `draft/approved`, vista markdown y JSON read-only del artefacto `vacancy_alignment_report_v2_*`
 - ajuste UX/debug aplicado a `S8 v2` en frontend: si el reporte grounded v2 falla por SSE, la tarjeta ahora muestra el detalle inline junto al step, incluye el ultimo `stage` cuando falta `message_complete` y refresca la oportunidad para reflejar el estado `error` persistido en backend
-- nuevo slice backend de `S8 v2` implementado en paralelo: contrato `vacancy_alignment_report.v2`, flow `task_vacancy_alignment_report_v2`, servicio grounded sobre `vacancy_evidence_adjudication.v1 + vacancy_alignment_summary.v2`, persistencia separada `vacancy_alignment_report_v2_*` y endpoints `vacancy-alignment-report-v2/recompute` / `recompute/stream`
-- validacion automatica agregada en `S8 v2`: la `vacancy_fit_matrix` debe cubrir exactamente todos los `item_id` adjudicados salvo `not_applicable`, no puede inventar `item_id` y debe respetar el mapeo de estados desde adjudicacion
-- validacion tecnica del slice `S8 v2` en verde: `cd apps/backend && .venv/bin/python -m unittest tests.test_vacancy_alignment_report_v2_contract tests.test_vacancy_alignment_report_v2_service tests.test_vacancy_v2_endpoints` (`56 tests`)
-- hardening de completitud aplicado a `S8 v2`: si el reporte inicial omite filas en `vacancy_fit_matrix`, backend ejecuta una segunda llamada LLM enfocada solo en los `item_id` faltantes y luego recompone la matriz por `item_id`, conservando las filas validas del reporte original y completando solo las ausentes con salida del LLM; si aun falla, el error lista `missing_item_ids`, `extra_item_ids` y los criterios humanos omitidos
+- nuevo slice backend de `S8 v2` implementado en paralelo: contrato `vacancy_alignment_report.v2`, flow `task_vacancy_alignment_report_v2`, persistencia separada `vacancy_alignment_report_v2_*` y endpoints `vacancy-alignment-report-v2/recompute` / `recompute/stream`
+- refactor de `S8 v2` aplicado: el servicio grounded ya no reconstruye matrices por cuenta propia; ahora consume `vacancy_fit_presentation.v1` (`P1`) como matriz profesional autoritativa y `candidate_preference_checks.v1` (`C2`) como matriz autoritativa de condiciones/preferencias, dejando al LLM concentrado en resumen ejecutivo, narrativa y conclusion accionable
+- validacion estructural vigente en `S8 v2`: `vacancy_fit_matrix` y `candidate_preference_matrix` se derivan deterministicamente desde `P1 + C2`, de modo que el reporte final deja de depender de que el LLM complete u omita filas
+- validacion tecnica del refactor `S8 v2 -> P1 + C2` en verde: `cd apps/backend && .venv/bin/python -m unittest tests.test_vacancy_alignment_report_v2_service tests.test_vacancy_v2_endpoints` (`67 tests`)
 - plan de implementacion y tareas de seguimiento volcados a Notion en `Engineering Projects Hub`
 - mecanica operativa de ejecucion y fuente de verdad formalizada en `AGENTS.md`
 - protocolo iterativo de implementacion agregado en `.specify/instructions/Implementation-Worker-Protocol.md`

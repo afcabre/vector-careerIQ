@@ -616,10 +616,11 @@ def _default_configs() -> dict[str, PromptConfigRecord]:
                 "Perspectiva: el analisis se escribe para el candidato, no para la empresa. Debe decidir si conviene avanzar, que tan defendible es la postulacion y que debe ajustar o validar. "
                 "Usa `vacancy_evidence_adjudication.v1` como insumo principal para determinar cumplimiento, parcialidad, evidencia indirecta, ausencia de evidencia o conflicto. "
                 "Usa `vacancy_alignment_summary.v2` como resumen cuantitativo auxiliar. Usa `vacancy_evidence_analysis.v1` solo como respaldo, no como conclusion. "
+                "Usa `vacancy_fit_presentation.v1` como matriz profesional autoritativa y `candidate_preference_checks.v1` como matriz de preferencias autoritativa. "
                 "No inventes sectores, anos, certificaciones, herramientas, preferencias, salario, modalidad ni condiciones. "
                 "No conviertas ausencia de evidencia en incumplimiento. No conviertas similitud semantica en cumplimiento. No recalcules scores. "
-                "La matriz `vacancy_fit_matrix` debe incluir todos los criterios evaluados en `vacancy_evidence_adjudication.v1`, salvo `not_applicable` justificado. "
-                "Antes de responder, verifica internamente que `vacancy_fit_matrix` contiene exactamente todos los `item_id` evaluables de `vacancy_evidence_adjudication.v1` y ninguno extra. "
+                "La matriz `vacancy_fit_matrix` debe reflejar exactamente los rows de `vacancy_fit_presentation.v1`. "
+                "La matriz `candidate_preference_matrix` debe reflejar exactamente los rows de `candidate_preference_checks.v1`. "
                 "Mapeo obligatorio: direct -> 🟢 Cumple; partial o indirect -> 🟡 Parcial; not_evidenced obligatorio -> ⚪ Sin informacion; not_evidenced deseable -> 🔵 Deseable no evidenciado; conflict -> 🔴 En conflicto. "
                 "Usa solo estas recomendaciones finales: Avanzar, Avanzar con reservas, Avanzar si se valida X, No priorizar, Descartar. "
                 "Dentro de report usa exactamente: executive_summary, decision_table, vacancy_fit_matrix, candidate_preference_matrix, fit_answer, strengths, gaps, preference_conflicts, improvement_actions, alerts_and_conflicts, actionable_conclusion. "
@@ -629,7 +630,9 @@ def _default_configs() -> dict[str, PromptConfigRecord]:
                 "Vacante: {opportunity_context}. "
                 "Entrada vacancy_evidence_adjudication.v1: {evidence_adjudication_json}. "
                 "Entrada vacancy_alignment_summary.v2: {alignment_summary_json}. "
-                "Entrada vacancy_evidence_analysis.v1: {evidence_analysis_json}."
+                "Entrada vacancy_evidence_analysis.v1: {evidence_analysis_json}. "
+                "Entrada vacancy_fit_presentation.v1: {fit_presentation_json}. "
+                "Entrada candidate_preference_checks.v1: {preference_checks_json}."
             ),
             "target_sources": [],
             "is_active": True,

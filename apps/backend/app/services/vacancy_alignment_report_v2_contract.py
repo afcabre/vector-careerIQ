@@ -143,6 +143,8 @@ class SourceArtifactsPayloadV2(TypedDict):
     evidence_adjudication_version: str
     alignment_summary_version: str
     evidence_analysis_version: str
+    fit_presentation_version: str
+    preference_checks_version: str
 
 
 class VacancyAlignmentReportV2Contract(TypedDict):
@@ -512,6 +514,8 @@ def empty_vacancy_alignment_report_v2_contract() -> VacancyAlignmentReportV2Cont
             "evidence_adjudication_version": "",
             "alignment_summary_version": "",
             "evidence_analysis_version": "",
+            "fit_presentation_version": "",
+            "preference_checks_version": "",
         },
         "report": _empty_report(),
         "rendered_markdown": "",
@@ -529,6 +533,8 @@ def normalize_vacancy_alignment_report_v2_contract(raw: Any) -> VacancyAlignment
         "evidence_adjudication_version": _clean_text(source_artifacts.get("evidence_adjudication_version"), max_chars=64),
         "alignment_summary_version": _clean_text(source_artifacts.get("alignment_summary_version"), max_chars=64),
         "evidence_analysis_version": _clean_text(source_artifacts.get("evidence_analysis_version"), max_chars=64),
+        "fit_presentation_version": _clean_text(source_artifacts.get("fit_presentation_version"), max_chars=64),
+        "preference_checks_version": _clean_text(source_artifacts.get("preference_checks_version"), max_chars=64),
     }
     normalized["report"] = _normalize_report(source.get("report"))
     normalized["rendered_markdown"] = _clean_markdown(source.get("rendered_markdown"))

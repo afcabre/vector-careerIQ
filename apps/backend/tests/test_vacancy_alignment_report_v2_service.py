@@ -177,6 +177,73 @@ def _analysis() -> dict[str, object]:
     }
 
 
+def _fit_presentation() -> dict[str, object]:
+    return {
+        "contract_version": "vacancy_fit_presentation.v1",
+        "vacancy_id": "o-r2-001",
+        "generated_at": "2026-05-08T18:01:30Z",
+        "groups": {
+            "required_criteria": [
+                {
+                    "item_id": "req_1",
+                    "item_index": 0,
+                    "group": "required_criteria",
+                    "group_code": "req",
+                    "type_label": "Obligatorio",
+                    "criterion": "Minimo 5 anos de experiencia profesional",
+                    "state": "🟢 Cumple",
+                    "why": "El CV declara 20 anos de experiencia profesional.",
+                    "evidence_count": 0,
+                    "evidence": [],
+                    "limitations": [],
+                    "confidence": "high",
+                    "candidate_risk": "low",
+                }
+            ],
+            "responsibilities": [],
+            "desirable_criteria": [
+                {
+                    "item_id": "des_1",
+                    "item_index": 1,
+                    "group": "desirable_criteria",
+                    "group_code": "des",
+                    "type_label": "Deseable",
+                    "criterion": "Certificacion PMP o Scrum",
+                    "state": "🔵 Deseable no evidenciado",
+                    "why": "No se observa certificacion formal en los snippets.",
+                    "evidence_count": 0,
+                    "evidence": [],
+                    "limitations": [],
+                    "confidence": "medium",
+                    "candidate_risk": "low",
+                }
+            ],
+        },
+        "warnings": [],
+    }
+
+
+def _preference_checks() -> dict[str, object]:
+    return {
+        "contract_version": "candidate_preference_checks.v1",
+        "vacancy_id": "o-r2-001",
+        "person_id": "p-001",
+        "generated_at": "2026-05-08T18:01:40Z",
+        "rows": [
+            {
+                "criterion_key": "location",
+                "criterion": "Ubicacion",
+                "state": "🟢 Cumple",
+                "vacancy_value": "Bogota, Colombia",
+                "candidate_value": "Bogota, Colombia",
+                "why": "La ubicacion es compatible.",
+                "confidence": "high",
+            }
+        ],
+        "warnings": [],
+    }
+
+
 class VacancyAlignmentReportV2ServiceTests(unittest.TestCase):
     def test_extract_success_returns_normalized_report_contract(self) -> None:
         llm_response = (
@@ -211,6 +278,8 @@ class VacancyAlignmentReportV2ServiceTests(unittest.TestCase):
                 vacancy_evidence_adjudication_artifact=_adjudication(),
                 vacancy_alignment_summary_v2_artifact=_summary_v2(),
                 vacancy_evidence_analysis_artifact=_analysis(),
+                vacancy_fit_presentation_artifact=_fit_presentation(),
+                candidate_preference_checks_artifact=_preference_checks(),
                 settings=object(),
             )
 
@@ -222,6 +291,7 @@ class VacancyAlignmentReportV2ServiceTests(unittest.TestCase):
             "vacancy_evidence_adjudication.v1",
         )
         self.assertEqual(len(contract["report"]["vacancy_fit_matrix"]), 2)
+        self.assertEqual(len(contract["report"]["candidate_preference_matrix"]), 1)
         self.assertTrue(contract["rendered_markdown"])
 
     def test_extract_requires_valid_inputs(self) -> None:
@@ -232,6 +302,8 @@ class VacancyAlignmentReportV2ServiceTests(unittest.TestCase):
                 vacancy_evidence_adjudication_artifact={},
                 vacancy_alignment_summary_v2_artifact=_summary_v2(),
                 vacancy_evidence_analysis_artifact=_analysis(),
+                vacancy_fit_presentation_artifact=_fit_presentation(),
+                candidate_preference_checks_artifact=_preference_checks(),
                 settings=object(),
             )
 
@@ -267,6 +339,8 @@ class VacancyAlignmentReportV2ServiceTests(unittest.TestCase):
                     vacancy_evidence_adjudication_artifact=_adjudication(),
                     vacancy_alignment_summary_v2_artifact=_summary_v2(),
                     vacancy_evidence_analysis_artifact=_analysis(),
+                    vacancy_fit_presentation_artifact=_fit_presentation(),
+                    candidate_preference_checks_artifact=_preference_checks(),
                     settings=object(),
                 )
 
@@ -278,56 +352,23 @@ class VacancyAlignmentReportV2ServiceTests(unittest.TestCase):
         )
         self.assertIn("evidence_adjudication_json", task_call.kwargs["context"])
         self.assertIn("alignment_summary_json", task_call.kwargs["context"])
+        self.assertIn("fit_presentation_json", task_call.kwargs["context"])
+        self.assertIn("preference_checks_json", task_call.kwargs["context"])
         self.assertEqual(
             complete_prompt_mock.call_args.kwargs["flow_key"],
             FLOW_TASK_VACANCY_ALIGNMENT_REPORT_V2,
         )
 
-    def test_extract_fails_when_fit_matrix_repair_is_still_incomplete(self) -> None:
-        initial_response = (
-            "{"
-            "\"report\":{"
-            "\"executive_summary\":{\"fit_level\":\"medio\",\"final_recommendation\":\"No priorizar\",\"summary\":\"Resumen\",\"main_strength\":\"\",\"main_gap_or_risk\":\"\",\"confidence\":\"media\"},"
-            "\"decision_table\":{},"
-            "\"vacancy_fit_matrix\":["
-            "{\"item_id\":\"req_1\",\"criterio\":\"Minimo 5 anos de experiencia profesional\",\"categoria\":\"Experiencia\",\"origen_del_criterio\":\"Vacante obligatoria\",\"prioridad\":\"Importante\",\"estado\":\"🟢 Cumple\",\"lo_que_solicita_la_vacante\":\"Minimo 5 anos de experiencia profesional\",\"evidencia_del_candidato\":\"20 anos de experiencia profesional.\",\"tipo_de_evidencia\":\"directa\",\"fuerza_de_evidencia\":\"alta\",\"descripcion_corta\":\"Directo\",\"riesgo_para_la_postulacion\":\"bajo\",\"fuentes\":[]}"
-            "],"
-            "\"candidate_preference_matrix\":[],"
-            "\"fit_answer\":{\"encaja\":\"sí\",\"respuesta_para_el_candidato\":\"Si\"},"
-            "\"strengths\":[],\"gaps\":[],\"preference_conflicts\":[],\"improvement_actions\":{},\"alerts_and_conflicts\":[],"
-            "\"actionable_conclusion\":{\"final_decision\":\"No priorizar\",\"main_reason\":\"\",\"recommended_next_step\":\"\",\"confidence\":\"media\"}"
-            "},"
-            "\"rendered_markdown\":\"## Resumen ejecutivo\\n\\nTexto\""
-            "}"
-        )
-        repair_response = "{\"vacancy_fit_matrix\":[]}"
-        with patch(
-            "app.services.vacancy_alignment_report_v2_service.complete_prompt",
-            side_effect=[initial_response, repair_response],
-        ) as mocked_complete:
-            with self.assertRaises(VacancyAlignmentReportV2BuildError) as raised:
-                extract_vacancy_alignment_report_v2(
-                    person=_person(),
-                    opportunity=_opportunity(),
-                    vacancy_evidence_adjudication_artifact=_adjudication(),
-                    vacancy_alignment_summary_v2_artifact=_summary_v2(),
-                    vacancy_evidence_analysis_artifact=_analysis(),
-                    settings=object(),
-                )
-        self.assertEqual(mocked_complete.call_count, 2)
-        self.assertIn("missing_item_ids=['des_1']", str(raised.exception))
-        self.assertIn("missing_items=['des_1: Certificacion PMP o Scrum']", str(raised.exception))
-
-    def test_extract_repairs_missing_fit_matrix_rows_with_targeted_llm_call(self) -> None:
-        first_response = (
+    def test_extract_overrides_llm_matrices_with_deterministic_p1_and_c2(self) -> None:
+        llm_response = (
             "{"
             "\"report\":{"
             "\"executive_summary\":{\"fit_level\":\"medio\",\"final_recommendation\":\"No priorizar\",\"summary\":\"Resumen parcial\",\"main_strength\":\"\",\"main_gap_or_risk\":\"\",\"confidence\":\"media\"},"
             "\"decision_table\":{},"
             "\"vacancy_fit_matrix\":["
-            "{\"item_id\":\"req_1\",\"criterio\":\"Minimo 5 anos de experiencia profesional\",\"categoria\":\"Experiencia\",\"origen_del_criterio\":\"Vacante obligatoria\",\"prioridad\":\"Importante\",\"estado\":\"🟢 Cumple\",\"lo_que_solicita_la_vacante\":\"Minimo 5 anos de experiencia profesional\",\"evidencia_del_candidato\":\"20 anos de experiencia profesional.\",\"tipo_de_evidencia\":\"directa\",\"fuerza_de_evidencia\":\"alta\",\"descripcion_corta\":\"Directo\",\"riesgo_para_la_postulacion\":\"bajo\",\"fuentes\":[]}"
+            "{\"item_id\":\"invented\",\"criterio\":\"Fila inventada\",\"categoria\":\"Experiencia\",\"origen_del_criterio\":\"Vacante obligatoria\",\"prioridad\":\"Importante\",\"estado\":\"🟢 Cumple\",\"lo_que_solicita_la_vacante\":\"Fila inventada\",\"evidencia_del_candidato\":\"Inventada\",\"tipo_de_evidencia\":\"directa\",\"fuerza_de_evidencia\":\"alta\",\"descripcion_corta\":\"Inventada\",\"riesgo_para_la_postulacion\":\"bajo\",\"fuentes\":[]}"
             "],"
-            "\"candidate_preference_matrix\":[],"
+            "\"candidate_preference_matrix\":[{\"criterio\":\"Inventado\",\"categoria\":\"Otro\",\"origen_del_criterio\":\"Preferencia del candidato\",\"estado\":\"🔴 En conflicto\",\"lo_que_ofrece_o_define_la_vacante\":\"X\",\"preferencia_o_condicion_del_candidato\":\"Y\",\"descripcion_corta\":\"Inventado\",\"validacion_recomendada\":\"\"}],"
             "\"fit_answer\":{\"encaja\":\"sí\",\"respuesta_para_el_candidato\":\"Si\"},"
             "\"strengths\":[],\"gaps\":[],\"preference_conflicts\":[],\"improvement_actions\":{},\"alerts_and_conflicts\":[],"
             "\"actionable_conclusion\":{\"final_decision\":\"No priorizar\",\"main_reason\":\"\",\"recommended_next_step\":\"\",\"confidence\":\"media\"}"
@@ -335,17 +376,9 @@ class VacancyAlignmentReportV2ServiceTests(unittest.TestCase):
             "\"rendered_markdown\":\"## Resumen ejecutivo\\n\\nTexto parcial\""
             "}"
         )
-        matrix_repair_response = (
-            "{"
-            "\"vacancy_fit_matrix\":["
-            "{\"item_id\":\"des_1\",\"criterio\":\"Certificacion PMP o Scrum\",\"categoria\":\"Certificaciones\",\"origen_del_criterio\":\"Vacante deseable\",\"prioridad\":\"Deseable\",\"estado\":\"🔵 Deseable no evidenciado\",\"lo_que_solicita_la_vacante\":\"Certificacion PMP o Scrum\",\"evidencia_del_candidato\":\"No se observa certificacion formal en los snippets.\",\"tipo_de_evidencia\":\"no evidenciada\",\"fuerza_de_evidencia\":\"ninguna\",\"descripcion_corta\":\"Es un deseable no demostrado.\",\"riesgo_para_la_postulacion\":\"bajo\",\"fuentes\":[]}"
-            "]"
-            "}"
-        )
-
         with patch(
             "app.services.vacancy_alignment_report_v2_service.complete_prompt",
-            side_effect=[first_response, matrix_repair_response],
+            return_value=llm_response,
         ) as mocked_complete:
             contract = extract_vacancy_alignment_report_v2(
                 person=_person(),
@@ -353,14 +386,20 @@ class VacancyAlignmentReportV2ServiceTests(unittest.TestCase):
                 vacancy_evidence_adjudication_artifact=_adjudication(),
                 vacancy_alignment_summary_v2_artifact=_summary_v2(),
                 vacancy_evidence_analysis_artifact=_analysis(),
+                vacancy_fit_presentation_artifact=_fit_presentation(),
+                candidate_preference_checks_artifact=_preference_checks(),
                 settings=object(),
             )
 
-        self.assertEqual(mocked_complete.call_count, 2)
+        self.assertEqual(mocked_complete.call_count, 1)
         self.assertEqual(len(contract["report"]["vacancy_fit_matrix"]), 2)
         self.assertEqual(
-            contract["report"]["vacancy_fit_matrix"][1]["item_id"],
-            "des_1",
+            contract["report"]["vacancy_fit_matrix"][0]["item_id"],
+            "req_1",
+        )
+        self.assertEqual(
+            contract["report"]["candidate_preference_matrix"][0]["criterio"],
+            "Ubicacion",
         )
 
 
