@@ -65,6 +65,7 @@
 - refactor de `S8 v2` aplicado: el servicio grounded ya no reconstruye matrices por cuenta propia; ahora consume `vacancy_fit_presentation.v1` (`P1`) como matriz profesional autoritativa y `candidate_preference_checks.v1` (`C2`) como matriz autoritativa de condiciones/preferencias, dejando al LLM concentrado en resumen ejecutivo, narrativa y conclusion accionable
 - validacion estructural vigente en `S8 v2`: `vacancy_fit_matrix` y `candidate_preference_matrix` se derivan deterministicamente desde `P1 + C2`, de modo que el reporte final deja de depender de que el LLM complete u omita filas
 - validacion tecnica del refactor `S8 v2 -> P1 + C2` en verde: `cd apps/backend && .venv/bin/python -m unittest tests.test_vacancy_alignment_report_v2_service tests.test_vacancy_v2_endpoints` (`67 tests`)
+- correccion adicional aplicada en `S8 v2`: la validacion de completitud de `vacancy_fit_matrix` ahora se mide contra los `item_id` presentes en `P1`, no contra todo el universo adjudicado de `S6.5`; con esto dejan de exigirse en la tabla principal los grupos excluidos por diseno (`work_conditions`, `benefits`, `about_the_company`)
 - plan de implementacion y tareas de seguimiento volcados a Notion en `Engineering Projects Hub`
 - mecanica operativa de ejecucion y fuente de verdad formalizada en `AGENTS.md`
 - protocolo iterativo de implementacion agregado en `.specify/instructions/Implementation-Worker-Protocol.md`
