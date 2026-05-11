@@ -453,7 +453,7 @@ class VacancyAlignmentReportV2ServiceTests(unittest.TestCase):
             "Avanzar con reservas",
         )
 
-    def test_extract_fails_when_required_narrative_sections_remain_empty_after_retry(self) -> None:
+    def test_extract_backfills_required_narrative_sections_when_retry_still_returns_empty(self) -> None:
         empty_narrative_response = (
             "{"
             "\"report\":{"
@@ -472,22 +472,38 @@ class VacancyAlignmentReportV2ServiceTests(unittest.TestCase):
         with patch(
             "app.services.vacancy_alignment_report_v2_service.complete_prompt",
             side_effect=[empty_narrative_response, empty_narrative_response],
-        ):
-            with self.assertRaises(VacancyAlignmentReportV2BuildError) as raised:
-                extract_vacancy_alignment_report_v2(
-                    person=_person(),
-                    opportunity=_opportunity(),
-                    vacancy_evidence_adjudication_artifact=_adjudication(),
-                    vacancy_alignment_summary_v2_artifact=_summary_v2(),
-                    vacancy_evidence_analysis_artifact=_analysis(),
-                    vacancy_fit_presentation_artifact=_fit_presentation(),
-                    candidate_preference_checks_artifact=_preference_checks(),
-                    settings=object(),
-                )
+        ) as mocked_complete:
+            contract = extract_vacancy_alignment_report_v2(
+                person=_person(),
+                opportunity=_opportunity(),
+                vacancy_evidence_adjudication_artifact=_adjudication(),
+                vacancy_alignment_summary_v2_artifact=_summary_v2(),
+                vacancy_evidence_analysis_artifact=_analysis(),
+                vacancy_fit_presentation_artifact=_fit_presentation(),
+                candidate_preference_checks_artifact=_preference_checks(),
+                settings=object(),
+            )
 
+        self.assertEqual(mocked_complete.call_count, 2)
+        self.assertTrue(contract["report"]["executive_summary"]["summary"])
+        self.assertTrue(contract["report"]["decision_table"]["recomendacion"]["resultado"])
+        self.assertTrue(contract["report"]["fit_answer"]["respuesta_para_el_candidato"])
+        self.assertTrue(contract["report"]["actionable_conclusion"]["recommended_next_step"])
         self.assertIn(
-            "executive_summary",
-            str(raised.exception),
+            "| Tipo | Criterio | Estado | Por qué |",
+            contract["rendered_markdown"],
+        )
+        self.assertIn(
+            "| Resumen | Resultado | Cómo leerlo |",
+            contract["rendered_markdown"],
+        )
+        self.assertIn(
+            "Requisitos obligatorios cumplidos",
+            contract["rendered_markdown"],
+        )
+        self.assertNotIn(
+            "Alineación general",
+            contract["rendered_markdown"],
         )
 
 

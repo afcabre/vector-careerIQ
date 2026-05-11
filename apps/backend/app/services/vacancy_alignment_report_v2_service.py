@@ -297,6 +297,456 @@ def _deterministic_preference_matrix(
     return rows
 
 
+def _count_states(rows: list[dict[str, Any]]) -> dict[str, int]:
+    counts = {
+        "🟢 Cumple": 0,
+        "🟡 Parcial": 0,
+        "⚪ Sin informacion": 0,
+        "🔴 En conflicto": 0,
+        "🔵 Deseable no evidenciado": 0,
+    }
+    for row in rows:
+        state = str(row.get("estado", "")).strip()
+        if state in counts:
+            counts[state] += 1
+    return counts
+
+
+def _recommendation_from_rows(
+    fit_rows: list[dict[str, Any]],
+    preference_rows: list[dict[str, Any]],
+) -> str:
+    fit_counts = _count_states(fit_rows)
+    preference_counts = _count_states(preference_rows)
+    if fit_counts["🔴 En conflicto"] > 0:
+        return "Descartar"
+    if fit_counts["⚪ Sin informacion"] >= 2:
+        return "Avanzar si se valida X"
+    if (
+        fit_counts["🟡 Parcial"] > 0
+        or fit_counts["⚪ Sin informacion"] > 0
+        or fit_counts["🔵 Deseable no evidenciado"] > 0
+        or preference_counts["🔴 En conflicto"] > 0
+        or preference_counts["⚪ Sin informacion"] > 0
+    ):
+        return "Avanzar con reservas"
+    return "Avanzar"
+
+
+def _fit_level_from_rows(
+    fit_rows: list[dict[str, Any]],
+    preference_rows: list[dict[str, Any]],
+) -> str:
+    fit_counts = _count_states(fit_rows)
+    preference_counts = _count_states(preference_rows)
+    if fit_counts["🔴 En conflicto"] > 0:
+        return "bajo"
+    if fit_counts["⚪ Sin informacion"] >= 2:
+        return "medio"
+    if (
+        fit_counts["🟡 Parcial"] > 0
+        or fit_counts["⚪ Sin informacion"] > 0
+        or fit_counts["🔵 Deseable no evidenciado"] > 0
+        or preference_counts["🔴 En conflicto"] > 0
+    ):
+        return "medio_alto"
+    return "alto"
+
+
+def _fit_answer_from_recommendation(recommendation: str) -> str:
+    if recommendation == "Avanzar":
+        return "sí"
+    if recommendation in {"Avanzar con reservas", "Avanzar si se valida X"}:
+        return "parcialmente"
+    return "no"
+
+
+def _first_row_with_states(rows: list[dict[str, Any]], states: set[str]) -> dict[str, Any] | None:
+    for row in rows:
+        if str(row.get("estado", "")).strip() in states:
+            return row
+    return None
+
+
+def _derive_strengths_from_fit_rows(fit_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    strengths: list[dict[str, Any]] = []
+    for row in fit_rows:
+        if row["estado"] != "🟢 Cumple":
+            continue
+        strengths.append(
+            {
+                "fortaleza": row["criterio"],
+                "por_que_importa": row["descripcion_corta"] or row["lo_que_solicita_la_vacante"],
+                "evidencia": row["evidencia_del_candidato"] or row["descripcion_corta"],
+            }
+        )
+        if len(strengths) >= 3:
+            break
+    return strengths
+
+
+def _derive_gaps_from_fit_rows(fit_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    gaps: list[dict[str, Any]] = []
+    for row in fit_rows:
+        state = row["estado"]
+        if state == "🟢 Cumple":
+            continue
+        gap_type = "brecha real"
+        if state == "⚪ Sin informacion":
+            gap_type = "no demostrado en CV"
+        elif state == "🔵 Deseable no evidenciado":
+            gap_type = "deseable no evidenciado"
+        elif state == "🟡 Parcial":
+            gap_type = "requisito ambiguo"
+        gaps.append(
+            {
+                "brecha": row["criterio"],
+                "tipo": gap_type,
+                "impacto": "medio" if state in {"🟡 Parcial", "⚪ Sin informacion"} else "bajo",
+                "accion_recomendada": row["descripcion_corta"] or row["lo_que_solicita_la_vacante"],
+            }
+        )
+        if len(gaps) >= 4:
+            break
+    return gaps
+
+
+def _derive_preference_conflicts(preference_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    conflicts: list[dict[str, Any]] = []
+    for row in preference_rows:
+        state = row["estado"]
+        if state not in {"🔴 En conflicto", "🟡 Parcial", "⚪ Sin informacion"}:
+            continue
+        estado = "conflicto" if state == "🔴 En conflicto" else "incertidumbre"
+        conflicts.append(
+            {
+                "criterio": row["criterio"],
+                "estado": estado,
+                "descripcion": row["descripcion_corta"],
+                "validacion_recomendada": row["validacion_recomendada"],
+            }
+        )
+    return conflicts
+
+
+def _derive_alerts(preference_rows: list[dict[str, Any]], fit_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    alerts: list[dict[str, Any]] = []
+    for row in preference_rows:
+        state = row["estado"]
+        if state == "🔴 En conflicto":
+            alerts.append(
+                {
+                    "tipo": "conflicto_preferencia",
+                    "severidad": "alta",
+                    "descripcion": row["descripcion_corta"],
+                }
+            )
+        elif state == "⚪ Sin informacion":
+            alerts.append(
+                {
+                    "tipo": "ambiguedad",
+                    "severidad": "media",
+                    "descripcion": row["descripcion_corta"],
+                }
+            )
+    for row in fit_rows:
+        if row["estado"] == "⚪ Sin informacion":
+            alerts.append(
+                {
+                    "tipo": "alerta",
+                    "severidad": "media",
+                    "descripcion": row["descripcion_corta"] or row["criterio"],
+                }
+            )
+    return alerts[:5]
+
+
+def _ensure_required_report_sections(
+    report_contract: VacancyAlignmentReportV2Contract,
+    *,
+    person: dict[str, Any],
+) -> VacancyAlignmentReportV2Contract:
+    normalized = normalize_vacancy_alignment_report_v2_contract(report_contract)
+    report = normalized["report"]
+    fit_rows = list(report["vacancy_fit_matrix"])
+    preference_rows = list(report["candidate_preference_matrix"])
+    recommendation = _recommendation_from_rows(fit_rows, preference_rows)
+    fit_level = _fit_level_from_rows(fit_rows, preference_rows)
+    top_strength = _first_row_with_states(fit_rows, {"🟢 Cumple"})
+    top_gap = _first_row_with_states(fit_rows, {"🔴 En conflicto", "⚪ Sin informacion", "🟡 Parcial", "🔵 Deseable no evidenciado"})
+    top_preference_issue = _first_row_with_states(preference_rows, {"🔴 En conflicto", "⚪ Sin informacion", "🟡 Parcial"})
+    candidate_name = str(person.get("full_name", "")).strip() or "El candidato"
+
+    if not _has_meaningful_executive_summary(report):
+        report["executive_summary"] = {
+            "fit_level": fit_level,
+            "final_recommendation": recommendation,
+            "summary": (
+                f"{candidate_name} presenta un ajuste {fit_level.replace('_', ' ')} para la vacante, "
+                "con una base profesional defendible y condiciones que deben validarse antes de priorizar la postulacion."
+            ),
+            "main_strength": top_strength["criterio"] if top_strength else "",
+            "main_gap_or_risk": (
+                top_preference_issue["criterio"]
+                if top_preference_issue
+                else (top_gap["criterio"] if top_gap else "")
+            ),
+            "confidence": "media",
+        }
+
+    if not _has_meaningful_decision_table(report):
+        fit_counts = _count_states(fit_rows)
+        preference_counts = _count_states(preference_rows)
+        report["decision_table"] = {
+            "alineacion_general": {
+                "resultado": top_gap["estado"] if top_gap else "🟢 Cumple",
+                "descripcion_corta": "Resumen global de ajuste profesional y condiciones comparables.",
+            },
+            "fit_objetivo": {
+                "resultado": "🟡 Parcial" if fit_counts["🟡 Parcial"] or fit_counts["⚪ Sin informacion"] else "🟢 Cumple",
+                "descripcion_corta": "Se basa en la matriz profesional determinística derivada de P1.",
+            },
+            "fit_preferencial": {
+                "resultado": "🔴 En conflicto" if preference_counts["🔴 En conflicto"] else ("⚪ Sin informacion" if preference_counts["⚪ Sin informacion"] else "🟢 Cumple"),
+                "descripcion_corta": "Se basa en la comparación determinística de C2.",
+            },
+            "requisitos_criticos_cumplidos": {
+                "resultado": f"{fit_counts['🟢 Cumple']} cumplidos",
+                "descripcion_corta": "Cuenta los criterios profesionales en verde dentro de la matriz principal.",
+            },
+            "bloqueadores": {
+                "resultado": "Sí" if fit_counts["🔴 En conflicto"] or preference_counts["🔴 En conflicto"] else "No",
+                "descripcion_corta": "Marca conflictos explícitos en ajuste profesional o condiciones.",
+            },
+            "alertas_relevantes": {
+                "resultado": str(fit_counts["⚪ Sin informacion"] + preference_counts["⚪ Sin informacion"]),
+                "descripcion_corta": "Cantidad de puntos que requieren validación o información adicional.",
+            },
+            "potencial_mejora_fit": {
+                "resultado": "Sí" if fit_counts["🟡 Parcial"] or fit_counts["⚪ Sin informacion"] else "Limitado",
+                "descripcion_corta": "Indica si el fit puede mejorar al reforzar CV o validar condiciones.",
+            },
+            "recomendacion": {
+                "resultado": recommendation,
+                "descripcion_corta": "Recomendación final sintetizada desde P1 y C2.",
+            },
+        }
+
+    if not _has_meaningful_fit_answer(report):
+        report["fit_answer"] = {
+            "encaja": _fit_answer_from_recommendation(recommendation),
+            "respuesta_para_el_candidato": (
+                "La vacante es defendible, pero conviene validar primero las condiciones y los puntos parcialmente cubiertos."
+                if recommendation != "Avanzar"
+                else "La vacante encaja bien y conviene priorizarla."
+            ),
+        }
+
+    if not report["strengths"]:
+        report["strengths"] = _derive_strengths_from_fit_rows(fit_rows)
+    if not report["gaps"]:
+        report["gaps"] = _derive_gaps_from_fit_rows(fit_rows)
+    if not report["preference_conflicts"]:
+        report["preference_conflicts"] = _derive_preference_conflicts(preference_rows)
+    if not report["alerts_and_conflicts"]:
+        report["alerts_and_conflicts"] = _derive_alerts(preference_rows, fit_rows)
+    if not report["improvement_actions"]["reinforce_in_cv_or_profile"]:
+        report["improvement_actions"]["reinforce_in_cv_or_profile"] = [
+            gap["brecha"] for gap in report["gaps"][:3]
+        ]
+    if not report["improvement_actions"]["validate_with_recruiter"]:
+        report["improvement_actions"]["validate_with_recruiter"] = [
+            conflict["criterio"] for conflict in report["preference_conflicts"][:3]
+        ]
+    if not report["improvement_actions"]["application_narrative"]:
+        report["improvement_actions"]["application_narrative"] = [
+            strength["fortaleza"] for strength in report["strengths"][:2]
+        ]
+
+    if not _has_meaningful_actionable_conclusion(report):
+        report["actionable_conclusion"] = {
+            "final_decision": recommendation,
+            "main_reason": (
+                top_preference_issue["descripcion_corta"]
+                if top_preference_issue
+                else (top_gap["descripcion_corta"] if top_gap else "El ajuste profesional base es favorable.")
+            ),
+            "recommended_next_step": (
+                top_preference_issue["validacion_recomendada"]
+                if top_preference_issue and top_preference_issue["validacion_recomendada"]
+                else "Validar con reclutador las condiciones abiertas y reforzar en el perfil los puntos parcialmente cubiertos."
+            ),
+            "confidence": "media",
+        }
+
+    return normalize_vacancy_alignment_report_v2_contract(normalized)
+
+
+def _markdown_table(headers: list[str], rows: list[list[str]]) -> str:
+    if not rows:
+        return ""
+    header_line = "| " + " | ".join(headers) + " |"
+    separator_line = "| " + " | ".join(["---"] * len(headers)) + " |"
+    body = ["| " + " | ".join(cell.replace("\n", " ").strip() for cell in row) + " |" for row in rows]
+    return "\n".join([header_line, separator_line, *body])
+
+
+def _render_markdown_from_report(report_contract: VacancyAlignmentReportV2Contract) -> str:
+    report = report_contract["report"]
+    executive = report["executive_summary"]
+    fit_rows = report["vacancy_fit_matrix"]
+    preference_rows = report["candidate_preference_matrix"]
+    required_rows = [row for row in fit_rows if row["origen_del_criterio"] == "Vacante obligatoria"]
+    desirable_rows = [row for row in fit_rows if row["origen_del_criterio"] == "Vacante deseable"]
+    responsibility_rows = [row for row in fit_rows if row["origen_del_criterio"] == "Responsabilidad"]
+    required_green = sum(1 for row in required_rows if row["estado"] == "🟢 Cumple")
+    desirable_green = sum(1 for row in desirable_rows if row["estado"] == "🟢 Cumple")
+    responsibility_green = sum(1 for row in responsibility_rows if row["estado"] == "🟢 Cumple")
+    professional_open = sum(
+        1
+        for row in fit_rows
+        if row["estado"] in {"🟡 Parcial", "⚪ Sin informacion", "🔵 Deseable no evidenciado", "🔴 En conflicto"}
+    )
+    preference_conflicts = sum(1 for row in preference_rows if row["estado"] == "🔴 En conflicto")
+    preference_to_validate = sum(
+        1 for row in preference_rows if row["estado"] in {"⚪ Sin informacion", "🟡 Parcial"}
+    )
+    summary_rows: list[list[str]] = [
+        [
+            "Requisitos obligatorios cumplidos",
+            f"{required_green} de {len(required_rows)}",
+            "Cantidad de criterios obligatorios en 🟢 dentro de la matriz profesional.",
+        ]
+    ]
+    if responsibility_rows:
+        summary_rows.append(
+            [
+                "Responsabilidades cubiertas",
+                f"{responsibility_green} de {len(responsibility_rows)}",
+                "Cantidad de responsabilidades del rol que quedaron en 🟢 dentro de la matriz profesional.",
+            ]
+        )
+    if desirable_rows:
+        summary_rows.append(
+            [
+                "Deseables cumplidos",
+                f"{desirable_green} de {len(desirable_rows)}",
+                "Cantidad de criterios deseables en 🟢 dentro de la matriz profesional.",
+            ]
+        )
+    summary_rows.extend(
+        [
+            [
+                "Criterios parciales o abiertos",
+                str(professional_open),
+                "Filas profesionales en 🟡, ⚪, 🔵 o 🔴 que requieren atención adicional.",
+            ],
+            [
+                "Condiciones del candidato en conflicto",
+                str(preference_conflicts),
+                "Filas 🔴 dentro de la comparación determinística de C2.",
+            ],
+            [
+                "Condiciones por validar",
+                str(preference_to_validate),
+                "Filas en 🟡 o ⚪ dentro de C2 que requieren confirmación o detalle adicional.",
+            ],
+            [
+                "Recomendación",
+                report["actionable_conclusion"]["final_decision"]
+                or executive["final_recommendation"],
+                "Síntesis final del caso basada en la matriz profesional y en las condiciones comparables.",
+            ],
+        ]
+    )
+    fit_table = _markdown_table(
+        ["Tipo", "Criterio", "Estado", "Por qué"],
+        [
+            [
+                row["origen_del_criterio"],
+                row["criterio"],
+                row["estado"],
+                row["descripcion_corta"] or row["evidencia_del_candidato"],
+            ]
+            for row in fit_rows
+        ],
+    )
+    preference_table = _markdown_table(
+        ["Criterio", "Estado", "Vacante", "Candidato", "Por qué"],
+        [
+            [
+                row["criterio"],
+                row["estado"],
+                row["lo_que_ofrece_o_define_la_vacante"],
+                row["preferencia_o_condicion_del_candidato"],
+                row["descripcion_corta"],
+            ]
+            for row in preference_rows
+        ],
+    )
+
+    strengths_lines = "\n".join(
+        f"- {item['fortaleza']}: {item['por_que_importa']}"
+        for item in report["strengths"]
+    ) or "- Sin fortalezas destacadas."
+    gaps_lines = "\n".join(
+        f"- {item['brecha']}: {item['accion_recomendada']}"
+        for item in report["gaps"]
+    ) or "- No se registran brechas adicionales."
+    preference_conflicts_lines = "\n".join(
+        f"- {item['criterio']}: {item['descripcion']}"
+        for item in report["preference_conflicts"]
+    ) or "- No se identifican conflictos preferenciales directos."
+    alerts_lines = "\n".join(
+        f"- {item['descripcion']}"
+        for item in report["alerts_and_conflicts"]
+    ) or "- No se registran alertas críticas adicionales."
+    improvements_lines = "\n".join(
+        f"- {item}" for item in (
+            report["improvement_actions"]["reinforce_in_cv_or_profile"]
+            + report["improvement_actions"]["validate_with_recruiter"]
+            + report["improvement_actions"]["application_narrative"]
+        )
+    ) or "- No se registran acciones adicionales."
+
+    sections = [
+        "## Resumen ejecutivo",
+        executive["summary"],
+        "",
+        _markdown_table(["Resumen", "Resultado", "Cómo leerlo"], summary_rows),
+        "",
+        "## Matriz de alineacion",
+        "### Ajuste frente a la vacante",
+        fit_table or "Sin filas de ajuste profesional.",
+        "",
+        "### Ajuste frente a preferencias y condiciones del candidato",
+        preference_table or "Sin filas de preferencias comparables.",
+        "",
+        "## 1. ¿Encaja con la vacante?",
+        report["fit_answer"]["respuesta_para_el_candidato"],
+        "",
+        "## 2. ¿Qué tiene a favor?",
+        strengths_lines,
+        "",
+        "## 3. ¿Qué le falta o no está demostrado?",
+        gaps_lines,
+        "",
+        "## 4. ¿Qué choca con sus preferencias o condiciones?",
+        preference_conflicts_lines,
+        "",
+        "## 5. ¿Qué debería ajustar o mejorar para aumentar su fit?",
+        improvements_lines,
+        "",
+        "## Alertas y conflictos",
+        alerts_lines,
+        "",
+        "## Conclusion accionable",
+        report["actionable_conclusion"]["main_reason"],
+        report["actionable_conclusion"]["recommended_next_step"],
+    ]
+    return "\n".join(part for part in sections if part is not None).strip()
+
+
 def _expected_fit_matrix_item_ids_from_presentation(
     vacancy_fit_presentation_artifact: dict[str, Any],
 ) -> set[str]:
@@ -716,6 +1166,11 @@ def extract_vacancy_alignment_report_v2(
             normalized_preference_checks
         )
         normalized = normalize_vacancy_alignment_report_v2_contract(normalized)
+    normalized = _ensure_required_report_sections(
+        normalized,
+        person=person,
+    )
+    normalized["rendered_markdown"] = _render_markdown_from_report(normalized)
     normalized["vacancy_id"] = vacancy_id
     normalized["person_id"] = person_id
     normalized["generated_at"] = generated_at
