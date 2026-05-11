@@ -24,6 +24,34 @@ class VacancyBlocksExtractionError(RuntimeError):
     pass
 
 
+_PROFILE_OR_ROLE_CUES = (
+    "busqueda de",
+    "buscamos",
+    "perfil ",
+    "perfil estrategico",
+    "capacidad de",
+    "experiencia en",
+    "experiencia comprobada",
+    "conocimiento en",
+    "con experiencia",
+    "profesional en",
+    "idealmente",
+    "candidato ideal",
+)
+
+_RESPONSIBILITY_SCOPE_CUES = (
+    "liderando",
+    "liderar",
+    "articular",
+    "gestionar",
+    "coordinar",
+    "asegurar",
+    "dirigir",
+    "evolucion tecnologica",
+    "transformacion digital",
+)
+
+
 def _now_iso() -> str:
     return datetime.now(tz=UTC).isoformat()
 
@@ -83,6 +111,46 @@ def _has_any_classified_fragment(contract: VacancyBlocksContract) -> bool:
     return any(payload.get(key) for key in VACANCY_BLOCK_KEYS)
 
 
+def _looks_like_profile_or_role_fragment(text: str) -> bool:
+    normalized = " ".join(str(text).casefold().split())
+    if not normalized:
+        return False
+    has_profile_cue = any(cue in normalized for cue in _PROFILE_OR_ROLE_CUES)
+    has_scope_cue = any(cue in normalized for cue in _RESPONSIBILITY_SCOPE_CUES)
+    return has_profile_cue and has_scope_cue
+
+
+def _reclassify_about_fragments(contract: VacancyBlocksContract) -> VacancyBlocksContract:
+    payload = contract["vacancy_blocks"]
+    about_items = payload["about_the_company"]
+    if not about_items:
+        return contract
+
+    existing_required_signatures = {
+        item.casefold() for item in payload["required_requirements"]
+    }
+    kept_about: list[str] = []
+    moved_count = 0
+
+    for fragment in about_items:
+        if not _looks_like_profile_or_role_fragment(fragment):
+            kept_about.append(fragment)
+            continue
+        signature = fragment.casefold()
+        if signature not in existing_required_signatures:
+            payload["required_requirements"].append(fragment)
+            existing_required_signatures.add(signature)
+        moved_count += 1
+
+    if moved_count:
+        payload["about_the_company"] = kept_about
+        contract["warnings"].append(
+            "Step 2 reclassified one or more about_the_company fragments into required_requirements because they described the candidate profile or role scope."
+        )
+
+    return contract
+
+
 def extract_vacancy_blocks(
     opportunity: OpportunityRecord,
     settings: Settings,
@@ -108,7 +176,8 @@ def extract_vacancy_blocks(
         "Do not write metadata; backend will add flow, vacancy_id, and generated_at. "
         "vacancy_blocks keys allowed: about_the_company, work_conditions, responsibilities, "
         "required_requirements, desirable_requirements, benefits, unclassified. "
-        "Use about_the_company only for company description, industry, mission, scale, context, or employer signals. "
+        "Use about_the_company only for company description, industry, mission, scale, context, or real employer signals. "
+        "If a sentence starts with the company name or with a hiring phrase like 'we are looking for' but actually describes the target profile, required experience, expected leadership, or role scope, do not place it in about_the_company; classify it under required_requirements or responsibilities based on its main meaning. "
         "Salary/compensation must always be in work_conditions and never in benefits. "
         "Rules: classify and clean text; do not summarize; do not atomize; do not invent keys. "
         f"Vacancy title: {opportunity.get('title', '')}. "
@@ -160,6 +229,7 @@ def extract_vacancy_blocks(
         generated_at=generated_at,
         prompt_version=prompt_version,
     )
+    normalized = _reclassify_about_fragments(normalized)
     if _has_any_classified_fragment(normalized):
         return normalized
 

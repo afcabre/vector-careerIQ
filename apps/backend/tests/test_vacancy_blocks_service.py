@@ -145,6 +145,7 @@ class VacancyBlocksServiceTests(unittest.TestCase):
         self.assertIn("Salary/compensation", fallback_prompt)
         self.assertIn("work_conditions", fallback_prompt)
         self.assertIn("never in benefits", fallback_prompt)
+        self.assertIn("required_requirements or responsibilities", fallback_prompt)
         self.assertEqual(contract["flow"]["prompt_version"], "2026-04-21T10:00:00Z")
 
     def test_extract_invalid_json_raises_controlled_error(self) -> None:
@@ -175,6 +176,52 @@ class VacancyBlocksServiceTests(unittest.TestCase):
                 extract_vacancy_blocks(opportunity, settings=object())  # type: ignore[arg-type]
 
         self.assertEqual(complete_prompt_mock.call_args.kwargs["temperature"], 0.33)
+
+    def test_extract_reclassifies_profile_like_about_company_fragments(self) -> None:
+        opportunity = _opportunity(raw_text="Texto de vacante con frase de apertura")
+        response_payload = (
+            "{"
+            "\"vacancy_blocks\":{"
+            "\"about_the_company\":["
+            "\"En Asssiprex nos encontramos en la busqueda de un Gerente de Tecnologia, un perfil estrategico con la capacidad de articular tecnologia, negocio y operacion, liderando la evolucion tecnologica de la organizacion en un entorno de alta exigencia.\","
+            "\"Compania multinacional del sector salud con presencia regional\""
+            "],"
+            "\"work_conditions\":[],"
+            "\"responsibilities\":[],"
+            "\"required_requirements\":[],"
+            "\"desirable_requirements\":[],"
+            "\"benefits\":[],"
+            "\"unclassified\":[]"
+            "},"
+            "\"warnings\":[],"
+            "\"coverage_notes\":[]"
+            "}"
+        )
+
+        with patch(
+            "app.services.vacancy_blocks_service.complete_prompt",
+            return_value=response_payload,
+        ):
+            contract = extract_vacancy_blocks(opportunity, settings=object())  # type: ignore[arg-type]
+
+        payload = contract["vacancy_blocks"]
+        self.assertEqual(
+            payload["about_the_company"],
+            ["Compania multinacional del sector salud con presencia regional"],
+        )
+        self.assertEqual(
+            payload["required_requirements"],
+            [
+                "En Asssiprex nos encontramos en la busqueda de un Gerente de Tecnologia, un perfil estrategico con la capacidad de articular tecnologia, negocio y operacion, liderando la evolucion tecnologica de la organizacion en un entorno de alta exigencia."
+            ],
+        )
+        self.assertTrue(
+            any(
+                "reclassified one or more about_the_company fragments into required_requirements"
+                in warning
+                for warning in contract["warnings"]
+            )
+        )
 
 
 if __name__ == "__main__":

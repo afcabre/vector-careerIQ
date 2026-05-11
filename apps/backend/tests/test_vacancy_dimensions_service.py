@@ -203,6 +203,7 @@ class VacancyDimensionsServiceTests(unittest.TestCase):
         self.assertIn("raw_text only", fallback_prompt)
         self.assertIn("too abstract", fallback_prompt)
         self.assertIn("minimum explicit context", fallback_prompt)
+        self.assertIn("reclassify it into required_criteria or responsibilities", fallback_prompt)
 
     def test_extract_invalid_json_raises_controlled_error(self) -> None:
         with patch(
@@ -238,6 +239,57 @@ class VacancyDimensionsServiceTests(unittest.TestCase):
                 extract_vacancy_dimensions(_opportunity(), _vacancy_blocks(), settings=object())
 
         self.assertEqual(complete_prompt_mock.call_args.kwargs["temperature"], 0.44)
+
+    def test_extract_reclassifies_profile_like_about_company_fragments(self) -> None:
+        llm_response = (
+            "{"
+            "\"vacancy_dimensions\":{"
+            "\"work_conditions\":[],"
+            "\"responsibilities\":[],"
+            "\"required_criteria\":[],"
+            "\"desirable_criteria\":[],"
+            "\"benefits\":[],"
+            "\"about_the_company\":["
+            "{\"raw_text\":\"En Asssiprex nos encontramos en la busqueda de un Gerente de Tecnologia, un perfil estrategico con la capacidad de articular tecnologia, negocio y operacion, liderando la evolucion tecnologica de la organizacion en un entorno de alta exigencia.\"},"
+            "{\"raw_text\":\"Compania multinacional con presencia en 12 paises\"}"
+            "],"
+            "\"unclassified\":[]"
+            "},"
+            "\"warnings\":[],"
+            "\"coverage_notes\":[]"
+            "}"
+        )
+
+        with patch(
+            "app.services.vacancy_dimensions_service.complete_prompt",
+            return_value=llm_response,
+        ):
+            contract = extract_vacancy_dimensions(
+                _opportunity(),
+                _vacancy_blocks(),
+                settings=object(),
+            )
+
+        payload = contract["vacancy_dimensions"]
+        self.assertEqual(
+            payload["about_the_company"],
+            [{"raw_text": "Compania multinacional con presencia en 12 paises"}],
+        )
+        self.assertEqual(
+            payload["required_criteria"],
+            [
+                {
+                    "raw_text": "En Asssiprex nos encontramos en la busqueda de un Gerente de Tecnologia, un perfil estrategico con la capacidad de articular tecnologia, negocio y operacion, liderando la evolucion tecnologica de la organizacion en un entorno de alta exigencia."
+                }
+            ],
+        )
+        self.assertTrue(
+            any(
+                "reclassified one or more about_the_company fragments into required_criteria"
+                in warning
+                for warning in contract["warnings"]
+            )
+        )
 
 
 if __name__ == "__main__":

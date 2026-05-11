@@ -42,6 +42,34 @@ class VacancyDimensionsExtractionError(RuntimeError):
     pass
 
 
+_PROFILE_OR_ROLE_CUES = (
+    "busqueda de",
+    "buscamos",
+    "perfil ",
+    "perfil estrategico",
+    "capacidad de",
+    "experiencia en",
+    "experiencia comprobada",
+    "conocimiento en",
+    "con experiencia",
+    "profesional en",
+    "idealmente",
+    "candidato ideal",
+)
+
+_RESPONSIBILITY_SCOPE_CUES = (
+    "liderando",
+    "liderar",
+    "articular",
+    "gestionar",
+    "coordinar",
+    "asegurar",
+    "dirigir",
+    "evolucion tecnologica",
+    "transformacion digital",
+)
+
+
 def _now_iso() -> str:
     return datetime.now(tz=UTC).isoformat()
 
@@ -105,6 +133,49 @@ def _has_any_dimensions_content(contract: VacancyDimensionsContract) -> bool:
     return _has_non_default_value(payload["work_conditions"])
 
 
+def _looks_like_profile_or_role_fragment(text: str) -> bool:
+    normalized = " ".join(str(text).casefold().split())
+    if not normalized:
+        return False
+    has_profile_cue = any(cue in normalized for cue in _PROFILE_OR_ROLE_CUES)
+    has_scope_cue = any(cue in normalized for cue in _RESPONSIBILITY_SCOPE_CUES)
+    return has_profile_cue and has_scope_cue
+
+
+def _reclassify_about_fragments(contract: VacancyDimensionsContract) -> VacancyDimensionsContract:
+    payload = contract["vacancy_dimensions"]
+    about_items = payload["about_the_company"]
+    if not about_items:
+        return contract
+
+    existing_required_signatures = {
+        item["raw_text"].casefold() for item in payload["required_criteria"]
+    }
+    kept_about: list[dict[str, str]] = []
+    moved_count = 0
+
+    for item in about_items:
+        raw_text = str(item.get("raw_text", "")).strip()
+        if not _looks_like_profile_or_role_fragment(raw_text):
+            kept_about.append(item)
+            continue
+        signature = raw_text.casefold()
+        if signature not in existing_required_signatures:
+            payload["required_criteria"].append({"raw_text": raw_text})
+            existing_required_signatures.add(signature)
+        moved_count += 1
+
+    if moved_count:
+        payload["about_the_company"] = kept_about
+        contract["warnings"] = merge_quality_notes(
+            contract.get("warnings", []),
+            [
+                "Step 3 reclassified one or more about_the_company fragments into required_criteria because they described the candidate profile or role scope."
+            ],
+        )
+    return contract
+
+
 def extract_vacancy_dimensions(
     opportunity: dict[str, Any],
     vacancy_blocks_artifact: dict[str, Any],
@@ -145,6 +216,7 @@ def extract_vacancy_dimensions(
         "All array items must be objects with raw_text only. "
         "Keep salary/compensation text in work_conditions as raw_text; Step 3.1 will normalize salary later. "
         "Keep benefits for non-compensation perks. "
+        "Keep about_the_company only for real company context; if a block inherited from vacancy_blocks begins with the employer or a hiring phrase but actually describes the target profile, expected experience, leadership, or role scope, reclassify it into required_criteria or responsibilities based on its main meaning. "
         "When an atomic item would become too abstract on its own, keep the minimum explicit context already present in the same source block so the raw_text remains understandable. "
         "Do not leave orphan items such as 'Ensure technical excellence', 'Guarantee high-impact deliverables', 'Ensure profitability', or 'Coordinate stakeholders' when the original block states what they apply to. "
         "Use only context already present in vacancy_blocks; do not add new information or interpret hidden intent. "
@@ -203,6 +275,7 @@ def extract_vacancy_dimensions(
         normalized_blocks.get("coverage_notes", []),
         normalized.get("coverage_notes", []),
     )
+    normalized = _reclassify_about_fragments(normalized)
 
     if _has_any_dimensions_content(normalized):
         return normalized
