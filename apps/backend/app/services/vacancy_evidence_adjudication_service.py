@@ -38,6 +38,8 @@ from app.services.vacancy_evidence_adjudication_contract import (
     normalize_vacancy_evidence_adjudication_contract,
 )
 from app.services.vacancy_evidence_analysis_contract import (
+    ConsolidatedEvidenceMatch,
+    DiscardedEvidenceMatch,
     VacancyEvidenceAnalysisContract,
     is_vacancy_evidence_analysis_contract,
     normalize_vacancy_evidence_analysis_contract,
@@ -341,6 +343,7 @@ def _run_adjudication_completion(
         "criterion_type solo puede ser: education, years_experience, leadership, technical_skill, project_management, transformation, business_outcome, certification, language, condition, cultural, other. "
         "candidate_risk solo puede ser: none, low, medium, high. confidence solo puede ser: high, medium, low. "
         "best_supporting_evidence debe incluir solo evidencia que realmente soporte el criterio e indicar why_it_supports. "
+        "Si vacancy_evidence_analysis muestra best_evidence o accepted_matches utiles para un item, no dejes best_supporting_evidence vacio. "
         "Vacante: {opportunity_context}. Persona: {person_context}. "
         "Entrada vacancy_dimensions_enriched.v1: {vacancy_dimensions_enriched_json}. "
         "Entrada vacancy_evidence_analysis.v1: {evidence_analysis_json}. "
@@ -392,6 +395,127 @@ def _merge_candidate_contracts(
             "warnings": list(primary["warnings"]) + list(supplemental["warnings"]),
         }
     )
+
+
+def _default_why_it_supports(raw_text: str, section: str, block_title: str) -> str:
+    context = str(section or "").strip() or str(block_title or "").strip()
+    if context:
+        return f"El snippet aporta evidencia relevante para '{raw_text}' desde la seccion {context} del CV."
+    return f"El snippet aporta evidencia relevante para '{raw_text}' en el CV."
+
+
+def _supporting_evidence_from_match(
+    match: ConsolidatedEvidenceMatch,
+    *,
+    raw_text: str,
+) -> dict[str, str]:
+    block_title = str(match.get("block_title", "")).strip()
+    section = str(match.get("section", "")).strip()
+    return {
+        "source_ref": str(match.get("source_ref", "")).strip(),
+        "block_title": block_title,
+        "section": section,
+        "snippet": str(match.get("snippet", "")).strip(),
+        "why_it_supports": _default_why_it_supports(raw_text, section, block_title),
+    }
+
+
+def _weak_evidence_from_match(match: DiscardedEvidenceMatch) -> dict[str, str]:
+    discard_reason = str(match.get("discard_reason", "")).strip()
+    reason_map = {
+        "score_below_review_threshold": "La evidencia fue descartada por ser demasiado debil o indirecta.",
+        "duplicate_of_better_match": "La evidencia fue descartada por duplicar un fragmento mejor soportado.",
+        "redundant_same_fragment": "La evidencia fue descartada por ser redundante respecto a otro fragmento equivalente.",
+    }
+    return {
+        "source_ref": str(match.get("source_ref", "")).strip(),
+        "block_title": str(match.get("block_title", "")).strip(),
+        "reason": reason_map.get(
+            discard_reason,
+            "La evidencia fue descartada por no soportar suficientemente el criterio.",
+        ),
+    }
+
+
+def _analysis_item_for_adjudicated_item(
+    item: VacancyEvidenceAdjudicationItem,
+    analysis_index: dict[str, dict[str, Any]],
+) -> dict[str, Any] | None:
+    signature = _analysis_signature(
+        item_id=item["item_id"],
+        item_index=item["item_index"],
+        group_code=item["group_code"],
+        raw_text=item["raw_text"],
+    )
+    payload = analysis_index.get(signature, {})
+    analysis_item = payload.get("analysis")
+    return analysis_item if isinstance(analysis_item, dict) else None
+
+
+def _backfill_supporting_evidence(
+    item: VacancyEvidenceAdjudicationItem,
+    *,
+    analysis_item: dict[str, Any] | None,
+) -> VacancyEvidenceAdjudicationItem:
+    if not analysis_item or item.get("best_supporting_evidence"):
+        return item
+    fallback_matches = list(analysis_item.get("best_evidence", []))
+    if not fallback_matches:
+        fallback_matches = list(analysis_item.get("accepted_matches", []))
+    supporting_evidence = [
+        _supporting_evidence_from_match(match, raw_text=item["raw_text"])
+        for match in fallback_matches
+        if isinstance(match, dict)
+        and (
+            str(match.get("snippet", "")).strip()
+            or str(match.get("source_ref", "")).strip()
+        )
+    ]
+    if not supporting_evidence:
+        return item
+    return {
+        **item,
+        "best_supporting_evidence": supporting_evidence,
+    }
+
+
+def _backfill_weak_evidence(
+    item: VacancyEvidenceAdjudicationItem,
+    *,
+    analysis_item: dict[str, Any] | None,
+) -> VacancyEvidenceAdjudicationItem:
+    if not analysis_item or item.get("weak_or_discarded_evidence"):
+        return item
+    discarded_matches = list(analysis_item.get("discarded_matches", []))
+    weak_evidence = [
+        _weak_evidence_from_match(match)
+        for match in discarded_matches
+        if isinstance(match, dict)
+        and (
+            str(match.get("source_ref", "")).strip()
+            or str(match.get("snippet", "")).strip()
+        )
+    ]
+    if not weak_evidence:
+        return item
+    return {
+        **item,
+        "weak_or_discarded_evidence": weak_evidence,
+    }
+
+
+def _enrich_adjudicated_items_with_analysis(
+    *,
+    items: list[VacancyEvidenceAdjudicationItem],
+    analysis_index: dict[str, dict[str, Any]],
+) -> list[VacancyEvidenceAdjudicationItem]:
+    enriched: list[VacancyEvidenceAdjudicationItem] = []
+    for item in items:
+        analysis_item = _analysis_item_for_adjudicated_item(item, analysis_index)
+        patched = _backfill_supporting_evidence(item, analysis_item=analysis_item)
+        patched = _backfill_weak_evidence(patched, analysis_item=analysis_item)
+        enriched.append(patched)
+    return enriched
 
 
 def _ordered_items_from_expected(
@@ -491,6 +615,7 @@ def build_vacancy_evidence_adjudication(
     generated_at = _now_iso()
     runtime_config = get_vacancy_v2_runtime_config(settings)
     llm_temperature = float(runtime_config["step3"]["llm_temperature"])
+    analysis_index = _build_analysis_index(normalized_analysis)
     normalized = _run_adjudication_completion(
         person=person,
         opportunity=opportunity,
@@ -536,6 +661,10 @@ def build_vacancy_evidence_adjudication(
                 "Step 6.5 LLM response omitted adjudication for one or more vacancy items. "
                 f"Missing items after retry: {missing_detail}"
             )
+    ordered_items = _enrich_adjudicated_items_with_analysis(
+        items=ordered_items,
+        analysis_index=analysis_index,
+    )
 
     artifact = empty_vacancy_evidence_adjudication_contract()
     artifact["vacancy_id"] = vacancy_id

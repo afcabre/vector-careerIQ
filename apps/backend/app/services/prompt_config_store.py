@@ -547,6 +547,7 @@ def _default_configs() -> dict[str, PromptConfigRecord]:
                 "candidate_risk solo puede ser: none, low, medium, high. confidence solo puede ser: high, medium, low. "
                 "Si no hay evidencia suficiente, usa not_evidenced y evidence_strength none o low segun corresponda. "
                 "best_supporting_evidence debe incluir solo snippets que realmente soporten el criterio e indicar why_it_supports. "
+                "Si vacancy_evidence_analysis muestra best_evidence o accepted_matches utiles para un item, no dejes best_supporting_evidence vacio. "
                 "Vacante: {opportunity_context}. "
                 "Persona: {person_context}. "
                 "Entrada vacancy_dimensions_enriched.v1: {vacancy_dimensions_enriched_json}. "

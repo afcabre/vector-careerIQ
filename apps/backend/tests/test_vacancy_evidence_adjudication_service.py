@@ -446,6 +446,89 @@ class VacancyEvidenceAdjudicationServiceTests(unittest.TestCase):
             str(raised.exception),
         )
 
+    def test_build_backfills_supporting_evidence_from_analysis_when_llm_omits_it(self) -> None:
+        normalized_items = _normalized_dimension_items()
+        responsibility = normalized_items["responsibility"]
+        required = normalized_items["required"]
+        analysis = _evidence_analysis()
+        analysis["analysis"]["required_criteria"][0]["discarded_matches"] = [
+            {
+                "source_ref": "cv:chunk:4",
+                "snippet": "Experiencia en varios roles tecnicos.",
+                "best_score": 0.21,
+                "query_texts": ["anos experiencia"],
+                "query_indexes": [1],
+                "section": "experience",
+                "block_type": "experience",
+                "block_title": "Experiencia",
+                "raw_match_count": 1,
+                "discard_reason": "score_below_review_threshold",
+            }
+        ]
+        llm_response = (
+            "{"
+            "\"items\":["
+            "{"
+            f"\"item_id\":\"{responsibility['item_id']}\","
+            f"\"item_index\":{responsibility['item_index']},"
+            "\"group\":\"responsibilities\","
+            "\"group_code\":\"resp\","
+            "\"raw_text\":\"Liderar area de servicios digitales\","
+            "\"criterion_type\":\"leadership\","
+            "\"priority\":\"important\","
+            "\"alignment_status\":\"partial\","
+            "\"evidence_strength\":\"medium\","
+            "\"proof_summary\":\"Resumen parcial.\","
+            "\"best_supporting_evidence\":[],"
+            "\"weak_or_discarded_evidence\":[],"
+            "\"limitations\":[],"
+            "\"candidate_risk\":\"medium\","
+            "\"cv_improvement_opportunity\":\"\","
+            "\"confidence\":\"medium\""
+            "},"
+            "{"
+            f"\"item_id\":\"{required['item_id']}\","
+            f"\"item_index\":{required['item_index']},"
+            "\"group\":\"required_criteria\","
+            "\"group_code\":\"req\","
+            "\"raw_text\":\"Minimo 5 anos de experiencia profesional\","
+            "\"criterion_type\":\"years_experience\","
+            "\"priority\":\"important\","
+            "\"alignment_status\":\"direct\","
+            "\"evidence_strength\":\"high\","
+            "\"proof_summary\":\"Resumen directo.\","
+            "\"best_supporting_evidence\":[],"
+            "\"weak_or_discarded_evidence\":[],"
+            "\"limitations\":[],"
+            "\"candidate_risk\":\"low\","
+            "\"cv_improvement_opportunity\":\"\","
+            "\"confidence\":\"high\""
+            "}"
+            "],"
+            "\"warnings\":[]"
+            "}"
+        )
+
+        with patch(
+            "app.services.vacancy_evidence_adjudication_service.complete_prompt",
+            return_value=llm_response,
+        ):
+            contract = build_vacancy_evidence_adjudication(
+                person=_person(),
+                opportunity=_opportunity(),
+                vacancy_dimensions_enriched_artifact=_dimensions_enriched(),
+                vacancy_evidence_analysis_artifact=analysis,
+                settings=object(),
+            )
+
+        responsibility_item = contract["items"][0]
+        required_item = contract["items"][1]
+        self.assertEqual(required_item["best_supporting_evidence"][0]["source_ref"], "cv:chunk:1")
+        self.assertEqual(required_item["best_supporting_evidence"][0]["section"], "profile_summary")
+        self.assertTrue(required_item["best_supporting_evidence"][0]["why_it_supports"])
+        self.assertEqual(required_item["weak_or_discarded_evidence"][0]["source_ref"], "cv:chunk:4")
+        self.assertEqual(responsibility_item["best_supporting_evidence"][0]["source_ref"], "cv:chunk:2")
+
 
 if __name__ == "__main__":
     unittest.main()
