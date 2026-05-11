@@ -2515,6 +2515,109 @@ button:disabled {
   opacity: 0.95;
 }
 
+.vacancyStructuredSection {
+  display: grid;
+  gap: 10px;
+}
+
+.vacancyMatrixGroup {
+  display: grid;
+  gap: 8px;
+}
+
+.vacancyMatrixGroupTitle {
+  margin: 0;
+  font-weight: 700;
+}
+
+.vacancyMatrixTableWrap {
+  overflow-x: auto;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 86%, var(--accent));
+  border-radius: 10px;
+}
+
+.vacancyMatrixTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+
+.vacancyMatrixTable th,
+.vacancyMatrixTable td {
+  padding: 10px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 88%, transparent);
+  vertical-align: top;
+  text-align: left;
+}
+
+.vacancyMatrixTable thead th {
+  background: color-mix(in srgb, var(--surface-card) 86%, var(--bg-deep));
+  font-weight: 700;
+}
+
+.vacancyMatrixTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.vacancyMatrixWhyCell {
+  display: grid;
+  gap: 8px;
+}
+
+.vacancyMatrixWhyCell p,
+.vacancyMatrixEvidenceCard p {
+  margin: 0;
+}
+
+.vacancyMatrixDetailsStack {
+  display: grid;
+  gap: 8px;
+}
+
+.vacancyMatrixDetails summary {
+  font-size: 0.8rem;
+}
+
+.vacancyMatrixEvidenceList {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.vacancyMatrixEvidenceCard {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, var(--accent));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-card) 95%, var(--bg-deep));
+}
+
+.vacancyMatrixEvidenceMeta {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.vacancyMatrixEvidenceSnippet {
+  white-space: pre-wrap;
+}
+
+.vacancyMatrixEvidenceReason {
+  color: color-mix(in srgb, var(--text) 88%, var(--accent));
+}
+
+.vacancyMatrixLimitationsList {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+}
+
+.vacancyMatrixWarnings {
+  display: grid;
+  gap: 6px;
+}
+
 .vacancyV2GatePanel {
   border: 1px dashed color-mix(in srgb, var(--border-subtle) 82%, var(--accent));
   border-radius: 12px;

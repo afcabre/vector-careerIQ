@@ -94,6 +94,53 @@ type ExternalUrlTextProps = {
   noValueText?: string;
 };
 
+type FitPresentationEvidenceRef = {
+  source_ref: string;
+  block_title: string;
+  section: string;
+  snippet: string;
+  why_it_supports: string;
+};
+
+type FitPresentationRowView = {
+  item_id: string;
+  item_index: number;
+  group: string;
+  type_label: string;
+  criterion: string;
+  state: string;
+  why: string;
+  evidence_count: number;
+  evidence: FitPresentationEvidenceRef[];
+  limitations: string[];
+  confidence: string;
+  candidate_risk: string;
+};
+
+type FitPresentationArtifactView = {
+  groups: {
+    required_criteria: FitPresentationRowView[];
+    responsibilities: FitPresentationRowView[];
+    desirable_criteria: FitPresentationRowView[];
+  };
+  warnings: string[];
+};
+
+type CandidatePreferenceCheckRowView = {
+  criterion_key: string;
+  criterion: string;
+  state: string;
+  vacancy_value: string;
+  candidate_value: string;
+  why: string;
+  confidence: string;
+};
+
+type CandidatePreferenceChecksArtifactView = {
+  rows: CandidatePreferenceCheckRowView[];
+  warnings: string[];
+};
+
 function parseWorkspacePath(pathname: string): ParsedWorkspaceRoute {
   const normalized = pathname.replace(/\/+$/, "") || "/";
   if (normalized === "/" || normalized === "/candidates") {
@@ -1169,6 +1216,298 @@ function asStringArray(value: unknown): string[] {
   return value
     .map((item) => String(item).trim())
     .filter((item) => item.length > 0);
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function parseFitPresentationEvidenceList(value: unknown): FitPresentationEvidenceRef[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((item) => {
+      const record = asRecord(item);
+      if (!record) {
+        return null;
+      }
+      const snippet = String(record.snippet ?? "").trim();
+      const sourceRef = String(record.source_ref ?? "").trim();
+      if (!snippet && !sourceRef) {
+        return null;
+      }
+      return {
+        source_ref: sourceRef,
+        block_title: String(record.block_title ?? "").trim(),
+        section: String(record.section ?? "").trim(),
+        snippet,
+        why_it_supports: String(record.why_it_supports ?? "").trim()
+      };
+    })
+    .filter((item): item is FitPresentationEvidenceRef => item !== null);
+}
+
+function parseFitPresentationRows(value: unknown, group: string): FitPresentationRowView[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((item) => {
+      const record = asRecord(item);
+      if (!record) {
+        return null;
+      }
+      const itemId = String(record.item_id ?? "").trim();
+      const criterion = String(record.criterion ?? "").trim();
+      if (!itemId || !criterion) {
+        return null;
+      }
+      const evidence = parseFitPresentationEvidenceList(record.evidence);
+      return {
+        item_id: itemId,
+        item_index: Number(record.item_index ?? 0) || 0,
+        group,
+        type_label: String(record.type_label ?? "").trim(),
+        criterion,
+        state: String(record.state ?? "").trim(),
+        why: String(record.why ?? "").trim(),
+        evidence_count: Number(record.evidence_count ?? evidence.length) || evidence.length,
+        evidence,
+        limitations: asStringArray(record.limitations),
+        confidence: String(record.confidence ?? "").trim(),
+        candidate_risk: String(record.candidate_risk ?? "").trim()
+      };
+    })
+    .filter((item): item is FitPresentationRowView => item !== null);
+}
+
+function parseFitPresentationArtifact(artifact: Record<string, unknown>): FitPresentationArtifactView | null {
+  const groupsRecord = asRecord(artifact.groups);
+  if (!groupsRecord) {
+    return null;
+  }
+  return {
+    groups: {
+      required_criteria: parseFitPresentationRows(groupsRecord.required_criteria, "required_criteria"),
+      responsibilities: parseFitPresentationRows(groupsRecord.responsibilities, "responsibilities"),
+      desirable_criteria: parseFitPresentationRows(groupsRecord.desirable_criteria, "desirable_criteria")
+    },
+    warnings: asStringArray(artifact.warnings)
+  };
+}
+
+function parseCandidatePreferenceChecksArtifact(
+  artifact: Record<string, unknown>
+): CandidatePreferenceChecksArtifactView | null {
+  if (!Array.isArray(artifact.rows)) {
+    return null;
+  }
+  return {
+    rows: artifact.rows
+      .map((item) => {
+        const record = asRecord(item);
+        if (!record) {
+          return null;
+        }
+        const criterion = String(record.criterion ?? "").trim();
+        if (!criterion) {
+          return null;
+        }
+        return {
+          criterion_key: String(record.criterion_key ?? "").trim(),
+          criterion,
+          state: String(record.state ?? "").trim(),
+          vacancy_value: String(record.vacancy_value ?? "").trim(),
+          candidate_value: String(record.candidate_value ?? "").trim(),
+          why: String(record.why ?? "").trim(),
+          confidence: String(record.confidence ?? "").trim()
+        };
+      })
+      .filter((item): item is CandidatePreferenceCheckRowView => item !== null),
+    warnings: asStringArray(artifact.warnings)
+  };
+}
+
+function getFitPresentationGroupTitle(group: string): string {
+  if (group === "required_criteria") {
+    return "Ajuste frente a la vacante";
+  }
+  if (group === "responsibilities") {
+    return "Responsabilidades";
+  }
+  return "Deseables";
+}
+
+function FitPresentationEvidenceDetails({
+  evidence,
+  limitations
+}: {
+  evidence: FitPresentationEvidenceRef[];
+  limitations: string[];
+}) {
+  if (evidence.length === 0 && limitations.length === 0) {
+    return null;
+  }
+  return (
+    <div className="vacancyMatrixDetailsStack">
+      {evidence.length > 0 ? (
+        <details className="payloadDetails vacancyMatrixDetails">
+          <summary>Ver evidencia ({evidence.length})</summary>
+          <div className="vacancyMatrixEvidenceList">
+            {evidence.map((entry, index) => (
+              <article
+                className="vacancyMatrixEvidenceCard"
+                key={`${entry.source_ref || "source"}-${entry.snippet || "snippet"}-${index}`}
+              >
+                <p className="vacancyMatrixEvidenceMeta">
+                  {entry.section || entry.block_title || "Fuente CV"}
+                  {entry.source_ref ? ` · ${entry.source_ref}` : ""}
+                </p>
+                {entry.snippet ? <p className="vacancyMatrixEvidenceSnippet">{entry.snippet}</p> : null}
+                {entry.why_it_supports ? (
+                  <p className="vacancyMatrixEvidenceReason">{entry.why_it_supports}</p>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        </details>
+      ) : null}
+      {limitations.length > 0 ? (
+        <details className="payloadDetails vacancyMatrixDetails">
+          <summary>Limitaciones ({limitations.length})</summary>
+          <ul className="vacancyMatrixLimitationsList">
+            {limitations.map((item, index) => (
+              <li key={`${item}-${index}`}>{item}</li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
+function FitPresentationTable({
+  artifact
+}: {
+  artifact: Record<string, unknown>;
+}) {
+  const parsed = parseFitPresentationArtifact(artifact);
+  if (!parsed) {
+    return null;
+  }
+  const orderedGroups: Array<keyof FitPresentationArtifactView["groups"]> = [
+    "required_criteria",
+    "responsibilities",
+    "desirable_criteria"
+  ];
+  const hasRows = orderedGroups.some((group) => parsed.groups[group].length > 0);
+  if (!hasRows) {
+    return null;
+  }
+  return (
+    <div className="vacancyStructuredSection">
+      {orderedGroups.map((group) =>
+        parsed.groups[group].length > 0 ? (
+          <div className="vacancyMatrixGroup" key={group}>
+            <p className="metaText vacancyMatrixGroupTitle">{getFitPresentationGroupTitle(group)}</p>
+            <div className="vacancyMatrixTableWrap">
+              <table className="vacancyMatrixTable">
+                <thead>
+                  <tr>
+                    <th>Tipo</th>
+                    <th>Criterio</th>
+                    <th>Estado</th>
+                    <th>Por qué</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {parsed.groups[group].map((row) => (
+                    <tr key={row.item_id}>
+                      <td>{row.type_label || "-"}</td>
+                      <td>{row.criterion}</td>
+                      <td>{row.state}</td>
+                      <td>
+                        <div className="vacancyMatrixWhyCell">
+                          <p>{row.why || "Sin explicación disponible."}</p>
+                          <FitPresentationEvidenceDetails
+                            evidence={row.evidence}
+                            limitations={row.limitations}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : null
+      )}
+      {parsed.warnings.length > 0 ? (
+        <div className="vacancyMatrixWarnings">
+          <p className="metaText vacancyMatrixGroupTitle">Warnings</p>
+          <ul className="vacancyMatrixLimitationsList">
+            {parsed.warnings.map((warning, index) => (
+              <li key={`${warning}-${index}`}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CandidatePreferenceChecksTable({
+  artifact
+}: {
+  artifact: Record<string, unknown>;
+}) {
+  const parsed = parseCandidatePreferenceChecksArtifact(artifact);
+  if (!parsed || parsed.rows.length === 0) {
+    return null;
+  }
+  return (
+    <div className="vacancyStructuredSection">
+      <div className="vacancyMatrixTableWrap">
+        <table className="vacancyMatrixTable">
+          <thead>
+            <tr>
+              <th>Criterio</th>
+              <th>Estado</th>
+              <th>Vacante</th>
+              <th>Candidato</th>
+              <th>Por qué</th>
+            </tr>
+          </thead>
+          <tbody>
+            {parsed.rows.map((row, index) => (
+              <tr key={`${row.criterion_key || row.criterion}-${index}`}>
+                <td>{row.criterion}</td>
+                <td>{row.state}</td>
+                <td>{row.vacancy_value || "-"}</td>
+                <td>{row.candidate_value || "-"}</td>
+                <td>{row.why || "Sin explicación disponible."}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {parsed.warnings.length > 0 ? (
+        <div className="vacancyMatrixWarnings">
+          <p className="metaText vacancyMatrixGroupTitle">Warnings</p>
+          <ul className="vacancyMatrixLimitationsList">
+            {parsed.warnings.map((warning, index) => (
+              <li key={`${warning}-${index}`}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function getAiRunPreviewText(run: AIRun): string {
@@ -8728,15 +9067,26 @@ export default function App() {
                         ) : null}
                       </div>
                       {hasCandidatePreferenceChecksArtifact ? (
-                        <label className="field">
-                          JSON C2
-                          <textarea
-                            className="vacancyV2JsonTextarea"
-                            readOnly
-                            rows={12}
-                            value={safePrettyJson(item.candidate_preference_checks_artifact)}
-                          />
-                        </label>
+                        <>
+                          <div className="field">
+                            <span>Vista estructurada C2</span>
+                            <CandidatePreferenceChecksTable
+                              artifact={item.candidate_preference_checks_artifact}
+                            />
+                          </div>
+                          <details className="payloadDetails">
+                            <summary>Ver JSON C2</summary>
+                            <label className="field">
+                              <span>JSON C2</span>
+                              <textarea
+                                className="vacancyV2JsonTextarea"
+                                readOnly
+                                rows={12}
+                                value={safePrettyJson(item.candidate_preference_checks_artifact)}
+                              />
+                            </label>
+                          </details>
+                        </>
                       ) : (
                         <p className="metaText">
                           Sin artefacto C2. Requiere P0 vigente del candidato y C1 valido para comparar vacante vs perfil.
@@ -9155,15 +9505,24 @@ export default function App() {
                         ) : null}
                       </div>
                       {hasVacancyFitPresentationArtifact ? (
-                        <label className="field">
-                          JSON P1
-                          <textarea
-                            className="vacancyV2JsonTextarea"
-                            readOnly
-                            rows={16}
-                            value={safePrettyJson(item.vacancy_fit_presentation_artifact)}
-                          />
-                        </label>
+                        <>
+                          <div className="field">
+                            <span>Vista estructurada P1</span>
+                            <FitPresentationTable artifact={item.vacancy_fit_presentation_artifact} />
+                          </div>
+                          <details className="payloadDetails">
+                            <summary>Ver JSON P1</summary>
+                            <label className="field">
+                              <span>JSON P1</span>
+                              <textarea
+                                className="vacancyV2JsonTextarea"
+                                readOnly
+                                rows={16}
+                                value={safePrettyJson(item.vacancy_fit_presentation_artifact)}
+                              />
+                            </label>
+                          </details>
+                        </>
                       ) : (
                         <p className="metaText">
                           Sin artefacto P1. Requiere S6.5 valido para derivar la matriz profesional deterministica.
@@ -9308,6 +9667,20 @@ export default function App() {
                       </div>
                       {hasVacancyAlignmentReportV2Artifact ? (
                         <>
+                          {hasVacancyFitPresentationArtifact ? (
+                            <div className="field">
+                              <span>Vista estructurada P1</span>
+                              <FitPresentationTable artifact={item.vacancy_fit_presentation_artifact} />
+                            </div>
+                          ) : null}
+                          {hasCandidatePreferenceChecksArtifact ? (
+                            <div className="field">
+                              <span>Vista estructurada C2</span>
+                              <CandidatePreferenceChecksTable
+                                artifact={item.candidate_preference_checks_artifact}
+                              />
+                            </div>
+                          ) : null}
                           {typeof item.vacancy_alignment_report_v2_artifact?.rendered_markdown === "string"
                           && item.vacancy_alignment_report_v2_artifact.rendered_markdown.trim() ? (
                             <div className="field">
