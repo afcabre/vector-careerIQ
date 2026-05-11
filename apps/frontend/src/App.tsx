@@ -65,6 +65,8 @@ import {
   recomputeOpportunityVacancyAlignmentReportV2Stream,
   recomputeOpportunityVacancyAlignmentReportStream,
   recomputeOpportunityVacancySalary,
+  recomputeOpportunityVacancyComparableConditionsStream,
+  recomputeOpportunityCandidatePreferenceChecksStream,
   recomputeCandidatePreferenceProfileStream,
   saveOpportunityFromSearch,
   searchOpportunities,
@@ -999,6 +1001,40 @@ function getVacancyAlignmentSummaryV2StageLabel(stage: string): string {
   return `SSE activo: ${stage}`;
 }
 
+function getVacancyComparableConditionsStageLabel(stage: string): string {
+  const normalized = stage.trim().toLowerCase();
+  if (!normalized) {
+    return "";
+  }
+  if (normalized === "vacancy_comparable_conditions_recompute_started") {
+    return "SSE activo: iniciando normalizacion comparable";
+  }
+  if (normalized === "vacancy_comparable_conditions_building") {
+    return "SSE activo: normalizando condiciones de la vacante";
+  }
+  if (normalized === "vacancy_comparable_conditions_saving") {
+    return "SSE activo: guardando C1";
+  }
+  return `SSE activo: ${stage}`;
+}
+
+function getCandidatePreferenceChecksStageLabel(stage: string): string {
+  const normalized = stage.trim().toLowerCase();
+  if (!normalized) {
+    return "";
+  }
+  if (normalized === "candidate_preference_checks_recompute_started") {
+    return "SSE activo: iniciando checks deterministas";
+  }
+  if (normalized === "candidate_preference_checks_building") {
+    return "SSE activo: comparando vacante y perfil";
+  }
+  if (normalized === "candidate_preference_checks_saving") {
+    return "SSE activo: guardando C2";
+  }
+  return `SSE activo: ${stage}`;
+}
+
 function getVacancyV2GateChipClassName(gatePassed: boolean): string {
   return gatePassed
     ? "vacancyV2StatusChip vacancyV2StatusChipApproved"
@@ -1823,6 +1859,10 @@ export default function App() {
   const [recomputingVacancyBlocksId, setRecomputingVacancyBlocksId] = useState<string | null>(null);
   const [recomputingVacancyDimensionsId, setRecomputingVacancyDimensionsId] = useState<string | null>(null);
   const [recomputingVacancySalaryId, setRecomputingVacancySalaryId] = useState<string | null>(null);
+  const [recomputingVacancyComparableConditionsId, setRecomputingVacancyComparableConditionsId] =
+    useState<string | null>(null);
+  const [recomputingCandidatePreferenceChecksId, setRecomputingCandidatePreferenceChecksId] =
+    useState<string | null>(null);
   const [recomputingVacancyDimensionsEnrichedId, setRecomputingVacancyDimensionsEnrichedId] = useState<string | null>(null);
   const [recomputingVacancyRetrievalQueriesId, setRecomputingVacancyRetrievalQueriesId] =
     useState<string | null>(null);
@@ -1895,6 +1935,14 @@ export default function App() {
     useState<string | null>(null);
   const [vacancyEvidenceAdjudicationStageByOpportunityId, setVacancyEvidenceAdjudicationStageByOpportunityId] =
     useState<Record<string, string>>({});
+  const [
+    vacancyComparableConditionsStageByOpportunityId,
+    setVacancyComparableConditionsStageByOpportunityId
+  ] = useState<Record<string, string>>({});
+  const [
+    candidatePreferenceChecksStageByOpportunityId,
+    setCandidatePreferenceChecksStageByOpportunityId
+  ] = useState<Record<string, string>>({});
   const [vacancyAlignmentSummaryV2StageByOpportunityId, setVacancyAlignmentSummaryV2StageByOpportunityId] =
     useState<Record<string, string>>({});
   const [vacancyAlignmentReportV2StageByOpportunityId, setVacancyAlignmentReportV2StageByOpportunityId] =
@@ -3938,6 +3986,100 @@ export default function App() {
     }
   }
 
+  async function handleRecomputeVacancyComparableConditions(item: Opportunity) {
+    if (!selectedPersonId || recomputingVacancyComparableConditionsId) {
+      return;
+    }
+    setRecomputingVacancyComparableConditionsId(item.opportunity_id);
+    setVacancyComparableConditionsStageByOpportunityId((current) => ({
+      ...current,
+      [item.opportunity_id]: "vacancy_comparable_conditions_recompute_started"
+    }));
+    setErrorMessage(null);
+    try {
+      await recomputeOpportunityVacancyComparableConditionsStream(
+        selectedPersonId,
+        item.opportunity_id,
+        (stage) => {
+          setVacancyComparableConditionsStageByOpportunityId((current) => ({
+            ...current,
+            [item.opportunity_id]: stage
+          }));
+        }
+      );
+      const items = await listOpportunities(selectedPersonId);
+      setSavedOpportunities(items);
+      if (selectedOpportunityId === item.opportunity_id) {
+        const refreshed = items.find((entry) => entry.opportunity_id === item.opportunity_id);
+        if (refreshed) {
+          setOpportunityStatus(refreshed.status);
+          setOpportunityNotes(refreshed.notes);
+        }
+      }
+      setToastMessage("Vacancy Comparable Conditions recalculado");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "No se pudo recalcular Vacancy Comparable Conditions";
+      setErrorMessage(message);
+    } finally {
+      setVacancyComparableConditionsStageByOpportunityId((current) => {
+        const next = { ...current };
+        delete next[item.opportunity_id];
+        return next;
+      });
+      setRecomputingVacancyComparableConditionsId(null);
+    }
+  }
+
+  async function handleRecomputeCandidatePreferenceChecks(item: Opportunity) {
+    if (!selectedPersonId || recomputingCandidatePreferenceChecksId) {
+      return;
+    }
+    setRecomputingCandidatePreferenceChecksId(item.opportunity_id);
+    setCandidatePreferenceChecksStageByOpportunityId((current) => ({
+      ...current,
+      [item.opportunity_id]: "candidate_preference_checks_recompute_started"
+    }));
+    setErrorMessage(null);
+    try {
+      await recomputeOpportunityCandidatePreferenceChecksStream(
+        selectedPersonId,
+        item.opportunity_id,
+        (stage) => {
+          setCandidatePreferenceChecksStageByOpportunityId((current) => ({
+            ...current,
+            [item.opportunity_id]: stage
+          }));
+        }
+      );
+      const items = await listOpportunities(selectedPersonId);
+      setSavedOpportunities(items);
+      if (selectedOpportunityId === item.opportunity_id) {
+        const refreshed = items.find((entry) => entry.opportunity_id === item.opportunity_id);
+        if (refreshed) {
+          setOpportunityStatus(refreshed.status);
+          setOpportunityNotes(refreshed.notes);
+        }
+      }
+      setToastMessage("Candidate Preference Checks recalculado");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "No se pudo recalcular Candidate Preference Checks";
+      setErrorMessage(message);
+    } finally {
+      setCandidatePreferenceChecksStageByOpportunityId((current) => {
+        const next = { ...current };
+        delete next[item.opportunity_id];
+        return next;
+      });
+      setRecomputingCandidatePreferenceChecksId(null);
+    }
+  }
+
   async function handleRecomputeVacancyAlignmentSummaryV2(item: Opportunity) {
     if (!selectedPersonId || recomputingVacancyAlignmentSummaryV2Id) {
       return;
@@ -4208,6 +4350,8 @@ export default function App() {
       | "vacancy_blocks"
       | "vacancy_dimensions"
       | "vacancy_salary"
+      | "vacancy_comparable_conditions"
+      | "candidate_preference_checks"
       | "vacancy_dimensions_enriched"
       | "vacancy_retrieval_queries"
       | "vacancy_retrieval_evidence"
@@ -4237,6 +4381,14 @@ export default function App() {
       } else if (artifact === "vacancy_salary") {
         await updateOpportunity(selectedPersonId, item.opportunity_id, {
           vacancy_salary_status: status,
+        });
+      } else if (artifact === "vacancy_comparable_conditions") {
+        await updateOpportunity(selectedPersonId, item.opportunity_id, {
+          vacancy_comparable_conditions_status: status,
+        });
+      } else if (artifact === "candidate_preference_checks") {
+        await updateOpportunity(selectedPersonId, item.opportunity_id, {
+          candidate_preference_checks_status: status,
         });
       } else if (artifact === "vacancy_dimensions_enriched") {
         await updateOpportunity(selectedPersonId, item.opportunity_id, {
@@ -7477,6 +7629,10 @@ export default function App() {
               const hasVacancyDimensionsArtifact =
                 Object.keys(item.vacancy_dimensions_artifact ?? {}).length > 0;
               const hasVacancySalaryArtifact = Object.keys(item.vacancy_salary_artifact ?? {}).length > 0;
+              const hasVacancyComparableConditionsArtifact =
+                Object.keys(item.vacancy_comparable_conditions_artifact ?? {}).length > 0;
+              const hasCandidatePreferenceChecksArtifact =
+                Object.keys(item.candidate_preference_checks_artifact ?? {}).length > 0;
               const hasVacancyDimensionsEnrichedArtifact =
                 Object.keys(item.vacancy_dimensions_enriched_artifact ?? {}).length > 0;
               const hasVacancyRetrievalQueriesArtifact =
@@ -7500,6 +7656,12 @@ export default function App() {
                 item.vacancy_dimensions_status
               );
               const vacancySalaryStatusLabel = getVacancyV2StatusLabel(item.vacancy_salary_status);
+              const vacancyComparableConditionsStatusLabel = getVacancyV2StatusLabel(
+                item.vacancy_comparable_conditions_status
+              );
+              const candidatePreferenceChecksStatusLabel = getVacancyV2StatusLabel(
+                item.candidate_preference_checks_status
+              );
               const vacancyDimensionsEnrichedStatusLabel = getVacancyV2StatusLabel(
                 item.vacancy_dimensions_enriched_status
               );
@@ -7536,6 +7698,12 @@ export default function App() {
               const vacancySalaryGeneratedAt = item.vacancy_salary_generated_at
                 ? formatAiRunTimestamp(item.vacancy_salary_generated_at)
                 : "Sin generar";
+              const vacancyComparableConditionsGeneratedAt = item.vacancy_comparable_conditions_generated_at
+                ? formatAiRunTimestamp(item.vacancy_comparable_conditions_generated_at)
+                : "Sin generar";
+              const candidatePreferenceChecksGeneratedAt = item.candidate_preference_checks_generated_at
+                ? formatAiRunTimestamp(item.candidate_preference_checks_generated_at)
+                : "Sin generar";
               const vacancyDimensionsEnrichedGeneratedAt = item.vacancy_dimensions_enriched_generated_at
                 ? formatAiRunTimestamp(item.vacancy_dimensions_enriched_generated_at)
                 : "Sin generar";
@@ -7569,6 +7737,10 @@ export default function App() {
                 updatingVacancyV2StatusKey === `vacancy_dimensions:${item.opportunity_id}`;
               const isUpdatingVacancySalaryStatus =
                 updatingVacancyV2StatusKey === `vacancy_salary:${item.opportunity_id}`;
+              const isUpdatingVacancyComparableConditionsStatus =
+                updatingVacancyV2StatusKey === `vacancy_comparable_conditions:${item.opportunity_id}`;
+              const isUpdatingCandidatePreferenceChecksStatus =
+                updatingVacancyV2StatusKey === `candidate_preference_checks:${item.opportunity_id}`;
               const isUpdatingVacancyDimensionsEnrichedStatus =
                 updatingVacancyV2StatusKey === `vacancy_dimensions_enriched:${item.opportunity_id}`;
               const isUpdatingVacancyRetrievalQueriesStatus =
@@ -7591,6 +7763,14 @@ export default function App() {
                 vacancyEvidenceAdjudicationStageByOpportunityId[item.opportunity_id] ?? "";
               const vacancyEvidenceAdjudicationStageLabel =
                 getVacancyEvidenceAdjudicationStageLabel(vacancyEvidenceAdjudicationStage);
+              const vacancyComparableConditionsStage =
+                vacancyComparableConditionsStageByOpportunityId[item.opportunity_id] ?? "";
+              const vacancyComparableConditionsStageLabel =
+                getVacancyComparableConditionsStageLabel(vacancyComparableConditionsStage);
+              const candidatePreferenceChecksStage =
+                candidatePreferenceChecksStageByOpportunityId[item.opportunity_id] ?? "";
+              const candidatePreferenceChecksStageLabel =
+                getCandidatePreferenceChecksStageLabel(candidatePreferenceChecksStage);
               const vacancyEvidenceAdjudicationError =
                 vacancyEvidenceAdjudicationErrorByOpportunityId[item.opportunity_id] ?? "";
               const vacancyAlignmentSummaryV2Stage =
@@ -8272,6 +8452,152 @@ export default function App() {
                       ) : (
                         <p className="metaText">
                           Sin artefacto S3.1. Requiere Step 3 valido para normalizar salario.
+                        </p>
+                      )}
+                    </section>
+
+                    <section className="vacancyV2Section">
+                      <div className="vacancyV2SectionHeader">
+                        <div>
+                          <p className="metaText vacancyV2SectionTitle">
+                            C1 · Vacancy Comparable Conditions
+                          </p>
+                          <p className="metaText">Generado: {vacancyComparableConditionsGeneratedAt}</p>
+                          {recomputingVacancyComparableConditionsId === item.opportunity_id
+                          && vacancyComparableConditionsStageLabel ? (
+                            <p className="metaText">{vacancyComparableConditionsStageLabel}</p>
+                          ) : null}
+                        </div>
+                        <div className="metaChips vacancyV2HeaderChips">
+                          <span
+                            className={`metaChip ${getVacancyV2StatusClassName(item.vacancy_comparable_conditions_status)}`}
+                          >
+                            {vacancyComparableConditionsStatusLabel}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="cardActions">
+                        <button
+                          className="vacancyProfileQuickActionButton"
+                          disabled={
+                            !hasVacancyDimensionsArtifact
+                            || recomputingVacancyComparableConditionsId === item.opportunity_id
+                          }
+                          onClick={() => void handleRecomputeVacancyComparableConditions(item)}
+                          type="button"
+                        >
+                          {recomputingVacancyComparableConditionsId === item.opportunity_id
+                            ? "Recalculando..."
+                            : "Recalcular C1"}
+                        </button>
+                        {hasVacancyComparableConditionsArtifact ? (
+                          <button
+                            className="vacancyProfileQuickActionButton"
+                            disabled={isUpdatingVacancyComparableConditionsStatus}
+                            onClick={() =>
+                              void handleSetVacancyV2Status(
+                                item,
+                                "vacancy_comparable_conditions",
+                                item.vacancy_comparable_conditions_status === "approved"
+                                  ? "draft"
+                                  : "approved"
+                              )}
+                            type="button"
+                          >
+                            {isUpdatingVacancyComparableConditionsStatus
+                              ? "Actualizando..."
+                              : item.vacancy_comparable_conditions_status === "approved"
+                                ? "Marcar borrador"
+                                : "Aprobar C1"}
+                          </button>
+                        ) : null}
+                      </div>
+                      {hasVacancyComparableConditionsArtifact ? (
+                        <label className="field">
+                          JSON C1
+                          <textarea
+                            className="vacancyV2JsonTextarea"
+                            readOnly
+                            rows={12}
+                            value={safePrettyJson(item.vacancy_comparable_conditions_artifact)}
+                          />
+                        </label>
+                      ) : (
+                        <p className="metaText">
+                          Sin artefacto C1. Requiere Step 3 valido y, si existe, el artefacto salarial de S3.1.
+                        </p>
+                      )}
+                    </section>
+
+                    <section className="vacancyV2Section">
+                      <div className="vacancyV2SectionHeader">
+                        <div>
+                          <p className="metaText vacancyV2SectionTitle">
+                            C2 · Candidate Preference Checks
+                          </p>
+                          <p className="metaText">Generado: {candidatePreferenceChecksGeneratedAt}</p>
+                          {recomputingCandidatePreferenceChecksId === item.opportunity_id
+                          && candidatePreferenceChecksStageLabel ? (
+                            <p className="metaText">{candidatePreferenceChecksStageLabel}</p>
+                          ) : null}
+                        </div>
+                        <div className="metaChips vacancyV2HeaderChips">
+                          <span
+                            className={`metaChip ${getVacancyV2StatusClassName(item.candidate_preference_checks_status)}`}
+                          >
+                            {candidatePreferenceChecksStatusLabel}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="cardActions">
+                        <button
+                          className="vacancyProfileQuickActionButton"
+                          disabled={
+                            !hasVacancyComparableConditionsArtifact
+                            || recomputingCandidatePreferenceChecksId === item.opportunity_id
+                          }
+                          onClick={() => void handleRecomputeCandidatePreferenceChecks(item)}
+                          type="button"
+                        >
+                          {recomputingCandidatePreferenceChecksId === item.opportunity_id
+                            ? "Recalculando..."
+                            : "Recalcular C2"}
+                        </button>
+                        {hasCandidatePreferenceChecksArtifact ? (
+                          <button
+                            className="vacancyProfileQuickActionButton"
+                            disabled={isUpdatingCandidatePreferenceChecksStatus}
+                            onClick={() =>
+                              void handleSetVacancyV2Status(
+                                item,
+                                "candidate_preference_checks",
+                                item.candidate_preference_checks_status === "approved"
+                                  ? "draft"
+                                  : "approved"
+                              )}
+                            type="button"
+                          >
+                            {isUpdatingCandidatePreferenceChecksStatus
+                              ? "Actualizando..."
+                              : item.candidate_preference_checks_status === "approved"
+                                ? "Marcar borrador"
+                                : "Aprobar C2"}
+                          </button>
+                        ) : null}
+                      </div>
+                      {hasCandidatePreferenceChecksArtifact ? (
+                        <label className="field">
+                          JSON C2
+                          <textarea
+                            className="vacancyV2JsonTextarea"
+                            readOnly
+                            rows={12}
+                            value={safePrettyJson(item.candidate_preference_checks_artifact)}
+                          />
+                        </label>
+                      ) : (
+                        <p className="metaText">
+                          Sin artefacto C2. Requiere P0 vigente del candidato y C1 valido para comparar vacante vs perfil.
                         </p>
                       )}
                     </section>

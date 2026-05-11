@@ -117,6 +117,12 @@ export type Opportunity = {
   vacancy_salary_artifact: Record<string, unknown>;
   vacancy_salary_status: "none" | "draft" | "approved" | "error";
   vacancy_salary_generated_at: string;
+  vacancy_comparable_conditions_artifact: Record<string, unknown>;
+  vacancy_comparable_conditions_status: "none" | "draft" | "approved" | "error";
+  vacancy_comparable_conditions_generated_at: string;
+  candidate_preference_checks_artifact: Record<string, unknown>;
+  candidate_preference_checks_status: "none" | "draft" | "approved" | "error";
+  candidate_preference_checks_generated_at: string;
   vacancy_dimensions_enriched_artifact: Record<string, unknown>;
   vacancy_dimensions_enriched_status: "none" | "draft" | "approved" | "error";
   vacancy_dimensions_enriched_generated_at: string;
@@ -1104,6 +1110,10 @@ export async function updateOpportunity(
     vacancy_dimensions_status?: "none" | "draft" | "approved" | "error";
     vacancy_salary_artifact?: Record<string, unknown>;
     vacancy_salary_status?: "none" | "draft" | "approved" | "error";
+    vacancy_comparable_conditions_artifact?: Record<string, unknown>;
+    vacancy_comparable_conditions_status?: "none" | "draft" | "approved" | "error";
+    candidate_preference_checks_artifact?: Record<string, unknown>;
+    candidate_preference_checks_status?: "none" | "draft" | "approved" | "error";
     vacancy_dimensions_enriched_artifact?: Record<string, unknown>;
     vacancy_dimensions_enriched_status?: "none" | "draft" | "approved" | "error";
     vacancy_retrieval_queries_artifact?: Record<string, unknown>;
@@ -1190,6 +1200,170 @@ export async function recomputeOpportunityVacancySalary(
     }
   );
   return parseResponse<Opportunity>(response);
+}
+
+export async function recomputeOpportunityVacancyComparableConditionsStream(
+  personId: string,
+  opportunityId: string,
+  onStatus: (stage: string) => void
+): Promise<Opportunity> {
+  const response = await safeFetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/vacancy-comparable-conditions/recompute/stream`,
+    {
+      method: "POST",
+      credentials: "include"
+    }
+  );
+  if (!response.ok) {
+    let messageText = `Request failed: ${response.status}`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) {
+        messageText = payload.detail;
+      }
+    } catch {
+      // Ignore parsing errors for stream setup failures.
+    }
+    throw new Error(messageText);
+  }
+  if (!response.body) {
+    throw new Error("Streaming response body is empty");
+  }
+
+  const decoder = new TextDecoder();
+  const reader = response.body.getReader();
+  let pending = "";
+  let completedOpportunity: Opportunity | null = null;
+  let lastStage = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+    pending += decoder.decode(value, { stream: true });
+    const consumed = consumeSseBuffer(pending, (eventName, payload) => {
+      if (eventName === "tool_status") {
+        const stage = payload.stage;
+        if (typeof stage === "string" && stage.trim()) {
+          lastStage = stage.trim();
+          onStatus(lastStage);
+        }
+      } else if (eventName === "message_complete") {
+        const opportunity = payload.opportunity;
+        if (opportunity && typeof opportunity === "object") {
+          completedOpportunity = opportunity as unknown as Opportunity;
+        }
+      }
+    });
+    pending = consumed.remainder;
+  }
+  if (pending.trim()) {
+    consumeSseBuffer(`${pending}\n\n`, (eventName, payload) => {
+      if (eventName === "tool_status") {
+        const stage = payload.stage;
+        if (typeof stage === "string" && stage.trim()) {
+          lastStage = stage.trim();
+          onStatus(lastStage);
+        }
+      } else if (eventName === "message_complete") {
+        const opportunity = payload.opportunity;
+        if (opportunity && typeof opportunity === "object") {
+          completedOpportunity = opportunity as unknown as Opportunity;
+        }
+      }
+    });
+  }
+
+  if (!completedOpportunity) {
+    const stageSuffix = lastStage ? ` (last stage: ${lastStage})` : "";
+    throw new Error(
+      `Vacancy comparable conditions stream ended without completion payload${stageSuffix}`
+    );
+  }
+  return completedOpportunity;
+}
+
+export async function recomputeOpportunityCandidatePreferenceChecksStream(
+  personId: string,
+  opportunityId: string,
+  onStatus: (stage: string) => void
+): Promise<Opportunity> {
+  const response = await safeFetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/candidate-preference-checks/recompute/stream`,
+    {
+      method: "POST",
+      credentials: "include"
+    }
+  );
+  if (!response.ok) {
+    let messageText = `Request failed: ${response.status}`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) {
+        messageText = payload.detail;
+      }
+    } catch {
+      // Ignore parsing errors for stream setup failures.
+    }
+    throw new Error(messageText);
+  }
+  if (!response.body) {
+    throw new Error("Streaming response body is empty");
+  }
+
+  const decoder = new TextDecoder();
+  const reader = response.body.getReader();
+  let pending = "";
+  let completedOpportunity: Opportunity | null = null;
+  let lastStage = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+    pending += decoder.decode(value, { stream: true });
+    const consumed = consumeSseBuffer(pending, (eventName, payload) => {
+      if (eventName === "tool_status") {
+        const stage = payload.stage;
+        if (typeof stage === "string" && stage.trim()) {
+          lastStage = stage.trim();
+          onStatus(lastStage);
+        }
+      } else if (eventName === "message_complete") {
+        const opportunity = payload.opportunity;
+        if (opportunity && typeof opportunity === "object") {
+          completedOpportunity = opportunity as unknown as Opportunity;
+        }
+      }
+    });
+    pending = consumed.remainder;
+  }
+  if (pending.trim()) {
+    consumeSseBuffer(`${pending}\n\n`, (eventName, payload) => {
+      if (eventName === "tool_status") {
+        const stage = payload.stage;
+        if (typeof stage === "string" && stage.trim()) {
+          lastStage = stage.trim();
+          onStatus(lastStage);
+        }
+      } else if (eventName === "message_complete") {
+        const opportunity = payload.opportunity;
+        if (opportunity && typeof opportunity === "object") {
+          completedOpportunity = opportunity as unknown as Opportunity;
+        }
+      }
+    });
+  }
+
+  if (!completedOpportunity) {
+    const stageSuffix = lastStage ? ` (last stage: ${lastStage})` : "";
+    throw new Error(
+      `Candidate preference checks stream ended without completion payload${stageSuffix}`
+    );
+  }
+  return completedOpportunity;
 }
 
 export async function recomputeOpportunityVacancyDimensionsEnriched(
