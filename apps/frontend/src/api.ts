@@ -1774,7 +1774,8 @@ export async function recomputeOpportunityVacancyAlignmentReportStream(
 export async function recomputeOpportunityVacancyAlignmentReportV2Stream(
   personId: string,
   opportunityId: string,
-  onStatus: (stage: string) => void
+  onStatus: (stage: string) => void,
+  onDelta?: (delta: string) => void
 ): Promise<Opportunity> {
   const response = await safeFetch(
     `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/vacancy-alignment-report-v2/recompute/stream`,
@@ -1818,6 +1819,12 @@ export async function recomputeOpportunityVacancyAlignmentReportV2Stream(
           lastStage = stage.trim();
           onStatus(lastStage);
         }
+      } else if (eventName === "message_delta") {
+        const channel = payload.channel;
+        const delta = payload.delta;
+        if (channel === "narrative_text" && typeof delta === "string" && delta.length > 0) {
+          onDelta?.(delta);
+        }
       } else if (eventName === "message_complete") {
         const opportunity = payload.opportunity;
         if (opportunity && typeof opportunity === "object") {
@@ -1834,6 +1841,12 @@ export async function recomputeOpportunityVacancyAlignmentReportV2Stream(
         if (typeof stage === "string" && stage.trim()) {
           lastStage = stage.trim();
           onStatus(lastStage);
+        }
+      } else if (eventName === "message_delta") {
+        const channel = payload.channel;
+        const delta = payload.delta;
+        if (channel === "narrative_text" && typeof delta === "string" && delta.length > 0) {
+          onDelta?.(delta);
         }
       } else if (eventName === "message_complete") {
         const opportunity = payload.opportunity;

@@ -54,6 +54,7 @@ from app.services.opportunity_store import (
 )
 from app.services.opportunity_profile_service import extract_structured_opportunity_profile
 from app.services.person_store import get_person
+from app.services.llm_service import stream_prompt
 from app.services.vacancy_v2_consistency_gate import (
     build_vacancy_v2_consistency_report,
     evaluate_vacancy_v2_consistency_report,
@@ -412,6 +413,34 @@ class AIRunsResponse(BaseModel):
 
 def _serialize_sse(event: str, payload: dict[str, Any]) -> str:
     return f"event: {event}\ndata: {json.dumps(payload)}\n\n"
+
+
+def _vacancy_alignment_report_v2_narrative_prompt(
+    *,
+    person: dict[str, Any],
+    opportunity: dict[str, Any],
+    artifact: dict[str, Any],
+) -> str:
+    report_json = json.dumps(artifact.get("report", {}), ensure_ascii=False)
+    return (
+        "Actua como analista senior de alineacion candidato-vacante. "
+        "Redacta solo la narrativa final para el candidato usando exclusivamente el JSON consolidado del reporte. "
+        "No incluyas tablas, no repitas matrices completas y no inventes informacion. "
+        "Usa markdown simple con estos encabezados en este orden exacto: "
+        "## Resumen ejecutivo, "
+        "## 1. ¿Encaja con la vacante?, "
+        "## 2. ¿Qué tiene a favor?, "
+        "## 3. ¿Qué le falta o no está demostrado?, "
+        "## 4. ¿Qué choca con sus preferencias o condiciones?, "
+        "## 5. ¿Qué debería ajustar o mejorar para aumentar su fit?, "
+        "## Conclusión accionable. "
+        "Cuando menciones condiciones o preferencias, usa solo lo ya resuelto en candidate_preference_matrix. "
+        "Persona: "
+        f"{str(person.get('full_name', '')).strip()}. "
+        "Vacante: "
+        f"{str(opportunity.get('title', '')).strip()} en {str(opportunity.get('company', '')).strip()}. "
+        f"Reporte consolidado: {report_json}"
+    )
 
 
 def _require_person(person_id: str) -> dict[str, Any]:
@@ -2816,6 +2845,48 @@ async def recompute_vacancy_alignment_report_v2_stream(
                 ),
                 settings=settings,
             )
+
+            yield _serialize_sse(
+                "tool_status",
+                {
+                    "person_id": person_id,
+                    "opportunity_id": opportunity_id,
+                    "stage": "vacancy_alignment_report_v2_streaming_narrative",
+                },
+            )
+            await asyncio.sleep(0)
+
+            narrative_prompt = _vacancy_alignment_report_v2_narrative_prompt(
+                person=person,
+                opportunity=opportunity,
+                artifact=artifact,
+            )
+            try:
+                for delta in stream_prompt(
+                    "Eres un analista senior de alineacion candidato-vacante. "
+                    "Escribe con claridad, grounding y foco en accion. "
+                    "No inventes informacion. No contradigas el reporte consolidado.",
+                    narrative_prompt,
+                    settings,
+                    temperature=0.2,
+                    person_id=person_id,
+                    opportunity_id=opportunity_id,
+                    flow_key="task_vacancy_alignment_report_v2_narrative_stream",
+                ):
+                    if not delta:
+                        continue
+                    yield _serialize_sse(
+                        "message_delta",
+                        {
+                            "person_id": person_id,
+                            "opportunity_id": opportunity_id,
+                            "channel": "narrative_text",
+                            "delta": delta,
+                        },
+                    )
+                    await asyncio.sleep(0)
+            except Exception:
+                pass
 
             yield _serialize_sse(
                 "tool_status",

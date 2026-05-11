@@ -1061,6 +1061,9 @@ function getVacancyAlignmentReportV2StageLabel(stage: string): string {
   if (normalized === "vacancy_alignment_report_v2_extracting") {
     return "SSE activo: generando reporte grounded v2";
   }
+  if (normalized === "vacancy_alignment_report_v2_streaming_narrative") {
+    return "SSE activo: redactando narrativa final";
+  }
   if (normalized === "vacancy_alignment_report_v2_saving") {
     return "SSE activo: guardando reporte v2";
   }
@@ -1508,6 +1511,86 @@ function CandidatePreferenceChecksTable({
       ) : null}
     </div>
   );
+}
+
+function buildAlignmentReportV2NarrativePreview(artifact: Record<string, unknown>): string {
+  const report = asRecord(artifact.report);
+  if (!report) {
+    return "";
+  }
+  const executiveSummary = asRecord(report.executive_summary);
+  const fitAnswer = asRecord(report.fit_answer);
+  const actionableConclusion = asRecord(report.actionable_conclusion);
+  const strengths = Array.isArray(report.strengths) ? report.strengths : [];
+  const gaps = Array.isArray(report.gaps) ? report.gaps : [];
+  const conflicts = Array.isArray(report.preference_conflicts) ? report.preference_conflicts : [];
+  const improvements = asRecord(report.improvement_actions);
+  const improvementLines = improvements
+    ? [
+        ...asStringArray(improvements.reinforce_in_cv_or_profile),
+        ...asStringArray(improvements.validate_with_recruiter),
+        ...asStringArray(improvements.application_narrative)
+      ]
+    : [];
+
+  const strengthLines = strengths
+    .map((item) => {
+      const record = asRecord(item);
+      if (!record) {
+        return "";
+      }
+      const fortaleza = String(record.fortaleza ?? "").trim();
+      const porque = String(record.por_que_importa ?? "").trim();
+      return fortaleza ? `- ${fortaleza}${porque ? `: ${porque}` : ""}` : "";
+    })
+    .filter((line) => line.length > 0);
+  const gapLines = gaps
+    .map((item) => {
+      const record = asRecord(item);
+      if (!record) {
+        return "";
+      }
+      const brecha = String(record.brecha ?? "").trim();
+      const accion = String(record.accion_recomendada ?? "").trim();
+      return brecha ? `- ${brecha}${accion ? `: ${accion}` : ""}` : "";
+    })
+    .filter((line) => line.length > 0);
+  const conflictLines = conflicts
+    .map((item) => {
+      const record = asRecord(item);
+      if (!record) {
+        return "";
+      }
+      const criterio = String(record.criterio ?? "").trim();
+      const descripcion = String(record.descripcion ?? "").trim();
+      return criterio ? `- ${criterio}${descripcion ? `: ${descripcion}` : ""}` : "";
+    })
+    .filter((line) => line.length > 0);
+
+  const sections = [
+    "## Resumen ejecutivo",
+    String(executiveSummary?.summary ?? "").trim(),
+    "",
+    "## 1. ¿Encaja con la vacante?",
+    String(fitAnswer?.respuesta_para_el_candidato ?? "").trim(),
+    "",
+    "## 2. ¿Qué tiene a favor?",
+    strengthLines.join("\n") || "- Sin fortalezas destacadas.",
+    "",
+    "## 3. ¿Qué le falta o no está demostrado?",
+    gapLines.join("\n") || "- No se registran brechas adicionales.",
+    "",
+    "## 4. ¿Qué choca con sus preferencias o condiciones?",
+    conflictLines.join("\n") || "- No se identifican conflictos preferenciales directos.",
+    "",
+    "## 5. ¿Qué debería ajustar o mejorar para aumentar su fit?",
+    improvementLines.map((line) => `- ${line}`).join("\n") || "- No se registran acciones adicionales.",
+    "",
+    "## Conclusión accionable",
+    String(actionableConclusion?.main_reason ?? "").trim(),
+    String(actionableConclusion?.recommended_next_step ?? "").trim()
+  ];
+  return sections.filter((part) => part.trim().length > 0).join("\n");
 }
 
 function getAiRunPreviewText(run: AIRun): string {
@@ -2292,6 +2375,10 @@ export default function App() {
   const [
     vacancyAlignmentReportV2ErrorByOpportunityId,
     setVacancyAlignmentReportV2ErrorByOpportunityId
+  ] = useState<Record<string, string>>({});
+  const [
+    vacancyAlignmentReportV2NarrativeByOpportunityId,
+    setVacancyAlignmentReportV2NarrativeByOpportunityId
   ] = useState<Record<string, string>>({});
   const [recomputingVacancyAlignmentReportV2Id, setRecomputingVacancyAlignmentReportV2Id] =
     useState<string | null>(null);
@@ -4632,6 +4719,10 @@ export default function App() {
       delete next[item.opportunity_id];
       return next;
     });
+    setVacancyAlignmentReportV2NarrativeByOpportunityId((current) => ({
+      ...current,
+      [item.opportunity_id]: ""
+    }));
     setErrorMessage(null);
     try {
       await recomputeOpportunityVacancyAlignmentReportV2Stream(
@@ -4641,6 +4732,12 @@ export default function App() {
           setVacancyAlignmentReportV2StageByOpportunityId((current) => ({
             ...current,
             [item.opportunity_id]: stage
+          }));
+        },
+        (delta) => {
+          setVacancyAlignmentReportV2NarrativeByOpportunityId((current) => ({
+            ...current,
+            [item.opportunity_id]: `${current[item.opportunity_id] ?? ""}${delta}`
           }));
         }
       );
@@ -8264,6 +8361,16 @@ export default function App() {
                 getVacancyAlignmentReportV2StageLabel(vacancyAlignmentReportV2Stage);
               const vacancyAlignmentReportV2Error =
                 vacancyAlignmentReportV2ErrorByOpportunityId[item.opportunity_id] ?? "";
+              const vacancyAlignmentReportV2Narrative =
+                vacancyAlignmentReportV2NarrativeByOpportunityId[item.opportunity_id] ?? "";
+              const vacancyAlignmentReportV2NarrativePreview =
+                buildAlignmentReportV2NarrativePreview(item.vacancy_alignment_report_v2_artifact);
+              const vacancyAlignmentRawWarnings = Array.from(
+                new Set([
+                  ...asStringArray(item.vacancy_fit_presentation_artifact?.warnings),
+                  ...asStringArray(item.candidate_preference_checks_artifact?.warnings)
+                ])
+              );
               const vacancyAlignmentReportTraces =
                 vacancyAlignmentReportTracesByOpportunityId[item.opportunity_id] ?? [];
               const isLoadingVacancyAlignmentReportTraces =
@@ -9665,20 +9772,19 @@ export default function App() {
                           </button>
                         ) : null}
                       </div>
-                      {hasVacancyAlignmentReportV2Artifact ? (
+                      {hasVacancyAlignmentReportV2Artifact
+                      || recomputingVacancyAlignmentReportV2Id === item.opportunity_id ? (
                         <>
-                          {hasVacancyFitPresentationArtifact ? (
+                          {recomputingVacancyAlignmentReportV2Id === item.opportunity_id
+                          && vacancyAlignmentReportV2Narrative.trim().length > 0 ? (
                             <div className="field">
-                              <span>Vista estructurada P1</span>
-                              <FitPresentationTable artifact={item.vacancy_fit_presentation_artifact} />
-                            </div>
-                          ) : null}
-                          {hasCandidatePreferenceChecksArtifact ? (
-                            <div className="field">
-                              <span>Vista estructurada C2</span>
-                              <CandidatePreferenceChecksTable
-                                artifact={item.candidate_preference_checks_artifact}
-                              />
+                              <span>Narrativa LLM en generación</span>
+                              <div className="analysisMarkdownCard">
+                                <MarkdownContent
+                                  className="analysisMarkdown"
+                                  content={vacancyAlignmentReportV2Narrative}
+                                />
+                              </div>
                             </div>
                           ) : null}
                           {typeof item.vacancy_alignment_report_v2_artifact?.rendered_markdown === "string"
@@ -9692,19 +9798,61 @@ export default function App() {
                                 />
                               </div>
                             </div>
+                          ) : vacancyAlignmentReportV2NarrativePreview.trim().length > 0 ? (
+                            <div className="field">
+                              <span>Vista Markdown S8 v2</span>
+                              <div className="analysisMarkdownCard">
+                                <MarkdownContent
+                                  className="analysisMarkdown"
+                                  content={vacancyAlignmentReportV2NarrativePreview}
+                                />
+                              </div>
+                            </div>
                           ) : null}
-                          <details className="payloadDetails">
-                            <summary>Ver JSON S8 v2</summary>
-                            <label className="field">
-                              <span>JSON S8 v2</span>
-                              <textarea
-                                className="vacancyV2JsonTextarea"
-                                readOnly
-                                rows={16}
-                                value={safePrettyJson(item.vacancy_alignment_report_v2_artifact)}
-                              />
-                            </label>
-                          </details>
+                          {vacancyAlignmentRawWarnings.length > 0 ? (
+                            <div className="field">
+                              <span>Warnings</span>
+                              <ul className="vacancyMatrixLimitationsList">
+                                {vacancyAlignmentRawWarnings.map((warning, index) => (
+                                  <li key={`${warning}-${index}`}>{warning}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
+                          {hasCandidatePreferenceChecksArtifact ? (
+                            <details className="payloadDetails">
+                              <summary>Ver matriz de preferencias C2</summary>
+                              <div className="field">
+                                <span>Vista estructurada C2</span>
+                                <CandidatePreferenceChecksTable
+                                  artifact={item.candidate_preference_checks_artifact}
+                                />
+                              </div>
+                            </details>
+                          ) : null}
+                          {hasVacancyFitPresentationArtifact ? (
+                            <details className="payloadDetails">
+                              <summary>Ver matriz profesional P1</summary>
+                              <div className="field">
+                                <span>Vista estructurada P1</span>
+                                <FitPresentationTable artifact={item.vacancy_fit_presentation_artifact} />
+                              </div>
+                            </details>
+                          ) : null}
+                          {hasVacancyAlignmentReportV2Artifact ? (
+                            <details className="payloadDetails">
+                              <summary>Ver JSON S8 v2</summary>
+                              <label className="field">
+                                <span>JSON S8 v2</span>
+                                <textarea
+                                  className="vacancyV2JsonTextarea"
+                                  readOnly
+                                  rows={16}
+                                  value={safePrettyJson(item.vacancy_alignment_report_v2_artifact)}
+                                />
+                              </label>
+                            </details>
+                          ) : null}
                         </>
                       ) : (
                         <p className="metaText">
