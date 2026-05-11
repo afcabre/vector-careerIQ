@@ -29,6 +29,7 @@ from app.services.vacancy_retrieval_queries_service import VacancyRetrievalQueri
 from app.services.vacancy_salary_service import VacancySalaryNormalizationError
 from app.services.vacancy_comparable_conditions_service import VacancyComparableConditionsBuildError
 from app.services.candidate_preference_checks_service import CandidatePreferenceChecksBuildError
+from app.services.vacancy_fit_presentation_service import VacancyFitPresentationBuildError
 
 
 def _clear_in_memory_state() -> None:
@@ -183,6 +184,68 @@ def _sample_candidate_preference_checks(person_id: str, opportunity_id: str) -> 
                 "confidence": "high",
             },
         ],
+        "warnings": [],
+    }
+
+
+def _sample_vacancy_fit_presentation(opportunity_id: str) -> dict[str, Any]:
+    return {
+        "contract_version": "vacancy_fit_presentation.v1",
+        "vacancy_id": opportunity_id,
+        "generated_at": "2026-04-21T10:02:50Z",
+        "groups": {
+            "required_criteria": [
+                {
+                    "item_id": "req_123",
+                    "item_index": 0,
+                    "group": "required_criteria",
+                    "group_code": "req",
+                    "type_label": "Obligatorio",
+                    "criterion": "Profesional en Ingenieria de Sistemas",
+                    "state": "🟢 Cumple",
+                    "why": "La formacion reportada coincide con el requisito.",
+                    "evidence_count": 1,
+                    "evidence": [
+                        {
+                            "source_ref": "cv-1",
+                            "block_title": "Educacion",
+                            "section": "education",
+                            "snippet": "Ingeniero de Sistemas",
+                            "why_it_supports": "Demuestra el titulo requerido.",
+                        }
+                    ],
+                    "limitations": [],
+                    "confidence": "high",
+                    "candidate_risk": "low",
+                }
+            ],
+            "responsibilities": [
+                {
+                    "item_id": "resp_1234567890",
+                    "item_index": 0,
+                    "group": "responsibilities",
+                    "group_code": "resp",
+                    "type_label": "Responsabilidad",
+                    "criterion": "Liderar backlog de datos",
+                    "state": "🟢 Cumple",
+                    "why": "La experiencia descrita prueba liderazgo directo sobre backlog.",
+                    "evidence_count": 1,
+                    "evidence": [
+                        {
+                            "source_ref": "cv-chunk-1",
+                            "block_title": "Experiencia",
+                            "section": "experience",
+                            "snippet": "Lidere backlog y priorizacion trimestral",
+                            "why_it_supports": "Demuestra liderazgo operativo del backlog.",
+                        }
+                    ],
+                    "limitations": [],
+                    "confidence": "high",
+                    "candidate_risk": "low",
+                }
+            ],
+            "desirable_criteria": [],
+        },
         "warnings": [],
     }
 
@@ -782,6 +845,21 @@ class VacancyV2EndpointsTests(unittest.TestCase):
             "Invalid candidate_preference_checks_status",
         )
 
+        with self.assertRaises(HTTPException) as invalid_vacancy_fit_presentation_status:
+            opportunities_api.update_opportunity(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                payload=opportunities_api.UpdateOpportunityRequest(
+                    vacancy_fit_presentation_status="invalid"
+                ),
+                _=self.session,
+            )
+        self.assertEqual(invalid_vacancy_fit_presentation_status.exception.status_code, 422)
+        self.assertEqual(
+            invalid_vacancy_fit_presentation_status.exception.detail,
+            "Invalid vacancy_fit_presentation_status",
+        )
+
         with self.assertRaises(HTTPException) as invalid_enriched_status:
             opportunities_api.update_opportunity(
                 person_id="p-001",
@@ -1204,6 +1282,84 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         stored = opportunity_store.find_opportunity("p-001", opportunity_id)
         assert stored is not None
         self.assertEqual(stored["candidate_preference_checks_status"], "error")
+
+    def test_recompute_vacancy_fit_presentation_success_sets_draft_artifact(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Backend Engineer",
+            company="Acme",
+            location="Hybrid",
+            raw_text="Vacante con matriz profesional.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_evidence_adjudication_artifact=_sample_vacancy_evidence_adjudication(opportunity_id),
+            vacancy_evidence_adjudication_status="approved",
+        )
+        assert updated is not None
+        artifact = _sample_vacancy_fit_presentation(opportunity_id)
+
+        with patch.object(opportunities_api, "build_vacancy_fit_presentation", return_value=artifact):
+            response = opportunities_api.recompute_vacancy_fit_presentation(
+                person_id="p-001",
+                opportunity_id=opportunity_id,
+                _=self.session,
+            )
+
+        self.assertEqual(response.vacancy_fit_presentation_status, "draft")
+        self.assertEqual(
+            response.vacancy_fit_presentation_artifact["contract_version"],
+            "vacancy_fit_presentation.v1",
+        )
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_fit_presentation_status"], "draft")
+
+    def test_recompute_vacancy_fit_presentation_failure_sets_error_status(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Backend Engineer",
+            company="Acme",
+            location="Hybrid",
+            raw_text="Vacante con matriz profesional.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_evidence_adjudication_artifact=_sample_vacancy_evidence_adjudication(opportunity_id),
+            vacancy_evidence_adjudication_status="approved",
+        )
+        assert updated is not None
+
+        with patch.object(
+            opportunities_api,
+            "build_vacancy_fit_presentation",
+            side_effect=VacancyFitPresentationBuildError(
+                "P1 requires a valid vacancy_evidence_adjudication.v1 artifact."
+            ),
+        ):
+            with self.assertRaises(HTTPException) as ctx:
+                opportunities_api.recompute_vacancy_fit_presentation(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                )
+
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertIn(
+            "P1 requires a valid vacancy_evidence_adjudication.v1 artifact.",
+            str(ctx.exception.detail),
+        )
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_fit_presentation_status"], "error")
 
     def test_recompute_vacancy_dimensions_enriched_success_sets_draft_artifact(self) -> None:
         created = opportunity_store.import_text_opportunity(
@@ -2492,6 +2648,92 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         stored = opportunity_store.find_opportunity("p-001", opportunity_id)
         assert stored is not None
         self.assertEqual(stored["candidate_preference_checks_status"], "error")
+
+    def test_vacancy_fit_presentation_stream_emits_stages_and_message_complete(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Backend Engineer",
+            company="Acme",
+            location="Hybrid",
+            raw_text="Vacante con matriz profesional.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_evidence_adjudication_artifact=_sample_vacancy_evidence_adjudication(opportunity_id),
+            vacancy_evidence_adjudication_status="approved",
+        )
+        assert updated is not None
+        artifact = _sample_vacancy_fit_presentation(opportunity_id)
+
+        with patch.object(opportunities_api, "build_vacancy_fit_presentation", return_value=artifact):
+            response = asyncio.run(
+                opportunities_api.recompute_vacancy_fit_presentation_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+
+        events = _parse_sse_events(raw)
+        stages = [payload["stage"] for event_name, payload in events if event_name == "tool_status"]
+        self.assertIn("vacancy_fit_presentation_recompute_started", stages)
+        self.assertIn("vacancy_fit_presentation_building", stages)
+        self.assertIn("vacancy_fit_presentation_saving", stages)
+        complete_payload = next(payload for event_name, payload in events if event_name == "message_complete")
+        self.assertEqual(
+            complete_payload["opportunity"]["vacancy_fit_presentation_status"],
+            "draft",
+        )
+
+    def test_vacancy_fit_presentation_stream_emits_error_and_marks_status(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Backend Engineer",
+            company="Acme",
+            location="Hybrid",
+            raw_text="Vacante con matriz profesional.",
+        )
+        opportunity_id = created["opportunity_id"]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_evidence_adjudication_artifact=_sample_vacancy_evidence_adjudication(opportunity_id),
+            vacancy_evidence_adjudication_status="approved",
+        )
+        assert updated is not None
+
+        with patch.object(
+            opportunities_api,
+            "build_vacancy_fit_presentation",
+            side_effect=VacancyFitPresentationBuildError(
+                "P1 requires a valid vacancy_evidence_adjudication.v1 artifact."
+            ),
+        ):
+            response = asyncio.run(
+                opportunities_api.recompute_vacancy_fit_presentation_stream(
+                    person_id="p-001",
+                    opportunity_id=opportunity_id,
+                    _=self.session,
+                )
+            )
+            raw = asyncio.run(_collect_sse_text(response))
+
+        events = _parse_sse_events(raw)
+        error_payload = next(payload for event_name, payload in events if event_name == "error")
+        self.assertIn(
+            "P1 requires a valid vacancy_evidence_adjudication.v1 artifact.",
+            error_payload["detail"],
+        )
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_fit_presentation_status"], "error")
 
     def test_vacancy_dimensions_enriched_stream_emits_stages_and_message_complete(self) -> None:
         created = opportunity_store.import_text_opportunity(

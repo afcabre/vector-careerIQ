@@ -4,7 +4,7 @@
 - fase_actual: `Implementacion`
 - checkpoint_actual: `El rediseño de match ya cuenta con P0, C1 y C2 en backend: la vacante ya normaliza condiciones comparables, S3.1 preserva componente variable explicito y ahora existe un artefacto deterministico de checks vacante-perfil para ubicacion, modalidad, compensacion y tipo de contrato`
 - repo_status: `flujo V1 operativo con analisis, postulacion, chat, CV semantico, admin de prompts y extraccion estructurada de vacantes en forma legacy estable; propuesta v2 desacoplada en branch experimental`
-- ultima_actualizacion: `2026-05-09`
+- ultima_actualizacion: `2026-05-11`
 
 ## Progreso Por Fase
 - `Fase 0`: completada
@@ -45,6 +45,9 @@
 - validacion tecnica del slice `C2` en verde: `cd apps/backend && .venv/bin/python -m unittest tests.test_candidate_preference_checks_contract tests.test_candidate_preference_checks_service tests.test_vacancy_v2_endpoints` (`66 tests`)
 - slice frontend experimental extendido a `C1 + C2`: `Vacancy V2` ahora expone `Vacancy Comparable Conditions` y `Candidate Preference Checks` con `status`, `generated_at`, recompute por SSE, aprobacion manual `draft/approved` y JSON read-only por oportunidad
 - validacion tecnica del slice frontend `C1 + C2`: `cd apps/frontend && npm run build` en verde
+- slice backend `P1` implementado: nuevo contrato `vacancy_fit_presentation.v1`, servicio deterministico para derivar la matriz profesional desde `vacancy_evidence_adjudication.v1`, persistencia por oportunidad y endpoints `vacancy-fit-presentation/recompute` y `recompute/stream`
+- reglas iniciales de `P1` cerradas en codigo: la matriz principal incluye solo `required_criteria`, `responsibilities` y `desirable_criteria`; `work_conditions`, `benefits` y `about_the_company` quedan fuera del main matrix con `warnings` explicitos; el estado visible se deriva sin LLM desde `alignment_status`
+- validacion tecnica del slice backend `P1`: `cd apps/backend && .venv/bin/python -m unittest tests.test_vacancy_fit_presentation_contract tests.test_vacancy_fit_presentation_service tests.test_vacancy_v2_endpoints` en verde (`67 tests`)
 - `Sprint 1` del rediseño de match iniciado en backend: `S3` ahora refuerza preservacion de contexto minimo en items atomizados, `S4` refuerza queries probatorias, los defaults de retrieval quedan en `retrieval_queries_per_item=4` y `top_k_semantic_per_criterion=6`, y `S8` ya persiste traza completa de request/response sin truncacion forzada por flow
 - nuevo slice backend de `S6.5` implementado: contrato `vacancy_evidence_adjudication.v1`, flow `task_vacancy_evidence_adjudication`, servicio grounded LLM-first, persistencia de artefacto/status/generated_at por oportunidad y endpoints `recompute` / `recompute/stream`
 - validacion tecnica del slice `S6.5` en verde: `cd apps/backend && .venv/bin/python -m unittest tests.test_vacancy_evidence_adjudication_contract tests.test_vacancy_evidence_adjudication_service tests.test_vacancy_v2_endpoints` (`47 tests`)

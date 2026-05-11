@@ -62,6 +62,9 @@ class OpportunityRecord(TypedDict):
     candidate_preference_checks_artifact: dict[str, Any]
     candidate_preference_checks_status: str
     candidate_preference_checks_generated_at: str
+    vacancy_fit_presentation_artifact: dict[str, Any]
+    vacancy_fit_presentation_status: str
+    vacancy_fit_presentation_generated_at: str
     vacancy_dimensions_enriched_artifact: dict[str, Any]
     vacancy_dimensions_enriched_status: str
     vacancy_dimensions_enriched_generated_at: str
@@ -144,6 +147,9 @@ def _normalize(payload: dict | None) -> OpportunityRecord:
         "candidate_preference_checks_artifact": dict(source.get("candidate_preference_checks_artifact", {})),
         "candidate_preference_checks_status": str(source.get("candidate_preference_checks_status", "none")),
         "candidate_preference_checks_generated_at": str(source.get("candidate_preference_checks_generated_at", "")),
+        "vacancy_fit_presentation_artifact": dict(source.get("vacancy_fit_presentation_artifact", {})),
+        "vacancy_fit_presentation_status": str(source.get("vacancy_fit_presentation_status", "none")),
+        "vacancy_fit_presentation_generated_at": str(source.get("vacancy_fit_presentation_generated_at", "")),
         "vacancy_dimensions_enriched_artifact": dict(source.get("vacancy_dimensions_enriched_artifact", {})),
         "vacancy_dimensions_enriched_status": str(source.get("vacancy_dimensions_enriched_status", "none")),
         "vacancy_dimensions_enriched_generated_at": str(source.get("vacancy_dimensions_enriched_generated_at", "")),
@@ -280,6 +286,9 @@ def create_opportunity(
         "candidate_preference_checks_artifact": {},
         "candidate_preference_checks_status": "none",
         "candidate_preference_checks_generated_at": "",
+        "vacancy_fit_presentation_artifact": {},
+        "vacancy_fit_presentation_status": "none",
+        "vacancy_fit_presentation_generated_at": "",
         "vacancy_dimensions_enriched_artifact": {},
         "vacancy_dimensions_enriched_status": "none",
         "vacancy_dimensions_enriched_generated_at": "",
@@ -418,6 +427,8 @@ def update_opportunity(
     vacancy_comparable_conditions_status: str | None = None,
     candidate_preference_checks_artifact: dict[str, Any] | None = None,
     candidate_preference_checks_status: str | None = None,
+    vacancy_fit_presentation_artifact: dict[str, Any] | None = None,
+    vacancy_fit_presentation_status: str | None = None,
     vacancy_dimensions_enriched_artifact: dict[str, Any] | None = None,
     vacancy_dimensions_enriched_status: str | None = None,
     vacancy_retrieval_queries_artifact: dict[str, Any] | None = None,
@@ -514,6 +525,17 @@ def update_opportunity(
         existing["candidate_preference_checks_status"] = candidate_preference_checks_status
         if candidate_preference_checks_artifact is None:
             existing["candidate_preference_checks_generated_at"] = _now_iso()
+
+    if vacancy_fit_presentation_artifact is not None:
+        existing["vacancy_fit_presentation_artifact"] = dict(vacancy_fit_presentation_artifact)
+        existing["vacancy_fit_presentation_generated_at"] = _now_iso()
+
+    if vacancy_fit_presentation_status is not None:
+        if vacancy_fit_presentation_status not in VACANCY_V2_ARTIFACT_STATUSES:
+            return None
+        existing["vacancy_fit_presentation_status"] = vacancy_fit_presentation_status
+        if vacancy_fit_presentation_artifact is None:
+            existing["vacancy_fit_presentation_generated_at"] = _now_iso()
 
     if vacancy_dimensions_enriched_artifact is not None:
         existing["vacancy_dimensions_enriched_artifact"] = dict(vacancy_dimensions_enriched_artifact)
