@@ -314,7 +314,9 @@ const PROMPT_FLOW_LABELS: Record<string, string> = {
   task_vacancy_blocks_extract: "Prompt de tarea: Vacancy Blocks S2",
   task_vacancy_dimensions_extract: "Prompt de tarea: Vacancy Dimensions S3",
   task_vacancy_retrieval_queries_extract: "Prompt de tarea: Queries de retrieval de vacante",
+  task_vacancy_evidence_adjudication: "Prompt de tarea: Adjudicación grounded S6.5",
   task_vacancy_alignment_report: "Prompt de tarea: Reporte final de alineacion",
+  task_vacancy_alignment_report_v2: "Prompt de tarea: Reporte grounded v2 S8",
   task_prepare_guidance: "Prompt de tarea: Preparar guia de perfil",
   task_prepare_cover_letter: "Prompt de tarea: Preparar carta",
   task_prepare_experience_summary: "Prompt de tarea: Preparar resumen"
@@ -335,7 +337,9 @@ const PROMPT_FLOW_ORDER: string[] = [
   "task_vacancy_blocks_extract",
   "task_vacancy_dimensions_extract",
   "task_vacancy_retrieval_queries_extract",
+  "task_vacancy_evidence_adjudication",
   "task_vacancy_alignment_report",
+  "task_vacancy_alignment_report_v2",
   "task_prepare_guidance",
   "task_prepare_cover_letter",
   "task_prepare_experience_summary"
@@ -432,6 +436,31 @@ Ubicacion: {opportunity_location}.
 URL: {opportunity_url}.
 Entrada vacancy_dimensions_enriched.v1: {vacancy_dimensions_enriched_json}.
 Entrada vacancy_salary_normalization.v1: {vacancy_salary_json}`,
+  task_vacancy_evidence_adjudication: `Actua como evaluador senior de evidencia candidato-vacante.
+Tu tarea es decidir, de forma estrictamente grounded, si la evidencia recuperada del CV soporta cada criterio de la vacante.
+Responde exclusivamente JSON valido conforme a vacancy_evidence_adjudication.v1.
+No escribas markdown ni texto fuera del JSON.
+Debes devolver exactamente estas claves raiz: items, warnings.
+adjudication_input solo incluye criterios profesionales comparables contra el CV; no debes inventar ni reintroducir condiciones de trabajo, beneficios ni descripciones promocionales de la empresa si no vienen en adjudication_input.
+items debe contener un item por cada criterio recibido en adjudication_input, sin omitir ninguno ni inventar nuevos.
+Antes de responder, verifica internamente que la cantidad de items en items coincide exactamente con la cantidad de criterios recibidos en adjudication_input.
+Para cada item devuelve exactamente: item_id, item_index, group, group_code, raw_text, criterion_type, priority, alignment_status, evidence_strength, proof_summary, best_supporting_evidence, weak_or_discarded_evidence, limitations, candidate_risk, cv_improvement_opportunity, confidence.
+Usa unicamente la evidencia proporcionada. No inventes experiencia, certificaciones, cargos, sectores, herramientas, anos, salario, preferencias ni condiciones.
+No conviertas similitud semantica en cumplimiento. No conviertas ausencia de evidencia en incumplimiento. No uses el score como conclusion final; usalo solo como pista auxiliar.
+Si un snippet es semanticamente cercano pero no prueba el criterio, muevelo a weak_or_discarded_evidence e indica la razon.
+Si el criterio tiene una parte obligatoria y otra ideal, deseable o preferible, no trates la parte deseable como bloqueador.
+alignment_status solo puede ser: direct, partial, indirect, not_evidenced, conflict, not_applicable.
+evidence_strength solo puede ser: high, medium, low, none.
+priority solo puede ser: critical, important, desirable, contextual.
+criterion_type solo puede ser: education, years_experience, leadership, technical_skill, project_management, transformation, business_outcome, certification, language, condition, cultural, other.
+candidate_risk solo puede ser: none, low, medium, high. confidence solo puede ser: high, medium, low.
+Si no hay evidencia suficiente, usa not_evidenced y evidence_strength none o low segun corresponda.
+best_supporting_evidence debe incluir solo snippets que realmente soporten el criterio e indicar why_it_supports.
+Vacante: {opportunity_context}.
+Persona: {person_context}.
+Entrada vacancy_dimensions_enriched.v1: {vacancy_dimensions_enriched_json}.
+Entrada vacancy_evidence_analysis.v1: {evidence_analysis_json}.
+Entrada adjudication_input: {adjudication_input_json}.`,
   task_vacancy_alignment_report: `Actua como analista senior de ajuste candidato-vacante, orientado a ayudar al candidato y/o a su tutor a decidir si conviene priorizar esta vacante.
 Responde SOLO JSON valido para vacancy_alignment_report.v1 y no escribas texto fuera del JSON.
 Debes producir exactamente dos claves raiz: report, rendered_markdown.
@@ -467,7 +496,30 @@ Luego debes incluir tablas markdown legibles para ambas matrices. No escribas te
 Persona: {person_context}.
 Vacante: {opportunity_context}.
 Entrada vacancy_alignment_summary.v1: {alignment_summary_json}.
-Entrada vacancy_evidence_analysis.v1: {evidence_analysis_json}`
+Entrada vacancy_evidence_analysis.v1: {evidence_analysis_json}`,
+  task_vacancy_alignment_report_v2: `Actua como analista senior de alineacion candidato-vacante, orientado a ayudar al candidato y/o a su tutor a decidir si conviene priorizar esta vacante.
+Responde SOLO JSON valido conforme a vacancy_alignment_report.v2.
+No escribas texto fuera del JSON. Debes producir exactamente dos claves raiz: report, rendered_markdown.
+Perspectiva: el analisis se escribe para el candidato, no para la empresa. Debe decidir si conviene avanzar, que tan defendible es la postulacion y que debe ajustar o validar.
+Usa vacancy_evidence_adjudication.v1 como insumo principal. Usa vacancy_alignment_summary.v2 como resumen cuantitativo auxiliar. Usa vacancy_evidence_analysis.v1 solo como respaldo.
+Usa vacancy_fit_presentation.v1 como matriz profesional autoritativa y candidate_preference_checks.v1 como matriz de preferencias autoritativa.
+Cuando hables de ubicacion, modalidad, compensacion o tipo de contrato, candidate_preference_checks.v1 es la fuente de verdad.
+No digas que falta evidencia en el CV o en el perfil para esas condiciones si candidate_preference_checks.v1 ya resolvio la comparacion.
+No menciones preferencias culturales blandas o campos fuera de candidate_preference_checks.v1 al redactar el ajuste preferencial.
+No inventes informacion, no infles el perfil, no omitas criterios evaluados y no recalcules scores.
+vacancy_fit_matrix debe reflejar exactamente los rows de vacancy_fit_presentation.v1.
+candidate_preference_matrix debe reflejar exactamente los rows de candidate_preference_checks.v1.
+Mapeo obligatorio: direct -> 🟢 Cumple; partial/indirect -> 🟡 Parcial; not_evidenced obligatorio -> ⚪ Sin informacion; not_evidenced deseable -> 🔵 Deseable no evidenciado; conflict -> 🔴 En conflicto.
+Usa solo estas recomendaciones: Avanzar, Avanzar con reservas, Avanzar si se valida X, No priorizar, Descartar.
+Dentro de report usa exactamente: executive_summary, decision_table, vacancy_fit_matrix, candidate_preference_matrix, fit_answer, strengths, gaps, preference_conflicts, improvement_actions, alerts_and_conflicts, actionable_conclusion.
+rendered_markdown debe reflejar el mismo contenido del JSON y usar este orden: ## Resumen ejecutivo, ## Matriz de alineacion, ### Ajuste frente a la vacante, ### Ajuste frente a preferencias y condiciones del candidato, ## 1. ¿Encaja con la vacante?, ## 2. ¿Que tiene a favor?, ## 3. ¿Que le falta o no esta demostrado?, ## 4. ¿Que choca con sus preferencias o condiciones?, ## 5. ¿Que deberia ajustar o mejorar para aumentar su fit?, ## Alertas y conflictos, ## Conclusion accionable.
+Persona: {person_context}.
+Vacante: {opportunity_context}.
+Entrada vacancy_evidence_adjudication.v1: {evidence_adjudication_json}.
+Entrada vacancy_alignment_summary.v2: {alignment_summary_json}.
+Entrada vacancy_evidence_analysis.v1: {evidence_analysis_json}.
+Entrada vacancy_fit_presentation.v1: {fit_presentation_json}.
+Entrada candidate_preference_checks.v1: {preference_checks_json}.`
 };
 const PROMPT_SOURCE_FLOW_KEYS = new Set([
   "search_jobs_tavily",
