@@ -94,8 +94,11 @@ class VacancyEvidenceAnalysisServiceTests(unittest.TestCase):
         self.assertEqual(item["accepted_match_count"], 1)
         self.assertEqual(item["discarded_match_count"], 1)
         self.assertEqual(item["distinct_query_hits"], 2)
+        self.assertEqual(item["accepted_matches"][0]["evidence_id"], "acc_001")
+        self.assertEqual(item["best_evidence"][0]["evidence_id"], "acc_001")
         self.assertEqual(item["best_evidence"][0]["raw_match_count"], 2)
         self.assertEqual(len(item["best_evidence"][0]["query_texts"]), 2)
+        self.assertEqual(item["discarded_matches"][0]["evidence_id"], "disc_001")
         self.assertEqual(
             item["discarded_matches"][0]["discard_reason"],
             "score_below_review_threshold",

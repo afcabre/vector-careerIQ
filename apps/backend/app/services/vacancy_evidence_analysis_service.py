@@ -144,6 +144,22 @@ def _build_discarded_match(
     }
 
 
+def _assign_evidence_ids(
+    matches: list[ConsolidatedEvidenceMatch] | list[DiscardedEvidenceMatch],
+    *,
+    prefix: str,
+) -> list[ConsolidatedEvidenceMatch] | list[DiscardedEvidenceMatch]:
+    identified: list[ConsolidatedEvidenceMatch] | list[DiscardedEvidenceMatch] = []
+    for index, match in enumerate(matches, start=1):
+        identified.append(
+            {
+                **match,
+                "evidence_id": f"{prefix}_{index:03d}",
+            }
+        )
+    return identified
+
+
 def _partition_consolidated_matches(
     item: RetrievalEvidenceItem,
     *,
@@ -206,6 +222,8 @@ def _partition_consolidated_matches(
 
     accepted_matches.sort(key=lambda value: (-value["best_score"], value["snippet"].casefold()))
     discarded_matches.sort(key=lambda value: (-value["best_score"], value["snippet"].casefold()))
+    accepted_matches = _assign_evidence_ids(accepted_matches, prefix="acc")
+    discarded_matches = _assign_evidence_ids(discarded_matches, prefix="disc")
     return accepted_matches, discarded_matches
 
 

@@ -31,6 +31,7 @@ class EvidenceAnalysisThresholds(TypedDict):
 
 
 class ConsolidatedEvidenceMatch(TypedDict):
+    evidence_id: str
     source_ref: str
     snippet: str
     best_score: float
@@ -132,6 +133,7 @@ def _normalize_query_indexes(raw: Any) -> list[int]:
 
 def _empty_consolidated_match() -> ConsolidatedEvidenceMatch:
     return {
+        "evidence_id": "",
         "source_ref": "",
         "snippet": "",
         "best_score": 0.0,
@@ -148,6 +150,7 @@ def _normalize_consolidated_match(raw: Any) -> ConsolidatedEvidenceMatch | None:
     if not isinstance(raw, dict):
         return None
     normalized = _empty_consolidated_match()
+    normalized["evidence_id"] = _clean_text(raw.get("evidence_id"), max_chars=40)
     normalized["source_ref"] = _clean_text(raw.get("source_ref"), max_chars=120)
     normalized["snippet"] = _clean_text(raw.get("snippet"), max_chars=500)
     normalized["best_score"] = _clean_score(raw.get("best_score", 0.0))
