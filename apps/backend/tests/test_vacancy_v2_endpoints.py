@@ -211,7 +211,8 @@ def _sample_vacancy_fit_presentation(opportunity_id: str) -> dict[str, Any]:
                             "block_title": "Educacion",
                             "section": "education",
                             "snippet": "Ingeniero de Sistemas",
-                            "why_it_supports": "Demuestra el titulo requerido.",
+                            "support_scope": "direct",
+                            "support_note_short": "Demuestra el titulo requerido.",
                         }
                     ],
                     "limitations": [],
@@ -236,7 +237,8 @@ def _sample_vacancy_fit_presentation(opportunity_id: str) -> dict[str, Any]:
                             "block_title": "Experiencia",
                             "section": "experience",
                             "snippet": "Lidere backlog y priorizacion trimestral",
-                            "why_it_supports": "Demuestra liderazgo operativo del backlog.",
+                            "support_scope": "direct",
+                            "support_note_short": "Demuestra liderazgo operativo del backlog.",
                         }
                     ],
                     "limitations": [],
@@ -403,7 +405,8 @@ def _sample_vacancy_evidence_adjudication(opportunity_id: str) -> dict[str, Any]
                         "block_title": "Experiencia",
                         "section": "experience",
                         "snippet": "Lidere backlog y priorizacion trimestral",
-                        "why_it_supports": "Demuestra liderazgo operativo del backlog.",
+                        "support_scope": "direct",
+                        "support_note_short": "Demuestra liderazgo operativo del backlog.",
                     }
                 ],
                 "weak_or_discarded_evidence": [],

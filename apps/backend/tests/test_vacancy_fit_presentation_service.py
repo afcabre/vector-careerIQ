@@ -33,7 +33,8 @@ def _adjudication() -> dict[str, object]:
                         "block_title": "Educacion",
                         "section": "education",
                         "snippet": "Ingeniero de Sistemas",
-                        "why_it_supports": "Demuestra el titulo exigido.",
+                        "support_scope": "direct",
+                        "support_note_short": "Demuestra el titulo exigido.",
                     }
                 ],
                 "weak_or_discarded_evidence": [],

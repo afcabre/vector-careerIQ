@@ -584,6 +584,9 @@ These findings are now formal inputs to the next slices and should not be re-deb
 
 ### Slice 5 - `S6/S6.5` Evidence Fidelity Hardening
 
+#### Status
+Implemented and extended in the current spike branch.
+
 #### Objective
 Prevent loss of relevant accepted evidence between `S6` and `S6.5`.
 
@@ -598,6 +601,20 @@ That behavior can hide additional accepted evidence that remains relevant for gr
 - `best_evidence` is only a summarized preview and must not be treated as exhaustive evidence
 - `S6.5` backfill must prioritize `accepted_matches`
 - `best_evidence` may remain trimmed for presentation or quick inspection, but not as the primary semantic source for adjudication backfill
+
+#### Implemented result
+- `S6.5` backfill now prioritizes the full `accepted_matches` set before relying on `best_evidence`
+- `best_evidence` remains a trimmed preview for inspection, but no longer acts as the authoritative semantic source for `S6.5`
+- `S6` now assigns stable `evidence_id` values to accepted and discarded evidence (`acc_*`, `disc_*`)
+- `S6.5` no longer depends on the LLM to rebuild full evidence objects
+- the LLM now selects evidence semantically by reference using `best_supporting_evidence_refs` and `weak_or_discarded_evidence_refs`
+- backend hydration reconstructs contract-compatible `best_supporting_evidence` and `weak_or_discarded_evidence` from `S6`, copying `source_ref`, `block_title`, `section` and `snippet`
+- upstream metadata such as `section: unknown` is preserved as-is; it is no longer degraded into empty strings during adjudication output
+- this keeps `vacancy_evidence_adjudication.v1` externally compatible while moving structural traceability out of the LLM
+- the prompt now explicitly separates item-level synthesis from snippet-level support:
+  - `proof_summary` may integrate multiple evidences from the same item and acts as the main explanation of the item
+  - snippet-level support is now intentionally minimal: each selected evidence carries `support_scope` (`direct`, `partial`, `contextual`) plus an optional `support_note_short`
+  - the visible snippet support must not import facts from sibling snippets
 
 #### Scope
 - `apps/backend/app/services/vacancy_evidence_analysis_service.py`
@@ -615,6 +632,7 @@ That behavior can hide additional accepted evidence that remains relevant for gr
 - no accepted evidence should be lost just because `best_evidence` is trimmed
 - `best_supporting_evidence` remains contract-compatible
 - tests explicitly cover the case where accepted evidence count is greater than `3`
+- tests explicitly cover stable evidence references and deterministic hydration from `S6` into `S6.5`
 
 #### Out of scope
 - `Cohere`
@@ -625,48 +643,52 @@ That behavior can hide additional accepted evidence that remains relevant for gr
 #### Recommended model
 - `gpt-5.4` with `medium` reasoning
 
-### Slice 6 - Supporting Explanation Hardening
+### Slice 6 - Item-First Adjudication Hardening
+
+#### Status
+Reframed after real runs and finalized as an `item-first + snippet support minimal` strategy.
 
 #### Objective
-Improve the fallback quality of `why_it_supports` and weak-evidence explanations so they remain useful even when the LLM omits structured support rationale.
+Reduce snippet-level hallucination while preserving the value of broad retrieval grounding during `S6.5`.
 
 #### Problem statement
-The current fallback explanation is too generic and often references `section`, even when `section` is `unknown`.
-This creates low-value explanations such as a generic statement that the snippet is relevant "from section unknown", which neither proves relevance nor explains the logic of support.
+Real runs show that the retrieval set in `S6` often contains useful global signals for the item, but `S6.5` may still choose one snippet and explain it with facts that actually belong to another sibling snippet.
+This is not mainly a retrieval-quality problem; it is a coupling problem between selected visible evidence and local snippet explanation.
 
 #### Decision
-- fallback explanations must be built from the snippet content and the criterion text, not from `section` metadata as the main anchor
-- `section` may appear only as a weak auxiliary hint when it is actually meaningful
-- if `section` is empty or `unknown`, it must not appear in the explanation
+- the main explanation of an adjudicated item lives in `proof_summary`
+- `proof_summary` may synthesize multiple evidences from the same item
+- snippet-level evidence remains visible and hydrated from `S6`, but no longer tries to carry a rich per-snippet narrative by default
+- snippet-level support is reduced to `support_scope` plus an optional `support_note_short`
+- backend fallback should remain neutral and safe; when the LLM omits local note text, the system should preserve structural evidence and default the support classification safely
+- structural evidence metadata should be hydrated programmatically from `S6`, not regenerated by the LLM
+- `direct` must not be used when the selected snippet does not visibly support an explicit number, range or threshold required by the criterion
 
 #### Required implementation behavior
-- never emit `section unknown` style explanations
-- explain relevance using observable signals from the snippet where possible
-- allow the fallback to express:
-  - direct support
-  - partial support
-  - inferred or indirect support
-- do not invent facts not present in the snippet
-
-#### Expected explanation shape
-Good fallback explanations should resemble:
-- "El snippet menciona liderazgo de equipos y gestion de servicios tecnologicos, lo que aporta soporte parcial al criterio."
-- "El snippet confirma experiencia profesional prolongada, aunque no prueba por si solo el numero exacto de anos requerido."
-- "El snippet describe uso de ERP y soporte a aplicaciones de negocio, por lo que aporta evidencia directa para ese criterio."
-
-Not acceptable:
-- generic statements that merely restate the criterion
-- references to `section unknown`
-- empty semantic justification
+- `proof_summary` remains the primary human-readable explanation
+- `best_supporting_evidence` must preserve `source_ref`, `block_title`, `section` and `snippet` from `S6`
+- each selected snippet must expose `support_scope` with only these values:
+  - `direct`
+  - `partial`
+  - `contextual`
+- `support_note_short` is optional and must stay snippet-local when present
+- if the LLM omits `support_note_short`, the backend must not fabricate pseudo-semantic rationale
+- do not use retries to recover structural evidence metadata that already exists in `S6`
+- do not invent facts not present in the selected snippet
 
 #### Scope
 - `apps/backend/app/services/vacancy_evidence_adjudication_service.py`
+- `apps/backend/app/services/vacancy_evidence_adjudication_contract.py`
+- `apps/backend/app/services/vacancy_fit_presentation_contract.py`
+- `apps/frontend/src/App.tsx`
 - related tests
 
 #### Acceptance criteria
-- fallback explanations mention a concrete signal from the snippet
-- `section unknown` does not appear in fallback support explanations
-- tests cover at least one direct-support and one partial-support fallback case
+- `proof_summary` remains the primary explanation shown to the user
+- snippet-level evidence no longer requires a rich `why_it_supports` string
+- selected visible evidence preserves traceability from `S6`
+- backend defaults snippet-level support safely to `contextual` when the LLM omits local support detail
+- tests cover deterministic hydration plus the new snippet-level shape
 
 #### Out of scope
 - full redesign of adjudication prompt

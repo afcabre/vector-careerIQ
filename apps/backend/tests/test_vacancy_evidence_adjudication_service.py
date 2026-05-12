@@ -118,6 +118,7 @@ def _evidence_analysis() -> dict[str, object]:
                     "distinct_query_hits": 1,
                     "best_evidence": [
                         {
+                            "evidence_id": "acc_001",
                             "source_ref": "cv:chunk:2",
                             "snippet": "Lidere equipos de servicios tecnologicos y transformacion.",
                             "best_score": 0.56,
@@ -129,7 +130,20 @@ def _evidence_analysis() -> dict[str, object]:
                             "raw_match_count": 1,
                         }
                     ],
-                    "accepted_matches": [],
+                    "accepted_matches": [
+                        {
+                            "evidence_id": "acc_001",
+                            "source_ref": "cv:chunk:2",
+                            "snippet": "Lidere equipos de servicios tecnologicos y transformacion.",
+                            "best_score": 0.56,
+                            "query_texts": ["liderazgo de servicios tecnologicos"],
+                            "query_indexes": [0],
+                            "section": "experience",
+                            "block_type": "experience",
+                            "block_title": "Experiencia",
+                            "raw_match_count": 1,
+                        }
+                    ],
                     "discarded_matches": [],
                 }
             ],
@@ -147,6 +161,7 @@ def _evidence_analysis() -> dict[str, object]:
                     "distinct_query_hits": 1,
                     "best_evidence": [
                         {
+                            "evidence_id": "acc_001",
                             "source_ref": "cv:chunk:1",
                             "snippet": "Profesional con 20 anos de experiencia.",
                             "best_score": 0.92,
@@ -158,7 +173,20 @@ def _evidence_analysis() -> dict[str, object]:
                             "raw_match_count": 1,
                         }
                     ],
-                    "accepted_matches": [],
+                    "accepted_matches": [
+                        {
+                            "evidence_id": "acc_001",
+                            "source_ref": "cv:chunk:1",
+                            "snippet": "Profesional con 20 anos de experiencia.",
+                            "best_score": 0.92,
+                            "query_texts": ["anos de experiencia profesional"],
+                            "query_indexes": [0],
+                            "section": "profile_summary",
+                            "block_type": "profile",
+                            "block_title": "Perfil",
+                            "raw_match_count": 1,
+                        }
+                    ],
                     "discarded_matches": [],
                 }
             ],
@@ -189,8 +217,8 @@ class VacancyEvidenceAdjudicationServiceTests(unittest.TestCase):
             "\"alignment_status\":\"partial\","
             "\"evidence_strength\":\"medium\","
             "\"proof_summary\":\"Hay evidencia de liderazgo de servicios tecnologicos, aunque no del nombre literal del area.\","
-            "\"best_supporting_evidence\":[{\"source_ref\":\"cv:chunk:2\",\"block_title\":\"Experiencia\",\"section\":\"experience\",\"snippet\":\"Lidere equipos de servicios tecnologicos y transformacion.\",\"why_it_supports\":\"Prueba liderazgo transferible de servicios tecnologicos.\"}],"
-            "\"weak_or_discarded_evidence\":[],"
+            "\"best_supporting_evidence_refs\":[{\"evidence_id\":\"acc_001\",\"support_scope\":\"partial\",\"support_note_short\":\"Prueba liderazgo transferible de servicios tecnologicos.\"}],"
+            "\"weak_or_discarded_evidence_refs\":[],"
             "\"limitations\":[\"No aparece el nombre literal area de servicios digitales.\"],"
             "\"candidate_risk\":\"medium\","
             "\"cv_improvement_opportunity\":\"Conectar mejor el liderazgo de servicios con transformacion digital.\","
@@ -207,8 +235,8 @@ class VacancyEvidenceAdjudicationServiceTests(unittest.TestCase):
             "\"alignment_status\":\"direct\","
             "\"evidence_strength\":\"high\","
             "\"proof_summary\":\"El CV declara 20 anos de experiencia profesional de forma explicita.\","
-            "\"best_supporting_evidence\":[{\"source_ref\":\"cv:chunk:1\",\"block_title\":\"Perfil\",\"section\":\"profile_summary\",\"snippet\":\"Profesional con 20 anos de experiencia.\",\"why_it_supports\":\"Prueba de forma directa la antiguedad profesional.\"}],"
-            "\"weak_or_discarded_evidence\":[],"
+            "\"best_supporting_evidence_refs\":[{\"evidence_id\":\"acc_001\",\"support_scope\":\"direct\",\"support_note_short\":\"Prueba de forma directa la antiguedad profesional.\"}],"
+            "\"weak_or_discarded_evidence_refs\":[],"
             "\"limitations\":[],"
             "\"candidate_risk\":\"low\","
             "\"cv_improvement_opportunity\":\"Mantener visible la antiguedad profesional en el resumen.\","
@@ -239,6 +267,14 @@ class VacancyEvidenceAdjudicationServiceTests(unittest.TestCase):
         self.assertEqual(len(contract["items"]), 2)
         self.assertEqual(contract["items"][0]["item_id"], responsibility["item_id"])
         self.assertEqual(contract["items"][1]["alignment_status"], "direct")
+        self.assertEqual(
+            contract["items"][0]["best_supporting_evidence"][0]["source_ref"],
+            "cv:chunk:2",
+        )
+        self.assertEqual(
+            contract["items"][1]["best_supporting_evidence"][0]["section"],
+            "profile_summary",
+        )
 
     def test_build_requires_valid_input_artifacts(self) -> None:
         with self.assertRaises(VacancyEvidenceAdjudicationBuildError):
@@ -525,16 +561,12 @@ class VacancyEvidenceAdjudicationServiceTests(unittest.TestCase):
         required_item = contract["items"][1]
         self.assertEqual(required_item["best_supporting_evidence"][0]["source_ref"], "cv:chunk:1")
         self.assertEqual(required_item["best_supporting_evidence"][0]["section"], "profile_summary")
-        self.assertIn(
-            "evidencia directa",
-            required_item["best_supporting_evidence"][0]["why_it_supports"],
-        )
+        self.assertEqual(required_item["best_supporting_evidence"][0]["support_scope"], "contextual")
+        self.assertEqual(required_item["best_supporting_evidence"][0]["support_note_short"], "")
         self.assertEqual(required_item["weak_or_discarded_evidence"][0]["source_ref"], "cv:chunk:4")
         self.assertEqual(responsibility_item["best_supporting_evidence"][0]["source_ref"], "cv:chunk:2")
-        self.assertIn(
-            "evidencia parcial",
-            responsibility_item["best_supporting_evidence"][0]["why_it_supports"],
-        )
+        self.assertEqual(responsibility_item["best_supporting_evidence"][0]["support_scope"], "contextual")
+        self.assertEqual(responsibility_item["best_supporting_evidence"][0]["support_note_short"], "")
 
     def test_build_backfills_from_full_accepted_matches_beyond_best_evidence_preview(self) -> None:
         normalized_items = _normalized_dimension_items()
@@ -653,7 +685,7 @@ class VacancyEvidenceAdjudicationServiceTests(unittest.TestCase):
         self.assertEqual(len(sources), 4)
         self.assertEqual(sources[-1], "cv:chunk:13")
 
-    def test_build_backfill_support_explanation_avoids_unknown_section_and_uses_snippet_signal(self) -> None:
+    def test_build_backfill_support_defaults_to_contextual_without_local_note(self) -> None:
         normalized_items = _normalized_dimension_items()
         responsibility = normalized_items["responsibility"]
         required = normalized_items["required"]
@@ -729,10 +761,9 @@ class VacancyEvidenceAdjudicationServiceTests(unittest.TestCase):
                 settings=object(),
             )
 
-        explanation = contract["items"][0]["best_supporting_evidence"][0]["why_it_supports"]
-        self.assertNotIn("section unknown", explanation)
-        self.assertNotIn("seccion unknown", explanation)
-        self.assertIn("servicios", explanation)
+        evidence = contract["items"][0]["best_supporting_evidence"][0]
+        self.assertEqual(evidence["support_scope"], "contextual")
+        self.assertEqual(evidence["support_note_short"], "")
 
 
 if __name__ == "__main__":

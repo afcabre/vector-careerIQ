@@ -32,6 +32,8 @@ from app.services.vacancy_evidence_adjudication_contract import (
     PRIORITY_CONTEXTUAL,
     PRIORITY_DESIRABLE,
     PRIORITY_IMPORTANT,
+    SUPPORT_SCOPE_CONTEXTUAL,
+    SUPPORT_SCOPES,
     VacancyEvidenceAdjudicationContract,
     VacancyEvidenceAdjudicationItem,
     empty_vacancy_evidence_adjudication_contract,
@@ -193,6 +195,60 @@ def _contract_candidate_from_llm(parsed: dict[str, object]) -> dict[str, object]
     return {"items": parsed, "warnings": []}
 
 
+def _normalize_llm_supporting_refs(raw: Any) -> list[dict[str, str]]:
+    if not isinstance(raw, list):
+        return []
+    refs: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for value in raw:
+        if not isinstance(value, dict):
+            continue
+        evidence_id = str(value.get("evidence_id", "")).strip()
+        support_scope = str(value.get("support_scope", "")).strip()
+        support_note_short = str(
+            value.get("support_note_short", "") or value.get("why_it_supports", "")
+        ).strip()
+        if not evidence_id:
+            continue
+        signature = evidence_id.casefold()
+        if signature in seen:
+            continue
+        seen.add(signature)
+        refs.append(
+            {
+                "evidence_id": evidence_id,
+                "support_scope": support_scope if support_scope in SUPPORT_SCOPES else SUPPORT_SCOPE_CONTEXTUAL,
+                "support_note_short": support_note_short,
+            }
+        )
+    return refs
+
+
+def _normalize_llm_weak_refs(raw: Any) -> list[dict[str, str]]:
+    if not isinstance(raw, list):
+        return []
+    refs: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for value in raw:
+        if not isinstance(value, dict):
+            continue
+        evidence_id = str(value.get("evidence_id", "")).strip()
+        reason = str(value.get("reason", "")).strip()
+        if not evidence_id:
+            continue
+        signature = evidence_id.casefold()
+        if signature in seen:
+            continue
+        seen.add(signature)
+        refs.append(
+            {
+                "evidence_id": evidence_id,
+                "reason": reason,
+            }
+        )
+    return refs
+
+
 def _has_meaningful_items(contract: VacancyEvidenceAdjudicationContract) -> bool:
     return bool(contract["items"])
 
@@ -311,6 +367,7 @@ def _run_adjudication_completion(
     expected_items: list[dict[str, Any]],
     vacancy_dimensions_enriched_artifact: dict[str, Any],
     vacancy_evidence_analysis_artifact: VacancyEvidenceAnalysisContract,
+    analysis_index: dict[str, dict[str, Any]],
     settings: Any,
     llm_temperature: float,
     phase_label: str,
@@ -332,28 +389,37 @@ def _run_adjudication_completion(
         "Usa un item de salida por cada item de entrada en adjudication_input. "
         "No omitas ningun item de entrada y no inventes items nuevos. "
         "Antes de responder, verifica internamente que la cantidad de items en items coincide exactamente con la cantidad de items recibidos en adjudication_input. "
-        "Para cada item debes devolver exactamente: item_id, item_index, group, group_code, raw_text, criterion_type, priority, alignment_status, evidence_strength, proof_summary, best_supporting_evidence, weak_or_discarded_evidence, limitations, candidate_risk, cv_improvement_opportunity, confidence. "
+        "Para cada item debes devolver exactamente: item_id, item_index, group, group_code, raw_text, criterion_type, priority, alignment_status, evidence_strength, proof_summary, best_supporting_evidence_refs, weak_or_discarded_evidence_refs, limitations, candidate_risk, cv_improvement_opportunity, confidence. "
         "Reglas obligatorias: usa unicamente la evidencia proporcionada; no inventes experiencia, certificaciones, cargos, sectores, herramientas, anos ni preferencias; "
         "no conviertas similitud semantica en cumplimiento; no conviertas ausencia de evidencia en incumplimiento; no uses el score como prueba final; "
-        "evalua si el snippet realmente prueba el criterio; si un snippet es cercano pero no prueba el criterio, muevelo a weak_or_discarded_evidence; "
+        "evalua si el snippet realmente prueba el criterio; si un snippet es cercano pero no prueba el criterio, muevelo a weak_or_discarded_evidence_refs; "
         "si el criterio incluye parte obligatoria y parte deseable, no trates la parte deseable como bloqueador. "
         "alignment_status solo puede ser: direct, partial, indirect, not_evidenced, conflict, not_applicable. "
         "evidence_strength solo puede ser: high, medium, low, none. "
         "priority solo puede ser: critical, important, desirable, contextual. "
         "criterion_type solo puede ser: education, years_experience, leadership, technical_skill, project_management, transformation, business_outcome, certification, language, condition, cultural, other. "
         "candidate_risk solo puede ser: none, low, medium, high. confidence solo puede ser: high, medium, low. "
-        "best_supporting_evidence debe incluir solo evidencia que realmente soporte el criterio e indicar why_it_supports. "
-        "why_it_supports no debe limitarse a repetir el criterio ni a decir genericamente que el snippet es relevante. "
-        "why_it_supports debe explicar que parte concreta del snippet soporta el criterio y si el soporte es directo, parcial o contextual. "
-        "Cuando sea posible, menciona la pieza observable del snippet: cargo, anos, tecnologia, certificacion, responsabilidad, resultado, metrica, stakeholder, presupuesto, estandar, dominio o entregable. "
-        "No uses section o block_title como justificacion principal. Si section es unknown o vacia, no la menciones. "
-        "Si el snippet solo sugiere afinidad pero no prueba el criterio, dilo explicitamente en why_it_supports o muevelo a weak_or_discarded_evidence. "
-        "No llenes best_supporting_evidence con todos los snippets aceptados. Curala. "
-        "Prioriza evidencia directa; despues evidencia parcial claramente defendible; deja la evidencia solo contextual fuera de best_supporting_evidence salvo que agregue una senal distinta y necesaria. "
-        "Evita redundancia entre snippets muy parecidos. "
-        "Como regla general devuelve entre 1 y 4 snippets en best_supporting_evidence; puedes devolver mas solo si cada snippet agrega una senal distinta y necesaria. "
-        "Si no puedes explicar de forma especifica por que un snippet soporta el criterio, no lo pongas en best_supporting_evidence. "
-        "Si vacancy_evidence_analysis muestra best_evidence o accepted_matches utiles para un item, no dejes best_supporting_evidence vacio. "
+        "proof_summary es la explicacion principal del item y puede integrar varias evidencias del mismo item. "
+        "best_supporting_evidence_refs, en cambio, representa soporte minimo a nivel snippet. "
+        "best_supporting_evidence_refs debe incluir solo evidencia que realmente soporte el criterio. "
+        "No devuelvas objetos completos de evidencia; devuelve referencias. "
+        "Cada entrada de best_supporting_evidence_refs debe incluir exactamente: evidence_id, support_scope. "
+        "Opcionalmente puedes incluir support_note_short, pero solo si puedes redactarlo usando exclusivamente hechos visibles dentro de ese snippet. "
+        "Cada entrada de weak_or_discarded_evidence_refs debe incluir exactamente: evidence_id, reason. "
+        "Selecciona evidence_id unicamente desde best_evidence, accepted_matches o discarded_matches del item correspondiente. "
+        "No inventes evidence_id ni reescribas snippets. "
+        "Si no puedes mantener trazabilidad clara a una evidencia origen unica, no la selecciones. "
+        "support_scope solo puede ser: direct, partial, contextual. "
+        "Usa direct solo si el snippet contiene una senal explicita muy cercana al criterio. "
+        "Usa partial si el snippet soporta una parte importante del criterio, pero no todo. "
+        "Usa contextual si el snippet aporta contexto util, pero no prueba el criterio de forma fuerte. "
+        "Si el criterio exige un numero, rango o umbral explicito, no uses direct desde un snippet que no muestre ese dato de forma visible o inferible con alta seguridad. "
+        "Si incluyes support_note_short, no repitas el criterio ni uses justificaciones genericas; menciona solo la pieza observable del snippet y no importes hechos de otros snippets del mismo item. "
+        "No llenes best_supporting_evidence_refs con todas las evidencias aceptadas. Curalas. "
+        "Prioriza evidencia directa; despues evidencia parcial claramente defendible; deja la evidencia solo contextual fuera de best_supporting_evidence_refs salvo que agregue una senal distinta y necesaria. "
+        "Evita redundancia entre evidencias muy parecidas. "
+        "Como regla general devuelve entre 1 y 4 referencias en best_supporting_evidence_refs; puedes devolver mas solo si cada evidencia agrega una senal distinta y necesaria. "
+        "Si vacancy_evidence_analysis muestra best_evidence o accepted_matches utiles para un item, no dejes best_supporting_evidence_refs vacio. "
         "Vacante: {opportunity_context}. Persona: {person_context}. "
         "Entrada vacancy_dimensions_enriched.v1: {vacancy_dimensions_enriched_json}. "
         "Entrada vacancy_evidence_analysis.v1: {evidence_analysis_json}. "
@@ -386,7 +452,11 @@ def _run_adjudication_completion(
         )
 
     candidate = _contract_candidate_from_llm(parsed)
-    return normalize_vacancy_evidence_adjudication_contract(candidate)
+    hydrated_candidate = _hydrate_llm_candidate_from_analysis(
+        candidate,
+        analysis_index=analysis_index,
+    )
+    return normalize_vacancy_evidence_adjudication_contract(hydrated_candidate)
 
 
 def _merge_candidate_contracts(
@@ -407,33 +477,8 @@ def _merge_candidate_contracts(
     )
 
 
-def _default_why_it_supports(raw_text: str, section: str, block_title: str) -> str:
-    normalized_section = _normalize_text(section)
-    normalized_block_title = _normalize_text(block_title)
-    if normalized_section and normalized_section != "unknown":
-        return (
-            f"Snippet retenido como soporte potencial para '{raw_text}'; "
-            f"la explicacion especifica no estuvo disponible. Referencia contextual: seccion {section.strip()}."
-        )
-    if normalized_block_title and normalized_block_title != "unknown":
-        return (
-            f"Snippet retenido como soporte potencial para '{raw_text}'; "
-            f"la explicacion especifica no estuvo disponible. Referencia contextual: bloque {block_title.strip()}."
-        )
-    return (
-        f"Snippet retenido como soporte potencial para '{raw_text}'; "
-        "la explicacion especifica no estuvo disponible."
-    )
-
-
-def _normalize_text(value: str) -> str:
-    return " ".join(str(value or "").strip().casefold().split())
-
-
 def _supporting_evidence_from_match(
     match: ConsolidatedEvidenceMatch,
-    *,
-    raw_text: str,
 ) -> dict[str, str]:
     block_title = str(match.get("block_title", "")).strip()
     section = str(match.get("section", "")).strip()
@@ -442,8 +487,22 @@ def _supporting_evidence_from_match(
         "block_title": block_title,
         "section": section,
         "snippet": str(match.get("snippet", "")).strip(),
-        "why_it_supports": _default_why_it_supports(raw_text, section, block_title),
+        "support_scope": SUPPORT_SCOPE_CONTEXTUAL,
+        "support_note_short": "",
     }
+
+
+def _supporting_evidence_from_match_with_support(
+    match: ConsolidatedEvidenceMatch,
+    *,
+    support_scope: str,
+    support_note_short: str,
+) -> dict[str, str]:
+    normalized = _supporting_evidence_from_match(match)
+    normalized["support_scope"] = support_scope if support_scope in SUPPORT_SCOPES else SUPPORT_SCOPE_CONTEXTUAL
+    if support_note_short.strip():
+        normalized["support_note_short"] = support_note_short.strip()
+    return normalized
 
 
 def _weak_evidence_from_match(match: DiscardedEvidenceMatch) -> dict[str, str]:
@@ -461,6 +520,17 @@ def _weak_evidence_from_match(match: DiscardedEvidenceMatch) -> dict[str, str]:
             "La evidencia fue descartada por no soportar suficientemente el criterio.",
         ),
     }
+
+
+def _weak_evidence_from_match_with_reason(
+    match: DiscardedEvidenceMatch,
+    *,
+    reason: str,
+) -> dict[str, str]:
+    normalized = _weak_evidence_from_match(match)
+    if reason.strip():
+        normalized["reason"] = reason.strip()
+    return normalized
 
 
 def _analysis_item_for_adjudicated_item(
@@ -503,6 +573,97 @@ def _supporting_match_candidates(
     return ordered
 
 
+def _evidence_matches_by_id(analysis_item: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    indexed: dict[str, dict[str, Any]] = {}
+    for field_name in ("accepted_matches", "best_evidence", "discarded_matches"):
+        matches = analysis_item.get(field_name, [])
+        if not isinstance(matches, list):
+            continue
+        for match in matches:
+            if not isinstance(match, dict):
+                continue
+            evidence_id = str(match.get("evidence_id", "")).strip()
+            if not evidence_id:
+                continue
+            indexed[evidence_id] = match
+    return indexed
+
+
+def _hydrate_best_supporting_evidence_refs(
+    raw_item: dict[str, Any],
+    *,
+    analysis_item: dict[str, Any] | None,
+) -> dict[str, Any]:
+    refs = _normalize_llm_supporting_refs(raw_item.get("best_supporting_evidence_refs"))
+    if not refs or not analysis_item:
+        return raw_item
+    matches_by_id = _evidence_matches_by_id(analysis_item)
+    hydrated = [
+        _supporting_evidence_from_match_with_support(
+            match,
+            support_scope=ref["support_scope"],
+            support_note_short=ref["support_note_short"],
+        )
+        for ref in refs
+        for match in [matches_by_id.get(ref["evidence_id"])]
+        if isinstance(match, dict)
+    ]
+    if not hydrated:
+        return raw_item
+    return {
+        **raw_item,
+        "best_supporting_evidence": hydrated,
+    }
+
+
+def _hydrate_weak_evidence_refs(
+    raw_item: dict[str, Any],
+    *,
+    analysis_item: dict[str, Any] | None,
+) -> dict[str, Any]:
+    refs = _normalize_llm_weak_refs(raw_item.get("weak_or_discarded_evidence_refs"))
+    if not refs or not analysis_item:
+        return raw_item
+    matches_by_id = _evidence_matches_by_id(analysis_item)
+    hydrated = [
+        _weak_evidence_from_match_with_reason(
+            match,
+            reason=ref["reason"],
+        )
+        for ref in refs
+        for match in [matches_by_id.get(ref["evidence_id"])]
+        if isinstance(match, dict)
+    ]
+    if not hydrated:
+        return raw_item
+    return {
+        **raw_item,
+        "weak_or_discarded_evidence": hydrated,
+    }
+
+
+def _hydrate_llm_candidate_from_analysis(
+    candidate: dict[str, object],
+    *,
+    analysis_index: dict[str, dict[str, Any]],
+) -> dict[str, object]:
+    raw_items = candidate.get("items")
+    if not isinstance(raw_items, list):
+        return candidate
+    hydrated_items: list[dict[str, Any]] = []
+    for raw_item in raw_items:
+        if not isinstance(raw_item, dict):
+            continue
+        analysis_item = _analysis_item_for_adjudicated_item(raw_item, analysis_index)
+        patched = _hydrate_best_supporting_evidence_refs(raw_item, analysis_item=analysis_item)
+        patched = _hydrate_weak_evidence_refs(patched, analysis_item=analysis_item)
+        hydrated_items.append(patched)
+    return {
+        **candidate,
+        "items": hydrated_items,
+    }
+
+
 def _backfill_supporting_evidence(
     item: VacancyEvidenceAdjudicationItem,
     *,
@@ -512,7 +673,7 @@ def _backfill_supporting_evidence(
         return item
     fallback_matches = _supporting_match_candidates(analysis_item)
     supporting_evidence = [
-        _supporting_evidence_from_match(match, raw_text=item["raw_text"])
+        _supporting_evidence_from_match(match)
         for match in fallback_matches
         if isinstance(match, dict)
         and (
@@ -672,6 +833,7 @@ def build_vacancy_evidence_adjudication(
         expected_items=expected_items,
         vacancy_dimensions_enriched_artifact=normalized_dimensions,
         vacancy_evidence_analysis_artifact=normalized_analysis,
+        analysis_index=analysis_index,
         settings=settings,
         llm_temperature=llm_temperature,
         phase_label="Step 6.5",
@@ -695,6 +857,7 @@ def build_vacancy_evidence_adjudication(
             expected_items=missing_expected_items,
             vacancy_dimensions_enriched_artifact=normalized_dimensions,
             vacancy_evidence_analysis_artifact=normalized_analysis,
+            analysis_index=analysis_index,
             settings=settings,
             llm_temperature=llm_temperature,
             phase_label="Step 6.5 retry",

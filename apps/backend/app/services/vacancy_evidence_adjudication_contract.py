@@ -114,13 +114,23 @@ CONFIDENCE_LEVELS = {
     CONFIDENCE_LOW,
 }
 
+SUPPORT_SCOPE_DIRECT = "direct"
+SUPPORT_SCOPE_PARTIAL = "partial"
+SUPPORT_SCOPE_CONTEXTUAL = "contextual"
+SUPPORT_SCOPES = {
+    SUPPORT_SCOPE_DIRECT,
+    SUPPORT_SCOPE_PARTIAL,
+    SUPPORT_SCOPE_CONTEXTUAL,
+}
+
 
 class SupportingEvidenceRef(TypedDict):
     source_ref: str
     block_title: str
     section: str
     snippet: str
-    why_it_supports: str
+    support_scope: str
+    support_note_short: str
 
 
 class WeakEvidenceRef(TypedDict):
@@ -199,7 +209,8 @@ def _empty_supporting_evidence_ref() -> SupportingEvidenceRef:
         "block_title": "",
         "section": "",
         "snippet": "",
-        "why_it_supports": "",
+        "support_scope": SUPPORT_SCOPE_CONTEXTUAL,
+        "support_note_short": "",
     }
 
 
@@ -211,7 +222,14 @@ def _normalize_supporting_evidence_ref(raw: Any) -> SupportingEvidenceRef | None
     normalized["block_title"] = _clean_text(raw.get("block_title"), max_chars=160)
     normalized["section"] = _clean_text(raw.get("section"), max_chars=120)
     normalized["snippet"] = _clean_text(raw.get("snippet"), max_chars=600)
-    normalized["why_it_supports"] = _clean_text(raw.get("why_it_supports"), max_chars=280)
+    support_scope = _clean_text(raw.get("support_scope"), max_chars=40)
+    normalized["support_scope"] = (
+        support_scope if support_scope in SUPPORT_SCOPES else SUPPORT_SCOPE_CONTEXTUAL
+    )
+    normalized["support_note_short"] = _clean_text(
+        raw.get("support_note_short") or raw.get("why_it_supports"),
+        max_chars=220,
+    )
     if not normalized["snippet"] and not normalized["source_ref"]:
         return None
     return normalized

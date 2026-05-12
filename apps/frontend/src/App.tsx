@@ -99,7 +99,8 @@ type FitPresentationEvidenceRef = {
   block_title: string;
   section: string;
   snippet: string;
-  why_it_supports: string;
+  support_scope: string;
+  support_note_short: string;
 };
 
 type FitPresentationRowView = {
@@ -501,10 +502,10 @@ Debes devolver exactamente estas claves raiz: items, warnings.
 adjudication_input solo incluye criterios profesionales comparables contra el CV; no debes inventar ni reintroducir condiciones de trabajo, beneficios ni descripciones promocionales de la empresa si no vienen en adjudication_input.
 items debe contener un item por cada criterio recibido en adjudication_input, sin omitir ninguno ni inventar nuevos.
 Antes de responder, verifica internamente que la cantidad de items en items coincide exactamente con la cantidad de criterios recibidos en adjudication_input.
-Para cada item devuelve exactamente: item_id, item_index, group, group_code, raw_text, criterion_type, priority, alignment_status, evidence_strength, proof_summary, best_supporting_evidence, weak_or_discarded_evidence, limitations, candidate_risk, cv_improvement_opportunity, confidence.
+Para cada item devuelve exactamente: item_id, item_index, group, group_code, raw_text, criterion_type, priority, alignment_status, evidence_strength, proof_summary, best_supporting_evidence_refs, weak_or_discarded_evidence_refs, limitations, candidate_risk, cv_improvement_opportunity, confidence.
 Usa unicamente la evidencia proporcionada. No inventes experiencia, certificaciones, cargos, sectores, herramientas, anos, salario, preferencias ni condiciones.
 No conviertas similitud semantica en cumplimiento. No conviertas ausencia de evidencia en incumplimiento. No uses el score como conclusion final; usalo solo como pista auxiliar.
-Si un snippet es semanticamente cercano pero no prueba el criterio, muevelo a weak_or_discarded_evidence e indica la razon.
+Si un snippet es semanticamente cercano pero no prueba el criterio, muevelo a weak_or_discarded_evidence_refs e indica la razon.
 Si el criterio tiene una parte obligatoria y otra ideal, deseable o preferible, no trates la parte deseable como bloqueador.
 alignment_status solo puede ser: direct, partial, indirect, not_evidenced, conflict, not_applicable.
 evidence_strength solo puede ser: high, medium, low, none.
@@ -512,18 +513,27 @@ priority solo puede ser: critical, important, desirable, contextual.
 criterion_type solo puede ser: education, years_experience, leadership, technical_skill, project_management, transformation, business_outcome, certification, language, condition, cultural, other.
 candidate_risk solo puede ser: none, low, medium, high. confidence solo puede ser: high, medium, low.
 Si no hay evidencia suficiente, usa not_evidenced y evidence_strength none o low segun corresponda.
-best_supporting_evidence debe incluir solo snippets que realmente soporten el criterio e indicar why_it_supports.
-why_it_supports no debe limitarse a repetir el criterio ni a afirmar genericamente que el snippet es relevante.
-why_it_supports debe explicar que parte concreta del snippet soporta el criterio y si el soporte es directo, parcial o contextual.
-Cuando sea posible, menciona la pieza observable del snippet: cargo, anos, tecnologia, certificacion, responsabilidad, resultado, metrica, stakeholder, presupuesto, estandar, dominio o entregable.
-No uses section o block_title como justificacion principal. Si section es unknown o vacia, no la menciones.
-Si el snippet solo sugiere afinidad pero no prueba el criterio, dilo explicitamente en why_it_supports o muevelo a weak_or_discarded_evidence.
-No llenes best_supporting_evidence con todos los snippets aceptados. Curala.
-Prioriza evidencia directa; despues evidencia parcial claramente defendible; deja la evidencia solo contextual fuera de best_supporting_evidence salvo que agregue una senal distinta y necesaria.
+proof_summary es la explicacion principal del item y puede integrar varias evidencias del mismo item.
+best_supporting_evidence_refs, en cambio, representa soporte minimo a nivel snippet.
+best_supporting_evidence_refs debe incluir solo evidencia que realmente soporte el criterio.
+No devuelvas objetos completos de evidencia; devuelve referencias.
+Cada entrada de best_supporting_evidence_refs debe incluir exactamente: evidence_id, support_scope.
+Opcionalmente puedes incluir support_note_short, pero solo si puedes redactarlo usando exclusivamente hechos visibles dentro de ese snippet.
+Cada entrada de weak_or_discarded_evidence_refs debe incluir exactamente: evidence_id, reason.
+Selecciona evidence_id unicamente desde best_evidence, accepted_matches o discarded_matches del item correspondiente.
+No inventes evidence_id ni reescribas snippets.
+Si no puedes mantener trazabilidad clara a una evidencia origen unica, no la selecciones.
+support_scope solo puede ser: direct, partial, contextual.
+Usa direct solo si el snippet contiene una senal explicita muy cercana al criterio.
+Usa partial si el snippet soporta una parte importante del criterio, pero no todo.
+Usa contextual si el snippet aporta contexto util, pero no prueba el criterio de forma fuerte.
+Si el criterio exige un numero, rango o umbral explicito, no uses direct desde un snippet que no muestre ese dato de forma visible o inferible con alta seguridad.
+Si incluyes support_note_short, no repitas el criterio ni uses justificaciones genericas; menciona solo la pieza observable del snippet y no importes hechos de otros snippets del mismo item.
+No llenes best_supporting_evidence_refs con todas las evidencias aceptadas. Curalas.
+Prioriza evidencia directa; despues evidencia parcial claramente defendible; deja la evidencia solo contextual fuera de best_supporting_evidence_refs salvo que agregue una senal distinta y necesaria.
 Evita redundancia entre snippets muy parecidos.
-Como regla general devuelve entre 1 y 4 snippets en best_supporting_evidence; puedes devolver mas solo si cada snippet agrega una senal distinta y necesaria.
-Si no puedes explicar de forma especifica por que un snippet soporta el criterio, no lo pongas en best_supporting_evidence.
-Si vacancy_evidence_analysis muestra best_evidence o accepted_matches utiles para un item, no dejes best_supporting_evidence vacio.
+Como regla general devuelve entre 1 y 4 referencias en best_supporting_evidence_refs; puedes devolver mas solo si cada evidencia agrega una senal distinta y necesaria.
+Si vacancy_evidence_analysis muestra best_evidence o accepted_matches utiles para un item, no dejes best_supporting_evidence_refs vacio.
 Vacante: {opportunity_context}.
 Persona: {person_context}.
 Entrada vacancy_dimensions_enriched.v1: {vacancy_dimensions_enriched_json}.
@@ -1281,13 +1291,14 @@ function parseFitPresentationEvidenceList(value: unknown): FitPresentationEviden
       if (!snippet && !sourceRef) {
         return null;
       }
-      return {
-        source_ref: sourceRef,
-        block_title: String(record.block_title ?? "").trim(),
-        section: String(record.section ?? "").trim(),
-        snippet,
-        why_it_supports: String(record.why_it_supports ?? "").trim()
-      };
+        return {
+          source_ref: sourceRef,
+          block_title: String(record.block_title ?? "").trim(),
+          section: String(record.section ?? "").trim(),
+          snippet,
+          support_scope: String(record.support_scope ?? "").trim(),
+          support_note_short: String(record.support_note_short ?? record.why_it_supports ?? "").trim()
+        };
     })
     .filter((item): item is FitPresentationEvidenceRef => item !== null);
 }
@@ -1408,9 +1419,12 @@ function FitPresentationEvidenceDetails({
                   {entry.section || entry.block_title || "Fuente CV"}
                   {entry.source_ref ? ` · ${entry.source_ref}` : ""}
                 </p>
+                {entry.support_scope ? (
+                  <p className="vacancyMatrixEvidenceMeta">Soporte: {entry.support_scope}</p>
+                ) : null}
                 {entry.snippet ? <p className="vacancyMatrixEvidenceSnippet">{entry.snippet}</p> : null}
-                {entry.why_it_supports ? (
-                  <p className="vacancyMatrixEvidenceReason">{entry.why_it_supports}</p>
+                {entry.support_note_short ? (
+                  <p className="vacancyMatrixEvidenceReason">{entry.support_note_short}</p>
                 ) : null}
               </article>
             ))}

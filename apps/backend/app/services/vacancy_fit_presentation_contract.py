@@ -25,7 +25,8 @@ class FitPresentationEvidenceRef(TypedDict):
     block_title: str
     section: str
     snippet: str
-    why_it_supports: str
+    support_scope: str
+    support_note_short: str
 
 
 class VacancyFitPresentationRow(TypedDict):
@@ -90,7 +91,11 @@ def _normalize_evidence_ref(raw: Any) -> FitPresentationEvidenceRef | None:
         "block_title": _clean_text(raw.get("block_title"), max_chars=160),
         "section": _clean_text(raw.get("section"), max_chars=120),
         "snippet": _clean_text(raw.get("snippet"), max_chars=600),
-        "why_it_supports": _clean_text(raw.get("why_it_supports"), max_chars=280),
+        "support_scope": _clean_text(raw.get("support_scope"), max_chars=40),
+        "support_note_short": _clean_text(
+            raw.get("support_note_short") or raw.get("why_it_supports"),
+            max_chars=220,
+        ),
     }
     if not normalized["source_ref"] and not normalized["snippet"]:
         return None

@@ -33,7 +33,7 @@ class VacancyFitPresentationContractTests(unittest.TestCase):
                             "state": "bad",
                             "why": "Texto",
                             "evidence_count": 1,
-                            "evidence": [{"source_ref": "cv-1", "snippet": "Ingeniero", "block_title": "", "section": "", "why_it_supports": ""}],
+                            "evidence": [{"source_ref": "cv-1", "snippet": "Ingeniero", "block_title": "", "section": "", "support_scope": "direct", "support_note_short": ""}],
                             "limitations": ["limitacion"],
                             "confidence": "BAD",
                             "candidate_risk": "BAD",

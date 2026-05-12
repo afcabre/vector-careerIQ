@@ -31,7 +31,8 @@ class VacancyEvidenceAdjudicationContractTests(unittest.TestCase):
                                 "block_title": "Perfil profesional",
                                 "section": "profile_summary",
                                 "snippet": "Profesional con 20 anos de experiencia.",
-                                "why_it_supports": "Declara de forma explicita la antiguedad profesional.",
+                                "support_scope": "direct",
+                                "support_note_short": "Declara de forma explicita la antiguedad profesional.",
                             }
                         ],
                         "weak_or_discarded_evidence": [
