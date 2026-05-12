@@ -513,6 +513,11 @@ criterion_type solo puede ser: education, years_experience, leadership, technica
 candidate_risk solo puede ser: none, low, medium, high. confidence solo puede ser: high, medium, low.
 Si no hay evidencia suficiente, usa not_evidenced y evidence_strength none o low segun corresponda.
 best_supporting_evidence debe incluir solo snippets que realmente soporten el criterio e indicar why_it_supports.
+why_it_supports no debe limitarse a repetir el criterio ni a afirmar genericamente que el snippet es relevante.
+why_it_supports debe explicar que senal concreta del snippet soporta el criterio y si el soporte parece directo, parcial o inferido.
+Cuando sea posible, menciona la pieza observable del snippet: cargo, anos, tecnologia, certificacion, responsabilidad, resultado, metrica, stakeholder, presupuesto, estandar o dominio.
+No uses section o block_title como justificacion principal. Si section es unknown o vacia, no la menciones.
+Si vacancy_evidence_analysis muestra best_evidence o accepted_matches utiles para un item, no dejes best_supporting_evidence vacio.
 Vacante: {opportunity_context}.
 Persona: {person_context}.
 Entrada vacancy_dimensions_enriched.v1: {vacancy_dimensions_enriched_json}.
