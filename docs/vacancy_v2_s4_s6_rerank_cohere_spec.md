@@ -575,10 +575,111 @@ Measure whether the `S4` improvement and lighter `S6` cleanup materially reduce 
 - `gpt-5.4-mini` for documentation-only synthesis
 - `gpt-5.4` if the worker must also inspect backend traces and propose code follow-ups
 
-### Slice 5 - Re-evaluate Cohere Activation
+#### Findings already incorporated into the roadmap
+The current validation phase has already surfaced two concrete design issues that must be treated before re-evaluating `Cohere`:
+- `S6` truncates `best_evidence` to `3`, which can hide accepted evidence that remains relevant downstream
+- `S6.5` backfill for `best_supporting_evidence` is too generic and often relies on `section`, which is frequently `unknown`
+
+These findings are now formal inputs to the next slices and should not be re-debated by the execution worker.
+
+### Slice 5 - `S6/S6.5` Evidence Fidelity Hardening
 
 #### Objective
-Only after slices 1-4, decide whether provider-backed rerank is still necessary immediately.
+Prevent loss of relevant accepted evidence between `S6` and `S6.5`.
+
+#### Problem statement
+Today `S6` preserves all `accepted_matches`, but `best_evidence` is truncated to a top-`3` preview.
+`S6.5` currently backfills `best_supporting_evidence` from `best_evidence` first, and only falls back to `accepted_matches` when `best_evidence` is empty.
+
+That behavior can hide additional accepted evidence that remains relevant for grounded adjudication.
+
+#### Decision
+- `accepted_matches` is the complete evidence source
+- `best_evidence` is only a summarized preview and must not be treated as exhaustive evidence
+- `S6.5` backfill must prioritize `accepted_matches`
+- `best_evidence` may remain trimmed for presentation or quick inspection, but not as the primary semantic source for adjudication backfill
+
+#### Scope
+- `apps/backend/app/services/vacancy_evidence_analysis_service.py`
+- `apps/backend/app/services/vacancy_evidence_adjudication_service.py`
+- related tests
+
+#### Required implementation behavior
+- preserve compatibility of `vacancy_evidence_analysis.v1`
+- do not remove `best_evidence` unless strictly necessary
+- ensure `S6.5` backfill reads from the full accepted evidence set before relying on any trimmed preview
+- keep downstream `S7`, `S8`, and UI compatibility intact
+
+#### Acceptance criteria
+- if an item has more than `3` accepted matches, `S6.5` must still be able to backfill supporting evidence from matches beyond the preview limit
+- no accepted evidence should be lost just because `best_evidence` is trimmed
+- `best_supporting_evidence` remains contract-compatible
+- tests explicitly cover the case where accepted evidence count is greater than `3`
+
+#### Out of scope
+- `Cohere`
+- rerank provider integration
+- redesign of `S6` thresholds
+- UI redesign
+
+#### Recommended model
+- `gpt-5.4` with `medium` reasoning
+
+### Slice 6 - Supporting Explanation Hardening
+
+#### Objective
+Improve the fallback quality of `why_it_supports` and weak-evidence explanations so they remain useful even when the LLM omits structured support rationale.
+
+#### Problem statement
+The current fallback explanation is too generic and often references `section`, even when `section` is `unknown`.
+This creates low-value explanations such as a generic statement that the snippet is relevant "from section unknown", which neither proves relevance nor explains the logic of support.
+
+#### Decision
+- fallback explanations must be built from the snippet content and the criterion text, not from `section` metadata as the main anchor
+- `section` may appear only as a weak auxiliary hint when it is actually meaningful
+- if `section` is empty or `unknown`, it must not appear in the explanation
+
+#### Required implementation behavior
+- never emit `section unknown` style explanations
+- explain relevance using observable signals from the snippet where possible
+- allow the fallback to express:
+  - direct support
+  - partial support
+  - inferred or indirect support
+- do not invent facts not present in the snippet
+
+#### Expected explanation shape
+Good fallback explanations should resemble:
+- "El snippet menciona liderazgo de equipos y gestion de servicios tecnologicos, lo que aporta soporte parcial al criterio."
+- "El snippet confirma experiencia profesional prolongada, aunque no prueba por si solo el numero exacto de anos requerido."
+- "El snippet describe uso de ERP y soporte a aplicaciones de negocio, por lo que aporta evidencia directa para ese criterio."
+
+Not acceptable:
+- generic statements that merely restate the criterion
+- references to `section unknown`
+- empty semantic justification
+
+#### Scope
+- `apps/backend/app/services/vacancy_evidence_adjudication_service.py`
+- related tests
+
+#### Acceptance criteria
+- fallback explanations mention a concrete signal from the snippet
+- `section unknown` does not appear in fallback support explanations
+- tests cover at least one direct-support and one partial-support fallback case
+
+#### Out of scope
+- full redesign of adjudication prompt
+- `Cohere`
+- chunk taxonomy redesign
+
+#### Recommended model
+- `gpt-5.4` with `medium` reasoning
+
+### Slice 7 - Re-evaluate Cohere Activation
+
+#### Objective
+Only after slices 1-6, decide whether provider-backed rerank is still necessary immediately.
 
 #### Decision gate
 Proceed to `Cohere` implementation only if one or more of these remain materially true:
@@ -619,3 +720,4 @@ If a smaller worker is asked to execute this roadmap, it must follow these rules
 4. do not expose rerank admin parameters in system administration during the pre-`Cohere` phase
 5. preserve compatibility of `S4 -> S5 -> S6 -> S7 -> S8`
 6. prefer additive changes and keep the pipeline running even if quality is still imperfect
+7. treat the evidence-fidelity and explanation-quality findings from validation as already decided inputs to slices 5 and 6, not as open design questions
