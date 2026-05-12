@@ -8523,401 +8523,414 @@ export default function App() {
                           {copiedOpportunityUrlId === item.opportunity_id ? "✓" : "⧉"}
                         </button>
                       ) : null}
+                      <button
+                        className={
+                          isSelectedSavedOpportunity
+                            ? "vacancyProfileQuickActionButton"
+                            : "primaryButton vacancyProfileQuickActionButton"
+                        }
+                        onClick={() => handleSelectOpportunityCard(item.opportunity_id)}
+                        type="button"
+                      >
+                        {isSelectedSavedOpportunity ? "Ocultar detalle" : "Abrir detalle"}
+                      </button>
                     </div>
                   </div>
-                  <article className="vacancyProfileCard">
-                    <div className="vacancyProfileHeader">
-                      <p className="chatRole vacancyProfileTitle">Resumen estructurado de la vacante</p>
-                      <div className="metaChips vacancyProfileHeaderChips">
-                        <span className="metaChip vacancyProfileStatusChip">{profileStatusLabel}</span>
-                        <span className={`metaChip vacancyProfileSourceChip ${sourceBadge.className}`}>
-                          {sourceBadge.label}
-                        </span>
-                      </div>
-                    </div>
-                    {!isEditingProfile ? (
-                      <>
-                        <p className="metaText vacancyProfileSummary">
-                          {profile.summary || "Sin resumen estructurado todavia."}
-                        </p>
-                        {profile.seniority && profile.seniority !== "no_especificado" ? (
-                          <p className="metaText">
-                            <strong>Seniority:</strong> {profile.seniority}
-                          </p>
-                        ) : null}
-                        {profile.organizational_level
-                          && profile.organizational_level !== "no_especificado" ? (
-                          <p className="metaText">
-                            <strong>Nivel organizacional:</strong> {profile.organizational_level}
-                          </p>
-                        ) : null}
-                        {profile.funciones_responsabilidades.length > 0 ? (
-                          <p className="metaText">
-                            <strong>Funciones y responsabilidades:</strong>{" "}
-                            {profile.funciones_responsabilidades.slice(0, 4).join("; ")}
-                          </p>
-                        ) : null}
-                        {profile.requisitos_obligatorios.length > 0 ? (
-                          <p className="metaText">
-                            <strong>Requisitos obligatorios:</strong>{" "}
-                            {profile.requisitos_obligatorios.slice(0, 4).join("; ")}
-                          </p>
-                        ) : null}
-                        {profile.requisitos_deseables.length > 0 ? (
-                          <p className="metaText">
-                            <strong>Requisitos deseables:</strong>{" "}
-                            {profile.requisitos_deseables.slice(0, 4).join("; ")}
-                          </p>
-                        ) : null}
-                        {(profile.condiciones_trabajo.modality !== "no_especificado"
-                          || profile.condiciones_trabajo.contract_type !== "no_especificado"
-                          || profile.condiciones_trabajo.schedule !== "no_especificado"
-                          || profile.condiciones_trabajo.location !== "no_especificado"
-                          || Boolean(profile.condiciones_trabajo.salary.text_original)) ? (
-                          <p className="metaText">
-                            <strong>Condiciones:</strong>{" "}
-                            {[
-                              profile.condiciones_trabajo.modality !== "no_especificado"
-                                ? `modalidad=${profile.condiciones_trabajo.modality}`
-                                : "",
-                              profile.condiciones_trabajo.schedule !== "no_especificado"
-                                ? `horario=${profile.condiciones_trabajo.schedule}`
-                                : "",
-                              profile.condiciones_trabajo.contract_type !== "no_especificado"
-                                ? `contrato=${profile.condiciones_trabajo.contract_type}`
-                                : "",
-                              profile.condiciones_trabajo.location !== "no_especificado"
-                                ? `ubicacion=${profile.condiciones_trabajo.location}`
-                                : "",
-                              profile.condiciones_trabajo.salary.text_original
-                                ? `salario=${profile.condiciones_trabajo.salary.text_original}`
-                                : "",
-                            ].filter(Boolean).join(" · ")}
-                          </p>
-                        ) : null}
-                        {profile.beneficios.length > 0 ? (
-                          <p className="metaText">
-                            <strong>Beneficios:</strong>{" "}
-                            {profile.beneficios.slice(0, 4).join("; ")}
-                          </p>
-                        ) : null}
-                        <div className="cardActions">
-                          <button
-                            className="vacancyProfileQuickActionButton"
-                            disabled={recomputingOpportunityProfileId === item.opportunity_id}
-                            onClick={() => void handleRecomputeOpportunityProfile(item)}
-                            type="button"
-                          >
-                            {recomputingOpportunityProfileId === item.opportunity_id
-                              ? "Recalculando..."
-                              : "Recalcular extraccion"}
-                          </button>
-                          <button
-                            className="vacancyProfileQuickActionButton"
-                            onClick={() => handleStartEditOpportunityProfile(item)}
-                            type="button"
-                          >
-                            {hasStructuredContent ? "Editar estructura" : "Completar estructura"}
-                          </button>
-                          <button
-                            className="vacancyProfileQuickActionButton"
-                            disabled={
-                              !canClearProfile
-                              || clearingOpportunityProfileId === item.opportunity_id
-                            }
-                            onClick={() => void handleClearOpportunityProfile(item)}
-                            type="button"
-                          >
-                            {clearingOpportunityProfileId === item.opportunity_id
-                              ? "Borrando..."
-                              : "Borrar extracto"}
-                          </button>
-                          {item.vacancy_profile_status !== "approved" && hasStructuredContent ? (
-                            <button
-                              className="primaryButton vacancyProfileQuickActionButton"
-                              disabled={savingOpportunityProfileId === item.opportunity_id}
-                              onClick={() => void handleSaveOpportunityProfile(item, true)}
-                              type="button"
-                            >
-                              {savingOpportunityProfileId === item.opportunity_id
-                                ? "Guardando..."
-                                : "Aprobar"}
-                            </button>
-                          ) : null}
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="vacancyProfileEditorMode">
-                          <span className="metaText">Modo de edicion:</span>
-                          <div className="cardActions">
-                            <button
-                              className={editorMode === "guided" ? "primaryButton" : ""}
-                              onClick={() => handleSetOpportunityProfileEditorMode(item, "guided")}
-                              type="button"
-                            >
-                              Guiado
-                            </button>
-                            <button
-                              className={editorMode === "json" ? "primaryButton" : ""}
-                              onClick={() => handleSetOpportunityProfileEditorMode(item, "json")}
-                              type="button"
-                            >
-                              JSON avanzado
-                            </button>
+                  {isSelectedSavedOpportunity ? (
+                    <>
+                      <article className="vacancyProfileCard">
+                        <div className="vacancyProfileHeader">
+                          <p className="chatRole vacancyProfileTitle">Resumen estructurado de la vacante</p>
+                          <div className="metaChips vacancyProfileHeaderChips">
+                            <span className="metaChip vacancyProfileStatusChip">{profileStatusLabel}</span>
+                            <span className={`metaChip vacancyProfileSourceChip ${sourceBadge.className}`}>
+                              {sourceBadge.label}
+                            </span>
                           </div>
                         </div>
-                        {editorMode === "json" ? (
+                        {!isEditingProfile ? (
                           <>
-                            <label className="field">
-                              JSON de estructura de vacante
-                              <textarea
-                                className="vacancyProfileJsonTextarea"
-                                onChange={(event) =>
-                                  handleOpportunityProfileJsonDraftChange(
-                                    item.opportunity_id,
-                                    event.target.value
-                                  )
-                                }
-                                rows={14}
-                                value={jsonDraft}
-                              />
-                            </label>
-                            <p className="metaText">
-                              Debe ser un objeto JSON valido. Puedes incluir campos adicionales.
+                            <p className="metaText vacancyProfileSummary">
+                              {profile.summary || "Sin resumen estructurado todavia."}
                             </p>
+                            {profile.seniority && profile.seniority !== "no_especificado" ? (
+                              <p className="metaText">
+                                <strong>Seniority:</strong> {profile.seniority}
+                              </p>
+                            ) : null}
+                            {profile.organizational_level
+                              && profile.organizational_level !== "no_especificado" ? (
+                              <p className="metaText">
+                                <strong>Nivel organizacional:</strong> {profile.organizational_level}
+                              </p>
+                            ) : null}
+                            {profile.funciones_responsabilidades.length > 0 ? (
+                              <p className="metaText">
+                                <strong>Funciones y responsabilidades:</strong>{" "}
+                                {profile.funciones_responsabilidades.slice(0, 4).join("; ")}
+                              </p>
+                            ) : null}
+                            {profile.requisitos_obligatorios.length > 0 ? (
+                              <p className="metaText">
+                                <strong>Requisitos obligatorios:</strong>{" "}
+                                {profile.requisitos_obligatorios.slice(0, 4).join("; ")}
+                              </p>
+                            ) : null}
+                            {profile.requisitos_deseables.length > 0 ? (
+                              <p className="metaText">
+                                <strong>Requisitos deseables:</strong>{" "}
+                                {profile.requisitos_deseables.slice(0, 4).join("; ")}
+                              </p>
+                            ) : null}
+                            {(profile.condiciones_trabajo.modality !== "no_especificado"
+                              || profile.condiciones_trabajo.contract_type !== "no_especificado"
+                              || profile.condiciones_trabajo.schedule !== "no_especificado"
+                              || profile.condiciones_trabajo.location !== "no_especificado"
+                              || Boolean(profile.condiciones_trabajo.salary.text_original)) ? (
+                              <p className="metaText">
+                                <strong>Condiciones:</strong>{" "}
+                                {[
+                                  profile.condiciones_trabajo.modality !== "no_especificado"
+                                    ? `modalidad=${profile.condiciones_trabajo.modality}`
+                                    : "",
+                                  profile.condiciones_trabajo.schedule !== "no_especificado"
+                                    ? `horario=${profile.condiciones_trabajo.schedule}`
+                                    : "",
+                                  profile.condiciones_trabajo.contract_type !== "no_especificado"
+                                    ? `contrato=${profile.condiciones_trabajo.contract_type}`
+                                    : "",
+                                  profile.condiciones_trabajo.location !== "no_especificado"
+                                    ? `ubicacion=${profile.condiciones_trabajo.location}`
+                                    : "",
+                                  profile.condiciones_trabajo.salary.text_original
+                                    ? `salario=${profile.condiciones_trabajo.salary.text_original}`
+                                    : "",
+                                ].filter(Boolean).join(" · ")}
+                              </p>
+                            ) : null}
+                            {profile.beneficios.length > 0 ? (
+                              <p className="metaText">
+                                <strong>Beneficios:</strong>{" "}
+                                {profile.beneficios.slice(0, 4).join("; ")}
+                              </p>
+                            ) : null}
+                            <div className="cardActions">
+                              <button
+                                className="vacancyProfileQuickActionButton"
+                                disabled={recomputingOpportunityProfileId === item.opportunity_id}
+                                onClick={() => void handleRecomputeOpportunityProfile(item)}
+                                type="button"
+                              >
+                                {recomputingOpportunityProfileId === item.opportunity_id
+                                  ? "Recalculando..."
+                                  : "Recalcular extraccion"}
+                              </button>
+                              <button
+                                className="vacancyProfileQuickActionButton"
+                                onClick={() => handleStartEditOpportunityProfile(item)}
+                                type="button"
+                              >
+                                {hasStructuredContent ? "Editar estructura" : "Completar estructura"}
+                              </button>
+                              <button
+                                className="vacancyProfileQuickActionButton"
+                                disabled={
+                                  !canClearProfile
+                                  || clearingOpportunityProfileId === item.opportunity_id
+                                }
+                                onClick={() => void handleClearOpportunityProfile(item)}
+                                type="button"
+                              >
+                                {clearingOpportunityProfileId === item.opportunity_id
+                                  ? "Borrando..."
+                                  : "Borrar extracto"}
+                              </button>
+                              {item.vacancy_profile_status !== "approved" && hasStructuredContent ? (
+                                <button
+                                  className="primaryButton vacancyProfileQuickActionButton"
+                                  disabled={savingOpportunityProfileId === item.opportunity_id}
+                                  onClick={() => void handleSaveOpportunityProfile(item, true)}
+                                  type="button"
+                                >
+                                  {savingOpportunityProfileId === item.opportunity_id
+                                    ? "Guardando..."
+                                    : "Aprobar"}
+                                </button>
+                              ) : null}
+                            </div>
                           </>
                         ) : (
                           <>
-                            <label className="field">
-                              Resumen
-                              <textarea
-                                onChange={(event) =>
-                                  handleOpportunityProfileDraftChange(item.opportunity_id, {
-                                    summary: event.target.value,
-                                  })
-                                }
-                                rows={2}
-                                value={draft.summary}
-                              />
-                            </label>
-                            <div className="manualRow">
-                              <label className="field">
-                                Seniority
-                                <input
-                                  onChange={(event) =>
-                                    handleOpportunityProfileDraftChange(item.opportunity_id, {
-                                      seniority: event.target.value,
-                                    })
-                                  }
-                                  value={draft.seniority}
-                                />
-                              </label>
-                              <label className="field">
-                                Nivel organizacional
-                                <input
-                                  onChange={(event) =>
-                                    handleOpportunityProfileDraftChange(item.opportunity_id, {
-                                      organizationalLevel: event.target.value,
-                                    })
-                                  }
-                                  value={draft.organizationalLevel}
-                                />
-                              </label>
+                            <div className="vacancyProfileEditorMode">
+                              <span className="metaText">Modo de edicion:</span>
+                              <div className="cardActions">
+                                <button
+                                  className={editorMode === "guided" ? "primaryButton" : ""}
+                                  onClick={() => handleSetOpportunityProfileEditorMode(item, "guided")}
+                                  type="button"
+                                >
+                                  Guiado
+                                </button>
+                                <button
+                                  className={editorMode === "json" ? "primaryButton" : ""}
+                                  onClick={() => handleSetOpportunityProfileEditorMode(item, "json")}
+                                  type="button"
+                                >
+                                  JSON avanzado
+                                </button>
+                              </div>
                             </div>
-                            <label className="field">
-                              Funciones y responsabilidades (uno por linea)
-                              <textarea
-                                onChange={(event) =>
-                                  handleOpportunityProfileDraftChange(item.opportunity_id, {
-                                    funcionesInput: event.target.value,
-                                  })
-                                }
-                                rows={3}
-                                value={draft.funcionesInput}
-                              />
-                            </label>
-                            <label className="field">
-                              Requisitos obligatorios (uno por linea)
-                              <textarea
-                                onChange={(event) =>
-                                  handleOpportunityProfileDraftChange(item.opportunity_id, {
-                                    requisitosObligatoriosInput: event.target.value,
-                                  })
-                                }
-                                rows={3}
-                                value={draft.requisitosObligatoriosInput}
-                              />
-                            </label>
-                            <label className="field">
-                              Requisitos deseables (uno por linea)
-                              <textarea
-                                onChange={(event) =>
-                                  handleOpportunityProfileDraftChange(item.opportunity_id, {
-                                    requisitosDeseablesInput: event.target.value,
-                                  })
-                                }
-                                rows={3}
-                                value={draft.requisitosDeseablesInput}
-                              />
-                            </label>
-                            <div className="manualRow">
-                              <label className="field">
-                                Modalidad
-                                <input
-                                  onChange={(event) =>
-                                    handleOpportunityProfileDraftChange(item.opportunity_id, {
-                                      modalidad: event.target.value,
-                                    })
-                                  }
-                                  value={draft.modalidad}
-                                />
-                              </label>
-                              <label className="field">
-                                Horario
-                                <input
-                                  onChange={(event) =>
-                                    handleOpportunityProfileDraftChange(item.opportunity_id, {
-                                      horario: event.target.value,
-                                    })
-                                  }
-                                  value={draft.horario}
-                                />
-                              </label>
+                            {editorMode === "json" ? (
+                              <>
+                                <label className="field">
+                                  JSON de estructura de vacante
+                                  <textarea
+                                    className="vacancyProfileJsonTextarea"
+                                    onChange={(event) =>
+                                      handleOpportunityProfileJsonDraftChange(
+                                        item.opportunity_id,
+                                        event.target.value
+                                      )
+                                    }
+                                    rows={14}
+                                    value={jsonDraft}
+                                  />
+                                </label>
+                                <p className="metaText">
+                                  Debe ser un objeto JSON valido. Puedes incluir campos adicionales.
+                                </p>
+                              </>
+                            ) : (
+                              <>
+                                <label className="field">
+                                  Resumen
+                                  <textarea
+                                    onChange={(event) =>
+                                      handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                        summary: event.target.value,
+                                      })
+                                    }
+                                    rows={2}
+                                    value={draft.summary}
+                                  />
+                                </label>
+                                <div className="manualRow">
+                                  <label className="field">
+                                    Seniority
+                                    <input
+                                      onChange={(event) =>
+                                        handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                          seniority: event.target.value,
+                                        })
+                                      }
+                                      value={draft.seniority}
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    Nivel organizacional
+                                    <input
+                                      onChange={(event) =>
+                                        handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                          organizationalLevel: event.target.value,
+                                        })
+                                      }
+                                      value={draft.organizationalLevel}
+                                    />
+                                  </label>
+                                </div>
+                                <label className="field">
+                                  Funciones y responsabilidades (uno por linea)
+                                  <textarea
+                                    onChange={(event) =>
+                                      handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                        funcionesInput: event.target.value,
+                                      })
+                                    }
+                                    rows={3}
+                                    value={draft.funcionesInput}
+                                  />
+                                </label>
+                                <label className="field">
+                                  Requisitos obligatorios (uno por linea)
+                                  <textarea
+                                    onChange={(event) =>
+                                      handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                        requisitosObligatoriosInput: event.target.value,
+                                      })
+                                    }
+                                    rows={3}
+                                    value={draft.requisitosObligatoriosInput}
+                                  />
+                                </label>
+                                <label className="field">
+                                  Requisitos deseables (uno por linea)
+                                  <textarea
+                                    onChange={(event) =>
+                                      handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                        requisitosDeseablesInput: event.target.value,
+                                      })
+                                    }
+                                    rows={3}
+                                    value={draft.requisitosDeseablesInput}
+                                  />
+                                </label>
+                                <div className="manualRow">
+                                  <label className="field">
+                                    Modalidad
+                                    <input
+                                      onChange={(event) =>
+                                        handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                          modalidad: event.target.value,
+                                        })
+                                      }
+                                      value={draft.modalidad}
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    Horario
+                                    <input
+                                      onChange={(event) =>
+                                        handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                          horario: event.target.value,
+                                        })
+                                      }
+                                      value={draft.horario}
+                                    />
+                                  </label>
+                                </div>
+                                <div className="manualRow">
+                                  <label className="field">
+                                    Tipo de contrato
+                                    <input
+                                      onChange={(event) =>
+                                        handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                          tipoContrato: event.target.value,
+                                        })
+                                      }
+                                      value={draft.tipoContrato}
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    Ubicacion
+                                    <input
+                                      onChange={(event) =>
+                                        handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                          ubicacionTrabajo: event.target.value,
+                                        })
+                                      }
+                                      value={draft.ubicacionTrabajo}
+                                    />
+                                  </label>
+                                </div>
+                                <div className="manualRow">
+                                  <label className="field">
+                                    Salario min
+                                    <input
+                                      onChange={(event) =>
+                                        handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                          salarioMinInput: event.target.value,
+                                        })
+                                      }
+                                      placeholder="ej: 3500000"
+                                      value={draft.salarioMinInput}
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    Salario max
+                                    <input
+                                      onChange={(event) =>
+                                        handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                          salarioMaxInput: event.target.value,
+                                        })
+                                      }
+                                      placeholder="ej: 5000000"
+                                      value={draft.salarioMaxInput}
+                                    />
+                                  </label>
+                                </div>
+                                <div className="manualRow">
+                                  <label className="field">
+                                    Moneda
+                                    <input
+                                      onChange={(event) =>
+                                        handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                          salarioMoneda: event.target.value,
+                                        })
+                                      }
+                                      placeholder="COP / USD / EUR"
+                                      value={draft.salarioMoneda}
+                                    />
+                                  </label>
+                                  <label className="field">
+                                    Periodo
+                                    <input
+                                      onChange={(event) =>
+                                        handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                          salarioPeriodo: event.target.value,
+                                        })
+                                      }
+                                      placeholder="mensual / anual / hora"
+                                      value={draft.salarioPeriodo}
+                                    />
+                                  </label>
+                                </div>
+                                <label className="field">
+                                  Salario (texto original)
+                                  <textarea
+                                    onChange={(event) =>
+                                      handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                        salarioTexto: event.target.value,
+                                      })
+                                    }
+                                    rows={2}
+                                    value={draft.salarioTexto}
+                                  />
+                                </label>
+                                <label className="field">
+                                  Beneficios (uno por linea)
+                                  <textarea
+                                    onChange={(event) =>
+                                      handleOpportunityProfileDraftChange(item.opportunity_id, {
+                                        beneficiosInput: event.target.value,
+                                      })
+                                    }
+                                    rows={2}
+                                    value={draft.beneficiosInput}
+                                  />
+                                </label>
+                              </>
+                            )}
+                            <div className="cardActions">
+                              <button
+                                disabled={savingOpportunityProfileId === item.opportunity_id}
+                                onClick={() => void handleSaveOpportunityProfile(item, false)}
+                                type="button"
+                              >
+                                {savingOpportunityProfileId === item.opportunity_id
+                                  ? "Guardando..."
+                                  : "Guardar borrador"}
+                              </button>
+                              <button
+                                className="primaryButton"
+                                disabled={savingOpportunityProfileId === item.opportunity_id}
+                                onClick={() => void handleSaveOpportunityProfile(item, true)}
+                                type="button"
+                              >
+                                {savingOpportunityProfileId === item.opportunity_id
+                                  ? "Guardando..."
+                                  : "Aprobar"}
+                              </button>
+                              <button
+                                onClick={() => setEditingOpportunityProfileId(null)}
+                                type="button"
+                              >
+                                Cancelar
+                              </button>
                             </div>
-                            <div className="manualRow">
-                              <label className="field">
-                                Tipo de contrato
-                                <input
-                                  onChange={(event) =>
-                                    handleOpportunityProfileDraftChange(item.opportunity_id, {
-                                      tipoContrato: event.target.value,
-                                    })
-                                  }
-                                  value={draft.tipoContrato}
-                                />
-                              </label>
-                              <label className="field">
-                                Ubicacion
-                                <input
-                                  onChange={(event) =>
-                                    handleOpportunityProfileDraftChange(item.opportunity_id, {
-                                      ubicacionTrabajo: event.target.value,
-                                    })
-                                  }
-                                  value={draft.ubicacionTrabajo}
-                                />
-                              </label>
-                            </div>
-                            <div className="manualRow">
-                              <label className="field">
-                                Salario min
-                                <input
-                                  onChange={(event) =>
-                                    handleOpportunityProfileDraftChange(item.opportunity_id, {
-                                      salarioMinInput: event.target.value,
-                                    })
-                                  }
-                                  placeholder="ej: 3500000"
-                                  value={draft.salarioMinInput}
-                                />
-                              </label>
-                              <label className="field">
-                                Salario max
-                                <input
-                                  onChange={(event) =>
-                                    handleOpportunityProfileDraftChange(item.opportunity_id, {
-                                      salarioMaxInput: event.target.value,
-                                    })
-                                  }
-                                  placeholder="ej: 5000000"
-                                  value={draft.salarioMaxInput}
-                                />
-                              </label>
-                            </div>
-                            <div className="manualRow">
-                              <label className="field">
-                                Moneda
-                                <input
-                                  onChange={(event) =>
-                                    handleOpportunityProfileDraftChange(item.opportunity_id, {
-                                      salarioMoneda: event.target.value,
-                                    })
-                                  }
-                                  placeholder="COP / USD / EUR"
-                                  value={draft.salarioMoneda}
-                                />
-                              </label>
-                              <label className="field">
-                                Periodo
-                                <input
-                                  onChange={(event) =>
-                                    handleOpportunityProfileDraftChange(item.opportunity_id, {
-                                      salarioPeriodo: event.target.value,
-                                    })
-                                  }
-                                  placeholder="mensual / anual / hora"
-                                  value={draft.salarioPeriodo}
-                                />
-                              </label>
-                            </div>
-                            <label className="field">
-                              Salario (texto original)
-                              <textarea
-                                onChange={(event) =>
-                                  handleOpportunityProfileDraftChange(item.opportunity_id, {
-                                    salarioTexto: event.target.value,
-                                  })
-                                }
-                                rows={2}
-                                value={draft.salarioTexto}
-                              />
-                            </label>
-                            <label className="field">
-                              Beneficios (uno por linea)
-                              <textarea
-                                onChange={(event) =>
-                                  handleOpportunityProfileDraftChange(item.opportunity_id, {
-                                    beneficiosInput: event.target.value,
-                                  })
-                                }
-                                rows={2}
-                                value={draft.beneficiosInput}
-                              />
-                            </label>
                           </>
                         )}
-                        <div className="cardActions">
-                          <button
-                            disabled={savingOpportunityProfileId === item.opportunity_id}
-                            onClick={() => void handleSaveOpportunityProfile(item, false)}
-                            type="button"
-                          >
-                            {savingOpportunityProfileId === item.opportunity_id
-                              ? "Guardando..."
-                              : "Guardar borrador"}
-                          </button>
-                          <button
-                            className="primaryButton"
-                            disabled={savingOpportunityProfileId === item.opportunity_id}
-                            onClick={() => void handleSaveOpportunityProfile(item, true)}
-                            type="button"
-                          >
-                            {savingOpportunityProfileId === item.opportunity_id
-                              ? "Guardando..."
-                              : "Aprobar"}
-                          </button>
-                          <button
-                            onClick={() => setEditingOpportunityProfileId(null)}
-                            type="button"
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </article>
-                  <article className="vacancyV2Card">
+                      </article>
+                      <article className="vacancyV2Card">
                     <div className="vacancyV2Header">
                       <p className="chatRole vacancyV2Title">Vacancy V2 (experimental)</p>
                       <span className="metaChip vacancyV2Tag">No afecta el flujo legacy</span>
@@ -10159,7 +10172,14 @@ export default function App() {
                         )}
                       </div>
                     </section>
-                  </article>
+                      </article>
+                    </>
+                  ) : (
+                    <p className="metaText">
+                      Detalle diferido. Abre esta oportunidad para cargar perfil estructurado y pipeline
+                      Vacancy V2.
+                    </p>
+                  )}
                 </article>
               );
             })}
