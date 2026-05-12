@@ -91,12 +91,16 @@ class VacancyRetrievalQueriesServiceTests(unittest.TestCase):
             "app.services.vacancy_retrieval_queries_service.complete_prompt",
             return_value=llm_response,
         ):
-            contract = extract_vacancy_retrieval_queries(
-                _opportunity(),
-                _vacancy_dimensions_enriched(),
-                _vacancy_salary(),
-                settings=object(),
-            )
+            with patch(
+                "app.services.vacancy_retrieval_queries_service.get_person",
+                return_value=None,
+            ):
+                contract = extract_vacancy_retrieval_queries(
+                    _opportunity(),
+                    _vacancy_dimensions_enriched(),
+                    _vacancy_salary(),
+                    settings=object(),
+                )
 
         self.assertEqual(contract["contract_version"], CONTRACT_VERSION_VACANCY_RETRIEVAL_QUERIES)
         self.assertEqual(contract["vacancy_id"], "o-q-001")
@@ -170,13 +174,142 @@ class VacancyRetrievalQueriesServiceTests(unittest.TestCase):
             "app.services.vacancy_retrieval_queries_service.complete_prompt",
             return_value="not-json",
         ):
-            with self.assertRaises(VacancyRetrievalQueriesExtractionError):
-                extract_vacancy_retrieval_queries(
+            with patch(
+                "app.services.vacancy_retrieval_queries_service.get_person",
+                return_value=None,
+            ):
+                with self.assertRaises(VacancyRetrievalQueriesExtractionError):
+                    extract_vacancy_retrieval_queries(
+                        _opportunity(),
+                        _vacancy_dimensions_enriched(),
+                        _vacancy_salary(),
+                        settings=object(),
+                    )
+
+    def test_extract_regenerates_when_english_probes_are_returned_for_spanish_case(self) -> None:
+        invalid_response = (
+            "{"
+            "\"queries\":{"
+            "\"responsibilities\":[{\"item_id\":\"resp_123\",\"item_index\":0,\"group_code\":\"resp\",\"raw_text\":\"Liderar roadmap\",\"queries\":[\"product roadmap leadership\",\"stakeholder management\"]}],"
+            "\"required_criteria\":[{\"item_id\":\"req_123\",\"item_index\":0,\"group_code\":\"req\",\"raw_text\":\"5 anos de experiencia en producto\",\"queries\":[\"product management experience\",\"years leading product strategy\"]}],"
+            "\"desirable_criteria\":[],"
+            "\"benefits\":[],"
+            "\"about_the_company\":[],"
+            "\"work_conditions\":[]"
+            "}"
+            "}"
+        )
+        valid_response = (
+            "{"
+            "\"queries\":{"
+            "\"responsibilities\":[{\"item_id\":\"resp_123\",\"item_index\":0,\"group_code\":\"resp\",\"raw_text\":\"Liderar roadmap\",\"queries\":[\"liderazgo de roadmap\",\"gestion de backlog\"]}],"
+            "\"required_criteria\":[{\"item_id\":\"req_123\",\"item_index\":0,\"group_code\":\"req\",\"raw_text\":\"5 anos de experiencia en producto\",\"queries\":[\"experiencia en producto\",\"trayectoria gestionando producto\"]}],"
+            "\"desirable_criteria\":[],"
+            "\"benefits\":[],"
+            "\"about_the_company\":[],"
+            "\"work_conditions\":[]"
+            "}"
+            "}"
+        )
+
+        with patch(
+            "app.services.vacancy_retrieval_queries_service.complete_prompt",
+            side_effect=[invalid_response, valid_response],
+        ) as complete_prompt_mock:
+            with patch(
+                "app.services.vacancy_retrieval_queries_service.get_person",
+                return_value={"languages": [{"language": "Español", "level": "Nativo"}]},
+            ):
+                contract = extract_vacancy_retrieval_queries(
                     _opportunity(),
                     _vacancy_dimensions_enriched(),
                     _vacancy_salary(),
                     settings=object(),
                 )
+
+        self.assertEqual(complete_prompt_mock.call_count, 2)
+        self.assertEqual(
+            contract["queries"]["required_criteria"][0]["queries"],
+            ["experiencia en producto", "trayectoria gestionando producto"],
+        )
+
+    def test_extract_regenerates_when_question_shaped_probes_are_returned(self) -> None:
+        invalid_response = (
+            "{"
+            "\"queries\":{"
+            "\"responsibilities\":[{\"item_id\":\"resp_123\",\"item_index\":0,\"group_code\":\"resp\",\"raw_text\":\"Liderar roadmap\",\"queries\":[\"¿Has liderado roadmap?\",\"Como has gestionado backlog?\"]}],"
+            "\"required_criteria\":[],"
+            "\"desirable_criteria\":[],"
+            "\"benefits\":[],"
+            "\"about_the_company\":[],"
+            "\"work_conditions\":[]"
+            "}"
+            "}"
+        )
+        valid_response = (
+            "{"
+            "\"queries\":{"
+            "\"responsibilities\":[{\"item_id\":\"resp_123\",\"item_index\":0,\"group_code\":\"resp\",\"raw_text\":\"Liderar roadmap\",\"queries\":[\"liderazgo de roadmap\",\"gestion de backlog\"]}],"
+            "\"required_criteria\":[],"
+            "\"desirable_criteria\":[],"
+            "\"benefits\":[],"
+            "\"about_the_company\":[],"
+            "\"work_conditions\":[]"
+            "}"
+            "}"
+        )
+
+        with patch(
+            "app.services.vacancy_retrieval_queries_service.complete_prompt",
+            side_effect=[invalid_response, valid_response],
+        ) as complete_prompt_mock:
+            with patch(
+                "app.services.vacancy_retrieval_queries_service.get_person",
+                return_value=None,
+            ):
+                contract = extract_vacancy_retrieval_queries(
+                    _opportunity(),
+                    _vacancy_dimensions_enriched(),
+                    _vacancy_salary(),
+                    settings=object(),
+                )
+
+        self.assertEqual(complete_prompt_mock.call_count, 2)
+        self.assertNotIn("?", " ".join(contract["queries"]["responsibilities"][0]["queries"]))
+
+    def test_extract_cleans_near_duplicate_probes_before_persisting(self) -> None:
+        llm_response = (
+            "{"
+            "\"queries\":{"
+            "\"responsibilities\":[{\"item_id\":\"resp_123\",\"item_index\":0,\"group_code\":\"resp\",\"raw_text\":\"Liderar roadmap\",\"queries\":[\"liderazgo de roadmap\",\"liderazgo del roadmap\",\"gestion de backlog\"]}],"
+            "\"required_criteria\":[],"
+            "\"desirable_criteria\":[],"
+            "\"benefits\":[],"
+            "\"about_the_company\":[],"
+            "\"work_conditions\":[]"
+            "}"
+            "}"
+        )
+
+        with patch(
+            "app.services.vacancy_retrieval_queries_service.complete_prompt",
+            return_value=llm_response,
+        ):
+            with patch(
+                "app.services.vacancy_retrieval_queries_service.get_person",
+                return_value=None,
+            ):
+                contract = extract_vacancy_retrieval_queries(
+                    _opportunity(),
+                    _vacancy_dimensions_enriched(),
+                    _vacancy_salary(),
+                    settings=object(),
+                )
+
+        self.assertEqual(
+            contract["queries"]["responsibilities"][0]["queries"],
+            ["liderazgo de roadmap", "gestion de backlog"],
+        )
 
 
 if __name__ == "__main__":

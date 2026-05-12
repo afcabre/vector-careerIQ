@@ -4,7 +4,7 @@
 - fase_actual: `Implementacion`
 - checkpoint_actual: `El rediseño de match ya cuenta con P0, C1, C2 y P1 operativos; S8 v2 ya consume la matriz profesional y la matriz de preferencias como estructuras autoritativas, y el slice correctivo actual endurece refresco de P0, recorta S6.5 al fit profesional y obliga a S8 a completar narrativa util`
 - repo_status: `flujo V1 operativo con analisis, postulacion, chat, CV semantico, admin de prompts y extraccion estructurada de vacantes en forma legacy estable; propuesta v2 desacoplada en branch experimental`
-- ultima_actualizacion: `2026-05-11`
+- ultima_actualizacion: `2026-05-12`
 
 ## Progreso Por Fase
 - `Fase 0`: completada
@@ -226,6 +226,8 @@
 - proteccion adicional de autenticacion: si en `production + firestore` no existe operador y el backend intenta sembrarlo con el hash demo por defecto, el arranque falla explicitamente para evitar credenciales silenciosamente incorrectas
 - validacion tecnica del hardening de autenticacion en verde: `cd apps/backend && .venv/bin/python -m unittest tests.test_operator_store tests.test_auth_rate_limit`
 - backlog prioritario documentado para `S4`: parametrizar tipologias de retrieval desde administracion; el default programatico actual ya excluye `work_conditions`, `benefits` y `about_the_company`
+- slice `vacancy_v2` `S4` pre-Cohere `Slice 2` implementado: el servicio ahora valida probes programaticamente, limpia queries con `?`, duplicados cercanos, probes demasiado largos y probes con overlap lexico casi nulo contra el criterio; cuando la vacante es espanola y el perfil de idioma del candidato marca espanol, tambien fuerza regeneracion si el LLM devuelve probes en ingles
+- `S4` agrega loop corto de regeneracion antes de persistir para recuperar tandas invalidas sin romper el contrato `vacancy_retrieval_queries.v1`; validacion tecnica en verde con `.venv/bin/python -m unittest tests.test_vacancy_retrieval_queries_service tests.test_vacancy_retrieval_queries_contract tests.test_vacancy_retrieval_evidence_service tests.test_vacancy_v2_endpoints` (`77 tests`)
 - validacion funcional nueva: el gate actual `Vacancy V2` mide solo consistencia parcial `S2 -> S3` (`vacancy_blocks` -> `vacancy_dimensions`) y no incorpora aun artefactos `S3.1` ni `S3.9`
 - slice frontend nuevo: la UI experimental de `Vacancy V2` ahora expone `S3.1` (`Vacancy Salary`) y `S3.9` (`Vacancy Dimensions Enriched`) con recompute, visualizacion de `status`/`generated_at`, inspeccion JSON read-only y cambio manual de estado `draft/approved`
 - validacion tecnica del slice frontend `S3.1 + S3.9`: `npm run build` en `apps/frontend` en verde
