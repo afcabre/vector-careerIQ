@@ -344,9 +344,15 @@ def _run_adjudication_completion(
         "candidate_risk solo puede ser: none, low, medium, high. confidence solo puede ser: high, medium, low. "
         "best_supporting_evidence debe incluir solo evidencia que realmente soporte el criterio e indicar why_it_supports. "
         "why_it_supports no debe limitarse a repetir el criterio ni a decir genericamente que el snippet es relevante. "
-        "why_it_supports debe explicar que senal concreta del snippet soporta el criterio y si el soporte parece directo, parcial o inferido. "
-        "Cuando sea posible, menciona la pieza observable del snippet: cargo, anos, tecnologia, certificacion, responsabilidad, resultado, metrica, stakeholder, presupuesto, estandar o dominio. "
-        "No menciones section o block_title como justificacion principal. Si section es unknown o vacia, no la menciones. "
+        "why_it_supports debe explicar que parte concreta del snippet soporta el criterio y si el soporte es directo, parcial o contextual. "
+        "Cuando sea posible, menciona la pieza observable del snippet: cargo, anos, tecnologia, certificacion, responsabilidad, resultado, metrica, stakeholder, presupuesto, estandar, dominio o entregable. "
+        "No uses section o block_title como justificacion principal. Si section es unknown o vacia, no la menciones. "
+        "Si el snippet solo sugiere afinidad pero no prueba el criterio, dilo explicitamente en why_it_supports o muevelo a weak_or_discarded_evidence. "
+        "No llenes best_supporting_evidence con todos los snippets aceptados. Curala. "
+        "Prioriza evidencia directa; despues evidencia parcial claramente defendible; deja la evidencia solo contextual fuera de best_supporting_evidence salvo que agregue una senal distinta y necesaria. "
+        "Evita redundancia entre snippets muy parecidos. "
+        "Como regla general devuelve entre 1 y 4 snippets en best_supporting_evidence; puedes devolver mas solo si cada snippet agrega una senal distinta y necesaria. "
+        "Si no puedes explicar de forma especifica por que un snippet soporta el criterio, no lo pongas en best_supporting_evidence. "
         "Si vacancy_evidence_analysis muestra best_evidence o accepted_matches utiles para un item, no dejes best_supporting_evidence vacio. "
         "Vacante: {opportunity_context}. Persona: {person_context}. "
         "Entrada vacancy_dimensions_enriched.v1: {vacancy_dimensions_enriched_json}. "
@@ -405,77 +411,23 @@ def _default_why_it_supports(raw_text: str, section: str, block_title: str) -> s
     normalized_section = _normalize_text(section)
     normalized_block_title = _normalize_text(block_title)
     if normalized_section and normalized_section != "unknown":
-        return f"El snippet aporta evidencia relevante para '{raw_text}' desde la seccion {section.strip()} del CV."
+        return (
+            f"Snippet retenido como soporte potencial para '{raw_text}'; "
+            f"la explicacion especifica no estuvo disponible. Referencia contextual: seccion {section.strip()}."
+        )
     if normalized_block_title and normalized_block_title != "unknown":
-        return f"El snippet aporta evidencia relevante para '{raw_text}' en el bloque {block_title.strip()} del CV."
-    return f"El snippet aporta evidencia relevante para '{raw_text}' en el CV."
+        return (
+            f"Snippet retenido como soporte potencial para '{raw_text}'; "
+            f"la explicacion especifica no estuvo disponible. Referencia contextual: bloque {block_title.strip()}."
+        )
+    return (
+        f"Snippet retenido como soporte potencial para '{raw_text}'; "
+        "la explicacion especifica no estuvo disponible."
+    )
 
 
 def _normalize_text(value: str) -> str:
     return " ".join(str(value or "").strip().casefold().split())
-
-
-def _content_tokens(value: str) -> list[str]:
-    return [
-        token
-        for token in _normalize_text(value).split()
-        if len(token) >= 3
-    ]
-
-
-def _quoted_snippet_excerpt(snippet: str, max_words: int = 12) -> str:
-    words = " ".join(str(snippet or "").strip().split()).split()
-    if not words:
-        return ""
-    excerpt = " ".join(words[:max_words])
-    if len(words) > max_words:
-        excerpt = f"{excerpt}..."
-    return f'"{excerpt}"'
-
-
-def _shared_signal_tokens(raw_text: str, snippet: str, limit: int = 3) -> list[str]:
-    criterion_tokens = _content_tokens(raw_text)
-    snippet_tokens = _content_tokens(snippet)
-    criterion_set = set(criterion_tokens)
-    shared: list[str] = []
-    seen: set[str] = set()
-    for token in snippet_tokens:
-        if token in criterion_set and token not in seen:
-            seen.add(token)
-            shared.append(token)
-        if len(shared) >= limit:
-            break
-    return shared
-
-
-def _has_years_signal(value: str) -> bool:
-    normalized = _normalize_text(value)
-    return any(marker in normalized for marker in ("ano", "anos", "año", "años", "experiencia"))
-
-
-def _support_strength_label(raw_text: str, snippet: str) -> str:
-    shared = _shared_signal_tokens(raw_text, snippet, limit=10)
-    if _has_years_signal(raw_text) and _has_years_signal(snippet):
-        return "directa"
-    if len(shared) >= 3:
-        return "directa"
-    if len(shared) >= 1:
-        return "parcial"
-    return "indirecta"
-
-
-def _support_signal_phrase(raw_text: str, snippet: str) -> str:
-    shared = _shared_signal_tokens(raw_text, snippet)
-    if shared:
-        if len(shared) == 1:
-            return f"menciona la senal {shared[0]}"
-        if len(shared) == 2:
-            return f"menciona las senales {shared[0]} y {shared[1]}"
-        return f"menciona senales como {', '.join(shared[:-1])} y {shared[-1]}"
-    excerpt = _quoted_snippet_excerpt(snippet)
-    if excerpt:
-        return f"describe {excerpt}"
-    return "aporta una senal relacionada"
 
 
 def _supporting_evidence_from_match(
@@ -490,41 +442,8 @@ def _supporting_evidence_from_match(
         "block_title": block_title,
         "section": section,
         "snippet": str(match.get("snippet", "")).strip(),
-        "why_it_supports": _build_support_explanation(
-            raw_text=raw_text,
-            snippet=str(match.get("snippet", "")).strip(),
-            section=section,
-            block_title=block_title,
-        ),
+        "why_it_supports": _default_why_it_supports(raw_text, section, block_title),
     }
-
-
-def _build_support_explanation(
-    *,
-    raw_text: str,
-    snippet: str,
-    section: str,
-    block_title: str,
-) -> str:
-    cleaned_snippet = str(snippet or "").strip()
-    if not cleaned_snippet:
-        return _default_why_it_supports(raw_text, section, block_title)
-
-    support_strength = _support_strength_label(raw_text, cleaned_snippet)
-    signal_phrase = _support_signal_phrase(raw_text, cleaned_snippet)
-    if support_strength == "directa":
-        return (
-            f"El snippet {signal_phrase}, lo que aporta evidencia directa para '{raw_text}'."
-        )
-    if support_strength == "parcial":
-        return (
-            f"El snippet {signal_phrase}, lo que aporta evidencia parcial para '{raw_text}', "
-            "aunque no prueba por si solo todo el criterio."
-        )
-    return (
-        f"El snippet {signal_phrase}, lo que aporta una senal indirecta o contextual para "
-        f"'{raw_text}', aunque requiere corroboracion adicional."
-    )
 
 
 def _weak_evidence_from_match(match: DiscardedEvidenceMatch) -> dict[str, str]:

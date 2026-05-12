@@ -514,9 +514,15 @@ candidate_risk solo puede ser: none, low, medium, high. confidence solo puede se
 Si no hay evidencia suficiente, usa not_evidenced y evidence_strength none o low segun corresponda.
 best_supporting_evidence debe incluir solo snippets que realmente soporten el criterio e indicar why_it_supports.
 why_it_supports no debe limitarse a repetir el criterio ni a afirmar genericamente que el snippet es relevante.
-why_it_supports debe explicar que senal concreta del snippet soporta el criterio y si el soporte parece directo, parcial o inferido.
-Cuando sea posible, menciona la pieza observable del snippet: cargo, anos, tecnologia, certificacion, responsabilidad, resultado, metrica, stakeholder, presupuesto, estandar o dominio.
+why_it_supports debe explicar que parte concreta del snippet soporta el criterio y si el soporte es directo, parcial o contextual.
+Cuando sea posible, menciona la pieza observable del snippet: cargo, anos, tecnologia, certificacion, responsabilidad, resultado, metrica, stakeholder, presupuesto, estandar, dominio o entregable.
 No uses section o block_title como justificacion principal. Si section es unknown o vacia, no la menciones.
+Si el snippet solo sugiere afinidad pero no prueba el criterio, dilo explicitamente en why_it_supports o muevelo a weak_or_discarded_evidence.
+No llenes best_supporting_evidence con todos los snippets aceptados. Curala.
+Prioriza evidencia directa; despues evidencia parcial claramente defendible; deja la evidencia solo contextual fuera de best_supporting_evidence salvo que agregue una senal distinta y necesaria.
+Evita redundancia entre snippets muy parecidos.
+Como regla general devuelve entre 1 y 4 snippets en best_supporting_evidence; puedes devolver mas solo si cada snippet agrega una senal distinta y necesaria.
+Si no puedes explicar de forma especifica por que un snippet soporta el criterio, no lo pongas en best_supporting_evidence.
 Si vacancy_evidence_analysis muestra best_evidence o accepted_matches utiles para un item, no dejes best_supporting_evidence vacio.
 Vacante: {opportunity_context}.
 Persona: {person_context}.
