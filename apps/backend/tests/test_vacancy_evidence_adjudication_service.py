@@ -529,6 +529,123 @@ class VacancyEvidenceAdjudicationServiceTests(unittest.TestCase):
         self.assertEqual(required_item["weak_or_discarded_evidence"][0]["source_ref"], "cv:chunk:4")
         self.assertEqual(responsibility_item["best_supporting_evidence"][0]["source_ref"], "cv:chunk:2")
 
+    def test_build_backfills_from_full_accepted_matches_beyond_best_evidence_preview(self) -> None:
+        normalized_items = _normalized_dimension_items()
+        responsibility = normalized_items["responsibility"]
+        required = normalized_items["required"]
+        analysis = _evidence_analysis()
+        extended_matches = [
+            {
+                "source_ref": "cv:chunk:10",
+                "snippet": "Dirigi servicios digitales regionales.",
+                "best_score": 0.77,
+                "query_texts": ["liderazgo servicios digitales"],
+                "query_indexes": [0],
+                "section": "experience",
+                "block_type": "experience",
+                "block_title": "Experiencia",
+                "raw_match_count": 1,
+            },
+            {
+                "source_ref": "cv:chunk:11",
+                "snippet": "Lidere transformacion operativa con equipos multidisciplinarios.",
+                "best_score": 0.72,
+                "query_texts": ["transformacion operativa"],
+                "query_indexes": [1],
+                "section": "experience",
+                "block_type": "experience",
+                "block_title": "Experiencia",
+                "raw_match_count": 1,
+            },
+            {
+                "source_ref": "cv:chunk:12",
+                "snippet": "Gestione portafolio y backlog de servicios digitales.",
+                "best_score": 0.69,
+                "query_texts": ["gestion backlog servicios"],
+                "query_indexes": [2],
+                "section": "experience",
+                "block_type": "experience",
+                "block_title": "Experiencia",
+                "raw_match_count": 1,
+            },
+            {
+                "source_ref": "cv:chunk:13",
+                "snippet": "Coordine stakeholders y entregas de servicios digitales.",
+                "best_score": 0.63,
+                "query_texts": ["stakeholders servicios"],
+                "query_indexes": [3],
+                "section": "experience",
+                "block_type": "experience",
+                "block_title": "Experiencia",
+                "raw_match_count": 1,
+            },
+        ]
+        analysis["analysis"]["responsibilities"][0]["accepted_matches"] = extended_matches
+        analysis["analysis"]["responsibilities"][0]["accepted_match_count"] = len(extended_matches)
+        analysis["analysis"]["responsibilities"][0]["distinct_query_hits"] = len(extended_matches)
+        analysis["analysis"]["responsibilities"][0]["best_evidence"] = extended_matches[:3]
+
+        llm_response = (
+            "{"
+            "\"items\":["
+            "{"
+            f"\"item_id\":\"{responsibility['item_id']}\","
+            f"\"item_index\":{responsibility['item_index']},"
+            "\"group\":\"responsibilities\","
+            "\"group_code\":\"resp\","
+            "\"raw_text\":\"Liderar area de servicios digitales\","
+            "\"criterion_type\":\"leadership\","
+            "\"priority\":\"important\","
+            "\"alignment_status\":\"partial\","
+            "\"evidence_strength\":\"medium\","
+            "\"proof_summary\":\"Resumen parcial.\","
+            "\"best_supporting_evidence\":[],"
+            "\"weak_or_discarded_evidence\":[],"
+            "\"limitations\":[],"
+            "\"candidate_risk\":\"medium\","
+            "\"cv_improvement_opportunity\":\"\","
+            "\"confidence\":\"medium\""
+            "},"
+            "{"
+            f"\"item_id\":\"{required['item_id']}\","
+            f"\"item_index\":{required['item_index']},"
+            "\"group\":\"required_criteria\","
+            "\"group_code\":\"req\","
+            "\"raw_text\":\"Minimo 5 anos de experiencia profesional\","
+            "\"criterion_type\":\"years_experience\","
+            "\"priority\":\"important\","
+            "\"alignment_status\":\"direct\","
+            "\"evidence_strength\":\"high\","
+            "\"proof_summary\":\"Resumen directo.\","
+            "\"best_supporting_evidence\":[],"
+            "\"weak_or_discarded_evidence\":[],"
+            "\"limitations\":[],"
+            "\"candidate_risk\":\"low\","
+            "\"cv_improvement_opportunity\":\"\","
+            "\"confidence\":\"high\""
+            "}"
+            "],"
+            "\"warnings\":[]"
+            "}"
+        )
+
+        with patch(
+            "app.services.vacancy_evidence_adjudication_service.complete_prompt",
+            return_value=llm_response,
+        ):
+            contract = build_vacancy_evidence_adjudication(
+                person=_person(),
+                opportunity=_opportunity(),
+                vacancy_dimensions_enriched_artifact=_dimensions_enriched(),
+                vacancy_evidence_analysis_artifact=analysis,
+                settings=object(),
+            )
+
+        responsibility_item = contract["items"][0]
+        sources = [item["source_ref"] for item in responsibility_item["best_supporting_evidence"]]
+        self.assertEqual(len(sources), 4)
+        self.assertEqual(sources[-1], "cv:chunk:13")
+
 
 if __name__ == "__main__":
     unittest.main()

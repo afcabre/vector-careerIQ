@@ -452,6 +452,31 @@ def _analysis_item_for_adjudicated_item(
     return analysis_item if isinstance(analysis_item, dict) else None
 
 
+def _supporting_match_candidates(
+    analysis_item: dict[str, Any],
+) -> list[ConsolidatedEvidenceMatch]:
+    ordered: list[ConsolidatedEvidenceMatch] = []
+    seen: set[str] = set()
+    for field_name in ("accepted_matches", "best_evidence"):
+        matches = analysis_item.get(field_name, [])
+        if not isinstance(matches, list):
+            continue
+        for match in matches:
+            if not isinstance(match, dict):
+                continue
+            signature = "|".join(
+                [
+                    str(match.get("source_ref", "")).strip().casefold(),
+                    str(match.get("snippet", "")).strip().casefold(),
+                ]
+            )
+            if not signature.strip("|") or signature in seen:
+                continue
+            seen.add(signature)
+            ordered.append(match)
+    return ordered
+
+
 def _backfill_supporting_evidence(
     item: VacancyEvidenceAdjudicationItem,
     *,
@@ -459,9 +484,7 @@ def _backfill_supporting_evidence(
 ) -> VacancyEvidenceAdjudicationItem:
     if not analysis_item or item.get("best_supporting_evidence"):
         return item
-    fallback_matches = list(analysis_item.get("best_evidence", []))
-    if not fallback_matches:
-        fallback_matches = list(analysis_item.get("accepted_matches", []))
+    fallback_matches = _supporting_match_candidates(analysis_item)
     supporting_evidence = [
         _supporting_evidence_from_match(match, raw_text=item["raw_text"])
         for match in fallback_matches
