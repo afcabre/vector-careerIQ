@@ -64,7 +64,7 @@ import {
   recomputeOpportunityVacancyAlignmentReport,
   recomputeOpportunityVacancyAlignmentReportV2Stream,
   recomputeOpportunityVacancyAlignmentReportStream,
-  recomputeOpportunityVacancySalary,
+  recomputeOpportunityVacancySalaryStream,
   recomputeOpportunityVacancyComparableConditionsStream,
   recomputeOpportunityCandidatePreferenceChecksStream,
   recomputeOpportunityVacancyFitPresentationStream,
@@ -1117,6 +1117,23 @@ function getVacancyComparableConditionsStageLabel(stage: string): string {
   }
   if (normalized === "vacancy_comparable_conditions_saving") {
     return "SSE activo: guardando C1";
+  }
+  return `SSE activo: ${stage}`;
+}
+
+function getVacancySalaryStageLabel(stage: string): string {
+  const normalized = stage.trim().toLowerCase();
+  if (!normalized) {
+    return "";
+  }
+  if (normalized === "vacancy_salary_recompute_started") {
+    return "SSE activo: iniciando normalizacion salarial";
+  }
+  if (normalized === "vacancy_salary_extracting") {
+    return "SSE activo: extrayendo salario comparable";
+  }
+  if (normalized === "vacancy_salary_saving") {
+    return "SSE activo: guardando S3.1";
   }
   return `SSE activo: ${stage}`;
 }
@@ -2351,6 +2368,12 @@ export default function App() {
   const [recomputingVacancyBlocksId, setRecomputingVacancyBlocksId] = useState<string | null>(null);
   const [recomputingVacancyDimensionsId, setRecomputingVacancyDimensionsId] = useState<string | null>(null);
   const [recomputingVacancySalaryId, setRecomputingVacancySalaryId] = useState<string | null>(null);
+  const [vacancySalaryStageByOpportunityId, setVacancySalaryStageByOpportunityId] = useState<
+    Record<string, string>
+  >({});
+  const [vacancySalaryErrorByOpportunityId, setVacancySalaryErrorByOpportunityId] = useState<
+    Record<string, string>
+  >({});
   const [recomputingVacancyComparableConditionsId, setRecomputingVacancyComparableConditionsId] =
     useState<string | null>(null);
   const [recomputingCandidatePreferenceChecksId, setRecomputingCandidatePreferenceChecksId] =
@@ -4281,9 +4304,27 @@ export default function App() {
       return;
     }
     setRecomputingVacancySalaryId(item.opportunity_id);
+    setVacancySalaryStageByOpportunityId((current) => ({
+      ...current,
+      [item.opportunity_id]: "vacancy_salary_recompute_started"
+    }));
+    setVacancySalaryErrorByOpportunityId((current) => {
+      const next = { ...current };
+      delete next[item.opportunity_id];
+      return next;
+    });
     setErrorMessage(null);
     try {
-      await recomputeOpportunityVacancySalary(selectedPersonId, item.opportunity_id);
+      await recomputeOpportunityVacancySalaryStream(
+        selectedPersonId,
+        item.opportunity_id,
+        (stage) => {
+          setVacancySalaryStageByOpportunityId((current) => ({
+            ...current,
+            [item.opportunity_id]: stage
+          }));
+        }
+      );
       const items = await listOpportunities(selectedPersonId);
       setSavedOpportunities(items);
       if (selectedOpportunityId === item.opportunity_id) {
@@ -4297,8 +4338,30 @@ export default function App() {
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "No se pudo recalcular Vacancy Salary";
+      setVacancySalaryErrorByOpportunityId((current) => ({
+        ...current,
+        [item.opportunity_id]: message
+      }));
+      try {
+        const items = await listOpportunities(selectedPersonId);
+        setSavedOpportunities(items);
+        if (selectedOpportunityId === item.opportunity_id) {
+          const refreshed = items.find((entry) => entry.opportunity_id === item.opportunity_id);
+          if (refreshed) {
+            setOpportunityStatus(refreshed.status);
+            setOpportunityNotes(refreshed.notes);
+          }
+        }
+      } catch {
+        // Preserve the original salary error message if the refresh fails.
+      }
       setErrorMessage(message);
     } finally {
+      setVacancySalaryStageByOpportunityId((current) => {
+        const next = { ...current };
+        delete next[item.opportunity_id];
+        return next;
+      });
       setRecomputingVacancySalaryId(null);
     }
   }
@@ -8337,6 +8400,9 @@ export default function App() {
                 vacancyEvidenceAdjudicationStageByOpportunityId[item.opportunity_id] ?? "";
               const vacancyEvidenceAdjudicationStageLabel =
                 getVacancyEvidenceAdjudicationStageLabel(vacancyEvidenceAdjudicationStage);
+              const vacancySalaryStage = vacancySalaryStageByOpportunityId[item.opportunity_id] ?? "";
+              const vacancySalaryStageLabel = getVacancySalaryStageLabel(vacancySalaryStage);
+              const vacancySalaryError = vacancySalaryErrorByOpportunityId[item.opportunity_id] ?? "";
               const vacancyComparableConditionsStage =
                 vacancyComparableConditionsStageByOpportunityId[item.opportunity_id] ?? "";
               const vacancyComparableConditionsStageLabel =
@@ -8984,6 +9050,14 @@ export default function App() {
                         <div>
                           <p className="metaText vacancyV2SectionTitle">S3.1 · Vacancy Salary</p>
                           <p className="metaText">Generado: {vacancySalaryGeneratedAt}</p>
+                          {recomputingVacancySalaryId === item.opportunity_id
+                          && vacancySalaryStageLabel ? (
+                            <p className="metaText">{vacancySalaryStageLabel}</p>
+                          ) : null}
+                          {recomputingVacancySalaryId !== item.opportunity_id
+                          && vacancySalaryError ? (
+                            <p className="errorText">{vacancySalaryError}</p>
+                          ) : null}
                         </div>
                         <div className="metaChips vacancyV2HeaderChips">
                           <span

@@ -1207,6 +1207,79 @@ export async function recomputeOpportunityVacancySalary(
   return parseResponse<Opportunity>(response);
 }
 
+export async function recomputeOpportunityVacancySalaryStream(
+  personId: string,
+  opportunityId: string,
+  onStatus: (stage: string) => void
+): Promise<void> {
+  const response = await safeFetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/vacancy-salary/recompute/stream`,
+    {
+      method: "POST",
+      credentials: "include"
+    }
+  );
+  if (!response.ok) {
+    let messageText = `Request failed: ${response.status}`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) {
+        messageText = payload.detail;
+      }
+    } catch {
+      // Ignore parsing errors for stream setup failures.
+    }
+    throw new Error(messageText);
+  }
+  if (!response.body) {
+    throw new Error("Streaming response body is empty");
+  }
+
+  const decoder = new TextDecoder();
+  const reader = response.body.getReader();
+  let pending = "";
+  let completed = false;
+  let lastStage = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+    pending += decoder.decode(value, { stream: true });
+    const consumed = consumeSseBuffer(pending, (eventName, payload) => {
+      if (eventName === "tool_status") {
+        const stage = payload.stage;
+        if (typeof stage === "string" && stage.trim()) {
+          lastStage = stage.trim();
+          onStatus(lastStage);
+        }
+      } else if (eventName === "message_complete") {
+        completed = true;
+      }
+    });
+    pending = consumed.remainder;
+  }
+  if (pending.trim()) {
+    consumeSseBuffer(`${pending}\n\n`, (eventName, payload) => {
+      if (eventName === "tool_status") {
+        const stage = payload.stage;
+        if (typeof stage === "string" && stage.trim()) {
+          lastStage = stage.trim();
+          onStatus(lastStage);
+        }
+      } else if (eventName === "message_complete") {
+        completed = true;
+      }
+    });
+  }
+
+  if (!completed) {
+    const stageSuffix = lastStage ? ` (last stage: ${lastStage})` : "";
+    throw new Error(`Vacancy salary stream ended without completion payload${stageSuffix}`);
+  }
+}
+
 export async function recomputeOpportunityVacancyComparableConditionsStream(
   personId: string,
   opportunityId: string,
