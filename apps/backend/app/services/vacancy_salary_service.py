@@ -13,6 +13,7 @@ from app.services.prompt_config_store import (
 from app.services.vacancy_dimensions_contract import is_vacancy_dimensions_contract, normalize_vacancy_dimensions_contract
 from app.services.vacancy_salary_contract import (
     VacancySalaryNormalizationContract,
+    empty_vacancy_salary_normalization_contract,
     normalize_vacancy_salary_normalization_contract,
 )
 from app.services.vacancy_v2_runtime_config import get_vacancy_v2_runtime_config
@@ -123,9 +124,10 @@ def extract_vacancy_salary_normalization(
     generated_at = _now_iso()
     salary_raw_text = _extract_salary_raw_text(normalized_dimensions)
     if not salary_raw_text:
-        raise VacancySalaryNormalizationError(
-            "Step 3.1 requires at least one salary signal in vacancy_dimensions.work_conditions."
-        )
+        empty_contract = empty_vacancy_salary_normalization_contract()
+        empty_contract["vacancy_id"] = vacancy_id
+        empty_contract["generated_at"] = generated_at
+        return empty_contract
 
     system_prompt = (
         "You are a vacancy salary normalizer. Return valid JSON only for vacancy_salary_normalization.v1. "

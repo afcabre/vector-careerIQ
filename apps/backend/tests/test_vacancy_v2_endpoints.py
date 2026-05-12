@@ -1095,6 +1095,47 @@ class VacancyV2EndpointsTests(unittest.TestCase):
         assert stored is not None
         self.assertEqual(stored["vacancy_salary_status"], "error")
 
+    def test_recompute_vacancy_salary_without_salary_signal_stays_draft(self) -> None:
+        created = opportunity_store.import_text_opportunity(
+            person_id="p-001",
+            title="Backend Engineer",
+            company="Acme",
+            location="Hybrid",
+            raw_text="Vacante sin salario publicado.",
+        )
+        opportunity_id = created["opportunity_id"]
+        dimensions = _sample_vacancy_dimensions(opportunity_id)
+        dimensions["vacancy_dimensions"]["work_conditions"] = [
+            {"raw_text": "Modalidad: Hibrido 3x2"},
+            {"raw_text": "Ubicacion: Bogota"},
+        ]
+        updated = opportunity_store.update_opportunity(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            status=None,
+            notes=None,
+            vacancy_dimensions_artifact=dimensions,
+            vacancy_dimensions_status="approved",
+        )
+        assert updated is not None
+
+        response = opportunities_api.recompute_vacancy_salary(
+            person_id="p-001",
+            opportunity_id=opportunity_id,
+            _=self.session,
+            settings=get_settings(),
+        )
+
+        self.assertEqual(response.vacancy_salary_status, "draft")
+        self.assertEqual(
+            response.vacancy_salary_artifact["contract_version"],
+            "vacancy_salary_normalization.v1",
+        )
+        self.assertEqual(response.vacancy_salary_artifact["salary"]["raw_text"], "")
+        stored = opportunity_store.find_opportunity("p-001", opportunity_id)
+        assert stored is not None
+        self.assertEqual(stored["vacancy_salary_status"], "draft")
+
     def test_recompute_vacancy_comparable_conditions_success_sets_draft_artifact(self) -> None:
         created = opportunity_store.import_text_opportunity(
             person_id="p-001",

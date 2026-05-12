@@ -77,16 +77,28 @@ class VacancySalaryNormalizationServiceTests(unittest.TestCase):
         self.assertEqual(contract["salary"]["currency"], "COP")
         self.assertEqual(contract["salary"]["period"], "mensual")
 
-    def test_extract_requires_valid_dimensions_artifact_and_salary_signal(self) -> None:
+    def test_extract_requires_valid_dimensions_artifact(self) -> None:
         with self.assertRaises(VacancySalaryNormalizationError):
             extract_vacancy_salary_normalization(_opportunity(), {}, settings=object())
 
-        with self.assertRaises(VacancySalaryNormalizationError):
-            extract_vacancy_salary_normalization(
-                _opportunity(),
-                _vacancy_dimensions(salary_raw_text=""),
-                settings=object(),
-            )
+    def test_extract_without_salary_signal_returns_empty_valid_contract(self) -> None:
+        contract = extract_vacancy_salary_normalization(
+            _opportunity(),
+            _vacancy_dimensions(salary_raw_text=""),
+            settings=object(),
+        )
+
+        self.assertEqual(
+            contract["contract_version"],
+            CONTRACT_VERSION_VACANCY_SALARY_NORMALIZATION,
+        )
+        self.assertEqual(contract["vacancy_id"], "o-salary-001")
+        self.assertTrue(contract["generated_at"])
+        self.assertIsNone(contract["salary"]["min"])
+        self.assertIsNone(contract["salary"]["max"])
+        self.assertEqual(contract["salary"]["currency"], "")
+        self.assertEqual(contract["salary"]["period"], "")
+        self.assertEqual(contract["salary"]["raw_text"], "")
 
     def test_extract_preserves_input_raw_text_when_llm_omits_it(self) -> None:
         llm_response = (
