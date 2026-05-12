@@ -18,6 +18,7 @@ Consolidar en un solo documento la definicion operativa de los Steps de `vacancy
 - `S1` no es hoy un artefacto formal de `vacancy_v2`; es la etapa previa de captura del `snapshot_raw_text`
 - los Steps con prompt configurable son: `S2`, `S3`, `S3.1`, `S4`, `S8`
 - los Steps deterministas, sin prompt propio, son: `S3.9`, `S5`, `S6`, `S7`
+- evolucion recomendada nueva: `S4` sigue como candidate generation `LLM-first`, pero `S6` debe evolucionar hacia rerank real con `Cohere`, manteniendo `S6.5` como adjudicacion grounded posterior
 - para el rediseño de presentacion final se propone una capa adicional posterior a `S7 v2`: limpieza de perfil comparable, normalizacion de condiciones comparables de vacante, checks deterministas y matriz de presentacion antes del relato final
 
 ## Mapa rapido
@@ -466,6 +467,13 @@ Traducir criterios atomizados a queries utiles para recuperar evidencia en el CV
 ### Regla operativa
 Debe formular queries orientadas a buscar evidencia del candidato. En la configuracion actual, el retrieval semantico se limita por defecto a `responsibilities`, `required_criteria` y `desirable_criteria`; los otros grupos permanecen presentes en contrato, pero vacios por defecto.
 
+### Evolucion recomendada
+`S4` debe dejar de producir preguntas largas o probes en ingles cuando vacante y CV estan en espanol. La evolucion recomendada es:
+- probes cortos
+- idioma dominante de la vacante/CV
+- sin `?`
+- validados programaticamente tras la generacion
+
 ### Transformaciones permitidas
 - generar varias queries por item
 - dejar `queries: []` cuando no haya formulacion util
@@ -544,6 +552,14 @@ Programatico
 
 ### Regla operativa
 Deduplica por fragmento recuperado y clasifica usando umbrales configurables. Mantiene trazabilidad de qué queries dispararon cada match.
+
+### Evolucion recomendada
+`S6` debe evolucionar de consolidacion por thresholds a rerank real:
+- `S5` conserva candidate generation con multiples queries
+- `S6` deduplica y rerankea por `criterio -> chunk` usando `Cohere`
+- el rerank no depende de `criterion_type`, `section` o `block_type` como senales primarias
+- `S6` debe soportar descarte, estado `pending_rerank` y relanzamiento parcial (`subset` o `pending_only`) para manejar limites del proveedor
+- si `Cohere` esta deshabilitado desde administracion, `S6` debe volver temporalmente a la logica actual basada en thresholds sin romper el resto del pipeline
 
 ### Transformaciones permitidas
 - consolidar matches duplicados

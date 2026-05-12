@@ -425,3 +425,197 @@ If none of those changed:
 6. expose minimal admin params
 7. add UI confirmation before full rerank
 8. calibrate thresholds with real vacancies
+
+## Deferred Execution Roadmap Before Cohere
+
+Because `Cohere` quota and token cost may delay provider integration, the implementation roadmap should be split into:
+- work that improves quality now without external rerank cost;
+- work that prepares the handoff to future `Cohere`-backed `S6`;
+- work that must wait until provider-backed rerank is explicitly reactivated.
+
+### Decision
+
+Until `Cohere` integration is explicitly resumed:
+- do implement `S4` refinement;
+- do improve `S6` current deterministic hygiene where it reduces obvious noise;
+- do not implement provider calls, replay orchestration, or admin runtime toggles for rerank yet;
+- do not redesign `S6.5` in this phase.
+
+This keeps the pipeline improving without spending provider quota.
+
+## Execution Roadmap For A Smaller Worker Model
+
+### Slice 1 - Refine `S4` Prompt Contract
+
+#### Objective
+Rewrite the effective `S4` prompt behavior so retrieval probes stop looking like interview questions and align with semantic retrieval.
+
+#### Scope
+- prompt template for `task_vacancy_retrieval_queries_extract`
+- fallback/system prompt assembly if applicable
+- prompt documentation if needed
+
+#### Required behavior
+- queries in dominant language of vacancy + CV pair
+- short probes
+- no question style
+- no role-play/interview wording
+- probes oriented to evidence retrieval, not explanation
+
+#### Acceptance criteria
+- generated queries for Spanish vacancy + Spanish CV are in Spanish
+- generated queries do not contain `?`
+- generated queries are visibly shorter and closer to anchor phrases than to interview prompts
+- existing `S4` contract remains compatible with downstream `S5`
+
+#### Out of scope
+- changing `S5`
+- introducing `Cohere`
+- changing persistence contract
+
+#### Recommended model
+- `gpt-5.4` with `medium` reasoning
+
+Reason:
+- this slice touches prompt behavior and tests, but does not require the heavier cost of `gpt-5.5`
+- `gpt-5.4-mini` is likely too brittle for prompt + backend + regression adjustment in one pass
+
+### Slice 2 - Add Programmatic `S4` Validation And Regeneration
+
+#### Objective
+Prevent obviously low-quality probes from surviving even if the LLM produces them.
+
+#### Scope
+- `S4` service validation layer
+- regeneration path for invalid probe sets
+- tests
+
+#### Validation rules to implement now
+- reject probes containing `?`
+- reject probes in the wrong dominant language when vacancy and CV are both Spanish
+- reject probes above configured max length
+- reject near-duplicate probes
+- reject probes with near-zero lexical overlap with criterion anchors
+
+#### Acceptance criteria
+- invalid probe sets trigger regeneration or cleanup before persistence
+- persisted `S4` output is still contract-compatible
+- tests cover at least:
+  - English probes for Spanish case
+  - question-shaped probes
+  - duplicated probes
+
+#### Out of scope
+- semantic rerank
+- changes to `S6` decision logic beyond consuming cleaner `S4`
+
+#### Recommended model
+- `gpt-5.4` with `medium` reasoning
+
+### Slice 3 - Improve Current `S6` Without Cohere
+
+#### Objective
+Reduce obvious retrieval noise while keeping the current deterministic architecture intact.
+
+#### Scope
+- current `S6` consolidation logic only
+- no provider integration
+- no new admin rerank settings yet
+
+#### Allowed improvements
+- stronger deduplication
+- clearer discard reasons
+- conservative filtering of clearly weak matches already detectable with current signals
+- better provenance retention for why a chunk entered `accepted`, `review`, or `discarded`
+
+#### Mandatory constraint
+This slice must preserve the current `S6` runtime shape and must not pretend to be the final rerank design.
+
+#### Acceptance criteria
+- `S6` output remains compatible with `S7`, `S8`, and UI consumers
+- discarded matches include clearer reasons
+- no provider dependency is introduced
+- regression tests keep passing
+
+#### Out of scope
+- `Cohere`
+- `pending_rerank`
+- subset replay
+- rerank admin toggles
+
+#### Recommended model
+- `gpt-5.4` with `medium` reasoning
+
+Reason:
+- this is backend logic with some nuance and regression risk
+- still not worth `gpt-5.5` at this phase
+
+### Slice 4 - Validation Batch With Real Cases
+
+#### Objective
+Measure whether the `S4` improvement and lighter `S6` cleanup materially reduce the failure modes already observed.
+
+#### Scope
+- no architecture change
+- run representative vacancies manually or with existing tools
+- document findings
+
+#### Minimum review checklist
+- are queries still appearing in English unexpectedly
+- are queries still shaped as questions
+- do obviously irrelevant chunks still dominate `best_evidence`
+- does English-level evidence still keep weak chunks
+- do education-like criteria still rank generic `conocimientos` chunks too high
+
+#### Acceptance criteria
+- a short findings note is recorded in local documentation or `PROJECT_STATUS.md`
+- decision is made whether current quality is enough to delay `Cohere` further
+
+#### Recommended model
+- `gpt-5.4-mini` for documentation-only synthesis
+- `gpt-5.4` if the worker must also inspect backend traces and propose code follow-ups
+
+### Slice 5 - Re-evaluate Cohere Activation
+
+#### Objective
+Only after slices 1-4, decide whether provider-backed rerank is still necessary immediately.
+
+#### Decision gate
+Proceed to `Cohere` implementation only if one or more of these remain materially true:
+- `S4` improved, but evidence ranking is still too noisy
+- weak chunks still survive into `S6.5` at unacceptable rate
+- current deterministic `S6` cannot separate borderline evidence reliably
+
+If those issues are no longer severe:
+- defer `Cohere`
+- keep the spec as future architecture
+- continue calibrating the no-provider path
+
+## Model Recommendation Summary
+
+For implementation slices in this phase:
+- recommended default: `gpt-5.4` with `medium` reasoning
+
+Use `gpt-5.4-mini` only for:
+- doc-only cleanup
+- narrow text edits
+- summarizing findings after human-reviewed runs
+
+Do not spend `gpt-5.5` by default here because:
+- the remaining near-term work is bounded and mechanical enough for `gpt-5.4`
+- most value comes from disciplined slice execution and regression checks, not from deeper frontier reasoning
+
+## Explicit Instruction For A Smaller Worker
+
+If a smaller worker is asked to execute this roadmap, it must follow these rules:
+
+1. execute slices in order
+2. stop after each slice and report:
+   - what changed
+   - what was validated
+   - what can be tested manually
+   - proposed commit message in English
+3. do not start `Cohere` integration unless the user reactivates that decision explicitly
+4. do not expose rerank admin parameters in system administration during the pre-`Cohere` phase
+5. preserve compatibility of `S4 -> S5 -> S6 -> S7 -> S8`
+6. prefer additive changes and keep the pipeline running even if quality is still imperfect

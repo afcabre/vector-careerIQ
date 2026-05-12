@@ -161,6 +161,9 @@ class VacancyRetrievalQueriesServiceTests(unittest.TestCase):
         self.assertIn("benefits, about_the_company, and work_conditions", fallback_prompt)
         self.assertIn("observable evidence", fallback_prompt)
         self.assertIn("budget ownership", fallback_prompt)
+        self.assertIn("Do not phrase the queries as questions", fallback_prompt)
+        self.assertIn("write the probes in Spanish", fallback_prompt)
+        self.assertIn("Do not switch to English unnecessarily", fallback_prompt)
 
     def test_extract_invalid_json_raises_controlled_error(self) -> None:
         with patch(

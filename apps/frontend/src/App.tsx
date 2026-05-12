@@ -467,15 +467,25 @@ Empresa: {opportunity_company}.
 Ubicacion: {opportunity_location}.
 URL: {opportunity_url}.
 Entrada vacancy_blocks.v2: {vacancy_blocks_json}`,
-  task_vacancy_retrieval_queries_extract: `Genera queries de retrieval para la vacante y responde SOLO JSON valido.
-Usa solo estas claves raiz: queries.
+  task_vacancy_retrieval_queries_extract: `Genera retrieval probes para la vacante y responde SOLO JSON valido conforme a vacancy_retrieval_queries.v1.
+Usa solo esta clave raiz: queries.
 Dentro de queries usa exactamente: responsibilities, required_criteria, desirable_criteria, benefits, about_the_company, work_conditions.
 work_conditions debe ser una lista plana de items, sin subcategorias.
 Genera queries no vacias solo para responsibilities, required_criteria y desirable_criteria.
 Mantén benefits, about_the_company y work_conditions presentes pero vacios.
 Cada item debe incluir exactamente: item_id, item_index, group_code, raw_text, queries.
-No reclasifiques ni resumes la vacante. Formula queries orientadas a buscar evidencia en el CV.
-Para cada item que amerite query, genera exactamente {retrieval_queries_per_item} queries distintas y utiles.
+No reclasifiques la vacante, no evalúes cumplimiento, no resumas y no inventes ids, grupos ni criterios nuevos.
+Objetivo: producir probes cortos y utiles para recuperar evidencia defendible en el CV.
+Reglas obligatorias para cada query:
+- usa el idioma dominante de la vacante y del CV; si la vacante y el CV estan en espanol, escribe en espanol
+- no uses preguntas ni el signo ?
+- no uses tono de entrevista, segunda persona ni frases como "puedes describir", "what is", "how have you", "can you"
+- prioriza probes cortos; idealmente entre 2 y 8 palabras, evitando frases largas
+- no cambies innecesariamente al ingles; conserva siglas, nombres propios y tecnologias tal como aparezcan
+- evita repetir el criterio casi literal en todas las queries; combina una formulacion cercana con variantes mas comprimidas y observables
+- cuando el criterio sea abstracto, tradúcelo a senales observables como cargos equivalentes, responsabilidades, herramientas, certificaciones, estandares, anos de experiencia, presupuesto, stakeholders, resultados, metricas, gobierno, arquitectura, transformacion o eficiencia
+- no inventes experiencia, certificaciones, herramientas, sectores, idiomas ni resultados que no esten sugeridos por el criterio
+Para cada item que amerite query, genera exactamente {retrieval_queries_per_item} queries distintas y utiles, con angulos variados de retrieval.
 Si un item no amerita query util, deja queries vacio.
 Vacante titulo: {opportunity_title}.
 Empresa: {opportunity_company}.
