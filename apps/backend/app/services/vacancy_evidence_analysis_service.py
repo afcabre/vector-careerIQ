@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from difflib import SequenceMatcher
 from datetime import UTC, datetime
 from typing import Any
 
 from app.services.ai_runtime_config_store import get_ai_runtime_config
 from app.services.vacancy_evidence_analysis_contract import (
+    DISCARD_REASON_DUPLICATE_OF_BETTER_MATCH,
+    DISCARD_REASON_REDUNDANT_SAME_FRAGMENT,
     DISCARD_REASON_SCORE_BELOW_REVIEW_THRESHOLD,
     ITEM_STATUS_NO_EVIDENCE,
     ITEM_STATUS_REVIEW,
@@ -26,6 +29,8 @@ from app.services.vacancy_retrieval_evidence_contract import (
 
 
 TOP_BEST_EVIDENCE_LIMIT = 3
+SNIPPET_NEAR_DUPLICATE_THRESHOLD = 0.92
+MIN_WEAK_MATCH_CRITERION_OVERLAP = 0.18
 
 
 class VacancyEvidenceAnalysisBuildError(RuntimeError):
@@ -46,6 +51,40 @@ def _score_thresholds() -> dict[str, float]:
         "useful_min": max(0.0, min(1.0, useful_min)),
         "review_min": max(0.0, min(1.0, review_min)),
     }
+
+
+def _normalize_text(value: str) -> str:
+    return " ".join(str(value or "").strip().casefold().split())
+
+
+def _content_tokens(value: str) -> set[str]:
+    return {
+        token
+        for token in _normalize_text(value).split()
+        if len(token) >= 3
+    }
+
+
+def _lexical_overlap(left: str, right: str) -> float:
+    left_tokens = _content_tokens(left)
+    right_tokens = _content_tokens(right)
+    union = left_tokens | right_tokens
+    if not union:
+        return 0.0
+    return len(left_tokens & right_tokens) / len(union)
+
+
+def _are_near_duplicate_snippets(left: str, right: str) -> bool:
+    left_normalized = _normalize_text(left)
+    right_normalized = _normalize_text(right)
+    if not left_normalized or not right_normalized:
+        return False
+    if left_normalized == right_normalized:
+        return True
+    return (
+        SequenceMatcher(None, left_normalized, right_normalized).ratio()
+        >= SNIPPET_NEAR_DUPLICATE_THRESHOLD
+    )
 
 
 def _consolidate_matches(item: RetrievalEvidenceItem) -> list[ConsolidatedEvidenceMatch]:
@@ -105,6 +144,71 @@ def _build_discarded_match(
     }
 
 
+def _partition_consolidated_matches(
+    item: RetrievalEvidenceItem,
+    *,
+    consolidated_matches: list[ConsolidatedEvidenceMatch],
+    thresholds: dict[str, float],
+) -> tuple[list[ConsolidatedEvidenceMatch], list[DiscardedEvidenceMatch]]:
+    accepted_matches: list[ConsolidatedEvidenceMatch] = []
+    discarded_matches: list[DiscardedEvidenceMatch] = []
+
+    for match in consolidated_matches:
+        if match["best_score"] < thresholds["review_min"]:
+            discarded_matches.append(
+                _build_discarded_match(
+                    match,
+                    discard_reason=DISCARD_REASON_SCORE_BELOW_REVIEW_THRESHOLD,
+                )
+            )
+            continue
+
+        overlap = _lexical_overlap(item["raw_text"], match["snippet"])
+        has_multi_query_support = len(match["query_texts"]) >= 2 or match["raw_match_count"] >= 2
+        if (
+            match["best_score"] < thresholds["useful_min"]
+            and not has_multi_query_support
+            and overlap < MIN_WEAK_MATCH_CRITERION_OVERLAP
+        ):
+            discarded_matches.append(
+                _build_discarded_match(
+                    match,
+                    discard_reason=DISCARD_REASON_SCORE_BELOW_REVIEW_THRESHOLD,
+                )
+            )
+            continue
+
+        duplicate_of_index: int | None = None
+        for index, accepted in enumerate(accepted_matches):
+            if _are_near_duplicate_snippets(match["snippet"], accepted["snippet"]):
+                duplicate_of_index = index
+                break
+        if duplicate_of_index is None:
+            accepted_matches.append(match)
+            continue
+
+        accepted = accepted_matches[duplicate_of_index]
+        if match["best_score"] > accepted["best_score"]:
+            discarded_matches.append(
+                _build_discarded_match(
+                    accepted,
+                    discard_reason=DISCARD_REASON_DUPLICATE_OF_BETTER_MATCH,
+                )
+            )
+            accepted_matches[duplicate_of_index] = match
+            continue
+        discarded_matches.append(
+            _build_discarded_match(
+                match,
+                discard_reason=DISCARD_REASON_REDUNDANT_SAME_FRAGMENT,
+            )
+        )
+
+    accepted_matches.sort(key=lambda value: (-value["best_score"], value["snippet"].casefold()))
+    discarded_matches.sort(key=lambda value: (-value["best_score"], value["snippet"].casefold()))
+    return accepted_matches, discarded_matches
+
+
 def _item_status_from_best_score(best_score: float, thresholds: dict[str, float]) -> str:
     if best_score >= thresholds["strong_min"]:
         return ITEM_STATUS_STRONG_EVIDENCE
@@ -121,18 +225,12 @@ def _analyze_item(
     thresholds: dict[str, float],
 ) -> EvidenceAnalysisItem:
     consolidated_matches = _consolidate_matches(item)
-    accepted_matches = [
-        match for match in consolidated_matches if match["best_score"] >= thresholds["review_min"]
-    ]
-    discarded_matches = [
-        _build_discarded_match(
-            match,
-            discard_reason=DISCARD_REASON_SCORE_BELOW_REVIEW_THRESHOLD,
-        )
-        for match in consolidated_matches
-        if match["best_score"] < thresholds["review_min"]
-    ]
-    best_score = max((match["best_score"] for match in consolidated_matches), default=0.0)
+    accepted_matches, discarded_matches = _partition_consolidated_matches(
+        item,
+        consolidated_matches=consolidated_matches,
+        thresholds=thresholds,
+    )
+    best_score = max((match["best_score"] for match in accepted_matches), default=0.0)
     accepted_query_hits = {
         query_text.casefold()
         for match in accepted_matches

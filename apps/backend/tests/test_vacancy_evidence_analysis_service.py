@@ -117,6 +117,76 @@ class VacancyEvidenceAnalysisServiceTests(unittest.TestCase):
                 vacancy_retrieval_evidence_artifact=artifact,
             )
 
+    def test_build_discards_redundant_same_fragment_variants(self) -> None:
+        artifact = _vacancy_retrieval_evidence()
+        artifact["evidence"]["responsibilities"][0]["matches"].append(
+            {
+                "query_index": 2,
+                "query_text": "liderazgo de producto",
+                "score": 0.57,
+                "snippet": "Lidere backlog trimestral.",
+                "source_ref": "cv-chunk-2",
+                "section": "experience",
+                "block_type": "bullet",
+                "block_title": "Product",
+            }
+        )
+
+        with patch(
+            "app.services.vacancy_evidence_analysis_service.get_ai_runtime_config",
+            return_value={
+                "vacancy_retrieval_score_strong_min": 0.75,
+                "vacancy_retrieval_score_useful_min": 0.45,
+                "vacancy_retrieval_score_review_min": 0.30,
+            },
+        ):
+            contract = build_vacancy_evidence_analysis(
+                opportunity=_opportunity(),
+                vacancy_retrieval_evidence_artifact=artifact,
+            )
+
+        item = contract["analysis"]["responsibilities"][0]
+        self.assertEqual(item["accepted_match_count"], 1)
+        discard_reasons = {match["discard_reason"] for match in item["discarded_matches"]}
+        self.assertIn("redundant_same_fragment", discard_reasons)
+
+    def test_build_discards_review_band_noise_without_overlap_or_multi_query_support(self) -> None:
+        artifact = _vacancy_retrieval_evidence()
+        artifact["evidence"]["responsibilities"][0]["matches"] = [
+            {
+                "query_index": 0,
+                "query_text": "liderazgo de backlog",
+                "score": 0.34,
+                "snippet": "Participe en reuniones tecnicas y talleres internos.",
+                "source_ref": "cv-chunk-11",
+                "section": "experience",
+                "block_type": "bullet",
+                "block_title": "General",
+            }
+        ]
+
+        with patch(
+            "app.services.vacancy_evidence_analysis_service.get_ai_runtime_config",
+            return_value={
+                "vacancy_retrieval_score_strong_min": 0.75,
+                "vacancy_retrieval_score_useful_min": 0.45,
+                "vacancy_retrieval_score_review_min": 0.30,
+            },
+        ):
+            contract = build_vacancy_evidence_analysis(
+                opportunity=_opportunity(),
+                vacancy_retrieval_evidence_artifact=artifact,
+            )
+
+        item = contract["analysis"]["responsibilities"][0]
+        self.assertEqual(item["item_status"], "no_evidence")
+        self.assertEqual(item["accepted_match_count"], 0)
+        self.assertEqual(item["discarded_match_count"], 1)
+        self.assertEqual(
+            item["discarded_matches"][0]["discard_reason"],
+            "score_below_review_threshold",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
