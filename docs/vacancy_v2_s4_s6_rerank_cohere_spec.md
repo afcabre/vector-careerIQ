@@ -703,6 +703,9 @@ This is not mainly a retrieval-quality problem; it is a coupling problem between
 #### Objective
 Only after slices 1-6, decide whether provider-backed rerank is still necessary immediately.
 
+#### Status
+Closed as a documentation/decision-only checkpoint in the current spike branch.
+
 #### Decision gate
 Proceed to `Cohere` implementation only if one or more of these remain materially true:
 - `S4` improved, but evidence ranking is still too noisy
@@ -713,6 +716,192 @@ If those issues are no longer severe:
 - defer `Cohere`
 - keep the spec as future architecture
 - continue calibrating the no-provider path
+
+#### Validated finding summary
+Recent validated runs now support these conclusions:
+- `S6` retrieval remains materially valuable and should not be treated as the main problem; the accepted evidence sets often contain useful global signals for the item
+- the structural traceability problems between `S6` and `S6.5` are resolved for the current phase:
+  - `accepted_matches` is the authoritative evidence source
+  - stable `evidence_id` values preserve evidence references
+  - `S6.5` hydrates structural metadata programmatically from `S6`
+  - visible evidence no longer depends on the LLM to reconstruct `source_ref`, `block_title`, `section` or `snippet`
+- the shift to `item-first + snippet support minimal` also removed the main snippet-level grounding failure mode; `proof_summary` now carries item-level synthesis while visible snippet evidence is reduced to traceable support classification
+- the remaining quality issues are mostly semantic calibration inside `S6.5`, not a clear rerank failure in `S6`
+
+#### Remaining issues observed in local runs
+The main residual problems are now concentrated in adjudication semantics:
+- `alignment_status: direct` is still sometimes too optimistic when the criterion requires an explicit number, range or threshold and the selected snippet does not show it visibly
+- criteria with strong concrete examples such as `CRM` can still receive generous judgments from broad technology evidence even when the example itself is not clearly evidenced
+- several partial fits are now structurally grounded, but still need stricter calibration on when to stay `partial` versus when they can be upgraded to `direct`
+
+Representative examples from recent reviewed runs:
+- `Gestión directa de equipos de 10 a 30 personas` still tends to be judged too strongly from leadership/coordinator snippets even when the headcount range is not explicit
+- `Liderar proyectos tecnológicos estratégicos de alta complejidad (ej. cambio o evolución de CRM)` can still drift toward `direct` even when the `CRM` example remains only weakly supported
+- `Experiencia sólida en CRM y Customer Journey` and `Conocimiento avanzado en CX, UX, y data analytics` still show semantic generosity, but the issue is now judgment calibration rather than structural evidence loss
+
+#### Decision
+Defer `Cohere` activation for now.
+
+#### Rationale
+Current local evidence does not justify immediate provider-backed rerank activation because:
+- the broad retrieval path in `S6` is already surfacing useful evidence
+- the main structural problems that previously made downstream adjudication brittle have been resolved without external rerank
+- the residual quality gap is now better explained by semantic calibration in `S6.5` than by a proven inability of deterministic `S6` to surface the right evidence candidates
+- immediate `Cohere` activation would add quota and orchestration cost before the no-provider path has exhausted the lower-cost calibration work that is now clearly visible
+
+#### Next recommended line of work
+Continue on the no-provider path and tighten adjudication semantics before revisiting external rerank:
+- harden `direct` so it requires explicit visible support for numbers, ranges, thresholds and strong concrete examples
+- keep using `proof_summary` as the primary item-level explanation
+- preserve hydrated snippet traceability from `S6`
+- revisit `Cohere` only if, after this semantic calibration pass, deterministic `S6` still proves unable to separate borderline evidence reliably
+
+### Slice 8 - Vacancy-First Pipeline Orchestration
+
+#### Objective
+Recover a V1-like operational experience where the user can obtain the profile-match analysis from a single business action, without collapsing back into a monolithic prompt.
+
+#### Status
+Approved as the next implementation slice after deferring `Cohere`.
+
+#### Product decision
+The next orchestration step should start in `Vacantes`, not yet in the `Analisis > Perfil-vacante` sheet.
+
+Rationale:
+- part of the pipeline belongs to the lifecycle of the vacancy itself and should be prepared when the vacancy is loaded or updated
+- part belongs to candidate/profile-side state and should be prepared when profile or preferences change
+- only the comparative/profile-match segment should remain tied to the user action `Calcular/Recalcular`
+- starting in `Vacantes` reduces UX coupling and lets the team stabilize operational sequencing before embedding it into the analysis workspace
+
+#### Target user experience
+In the short term:
+- `Vacantes` becomes the main operational surface for pipeline readiness
+- vacancy-derived upstream artifacts are prepared from vacancy actions
+- profile-derived comparable artifacts remain prepared from profile/preference actions
+- the comparative/profile-match action is exposed in `Vacantes` as a visible CTA, not yet as the first-class orchestration entrypoint in `Analisis`
+- `Calcular/Recalcular` later consumes a much more ready pipeline and behaves closer to the old V1 expectation of "click and get the analysis"
+
+The analysis sheet is not the first orchestration target in this slice.
+It becomes a later integration surface once the vacancy-first orchestration is stable.
+
+#### Orchestration split by business moment
+
+1. Vacancy lifecycle
+- operationally starts at `S1` as capture/persistence of `snapshot_raw_text`
+- `vacancy_v2` then starts formally at `S2`
+- when a vacancy is created, loaded, refreshed or materially updated, prepare or refresh vacancy-side upstream artifacts
+- vacancy-side scope for this phase:
+  - `S1` pre-ingesta operativa de vacante (`snapshot_raw_text` persistido)
+  - `S2` `vacancy_blocks.v2`
+  - `S3` `vacancy_dimensions.v2`
+  - `S3.1` `vacancy_salary_normalization.v1`
+  - `S3.9` `vacancy_dimensions_enriched.v1`
+  - `S4` `vacancy_retrieval_queries.v1`
+  - `C1` `vacancy_comparable_conditions.v1`
+- ownership rule:
+  - if an artifact can be built from vacancy inputs alone, it belongs to vacancy-time processing
+
+2. Candidate/profile lifecycle
+- when profile/CV/preferences change, prepare the candidate-side comparable artifacts
+- minimum expected scope:
+  - `P0` `candidate_preference_profile.v1`
+- ownership rule:
+  - if an artifact can be built without reading the active vacancy, it belongs to profile-time processing
+
+3. Comparative analysis trigger
+- the comparative/profile-match chain remains tied to a user-visible CTA
+- in this phase, that CTA should live in `Vacantes`, above the vacancy technical sections, not yet in `Analisis > Perfil-vacante`
+- alignment-side scope:
+  - `S5` `vacancy_retrieval_evidence.v1`
+  - `S6` `vacancy_evidence_analysis.v1`
+  - `S6.5` `vacancy_evidence_adjudication.v1`
+  - `C2` `candidate_preference_checks.v1`
+  - `P1` `vacancy_fit_presentation.v1`
+  - `S7 v2` `vacancy_alignment_summary.v2`
+  - `S8 v2` `vacancy_alignment_report.v2`
+- ownership rule:
+  - if an artifact needs both vacancy-ready and profile-ready inputs, it belongs to alignment-time processing
+
+#### Safety net rule
+Even if upstream preparation is expected earlier, the later `Calcular/Recalcular` path must remain resilient.
+
+If a required upstream artifact is missing, stale or invalid, the system may complete the minimum missing prerequisites before running the comparative segment.
+
+This means:
+- preferred operational path: prepare early in `Vacantes` or `Perfil`
+- resilient fallback path: complete minimum missing prerequisites on demand
+
+#### First implementation boundary
+Do not start with a backend mega-endpoint that runs the entire pipeline.
+
+Preferred first implementation:
+- orchestrate from the frontend vacancy flow using existing recompute endpoints and SSE
+- keep changes additive
+- preserve manual step access for debugging and advanced inspection
+
+#### UX operating model for this phase
+
+Vacancy-side behavior:
+- silent or near-silent preparation after vacancy save/import/material update
+- the UI should not force the user to click `S2`, `S3`, `S3.1`, `S3.9`, `S4` or `C1` one by one in the normal path
+- `Vacantes` should expose compact readiness status for vacancy preparation, with a fallback action such as `Reintentar preparacion` or equivalent only when needed
+
+Profile-side behavior:
+- silent or near-silent preparation of `P0` after saving relevant profile/CV/preferences changes
+- keep a visible compact status in `Perfil`, plus a fallback manual recompute action for debugging or recovery
+
+Alignment-side behavior:
+- visible CTA in `Vacantes`, above the technical artifact sections for the selected vacancy
+- proposed labels:
+  - `Calcular alineacion`
+  - `Recalcular alineacion`
+- the CTA should show staged progress while running the alignment chain
+- the normal path should present progress as business stages rather than raw step names, although the technical mapping may remain available in debug/details
+
+#### UX stage grouping proposal
+
+For vacancy preparation status in `Vacantes`:
+- `Capturando vacante`
+- `Estructurando vacante`
+- `Normalizando condiciones`
+- `Vacante preparada`
+
+For profile preparation status in `Perfil`:
+- `Preparando perfil comparable`
+- `Perfil preparado`
+
+For the visible alignment CTA in `Vacantes`:
+- `Buscando evidencia`
+- `Evaluando ajuste`
+- `Consolidando resultado`
+- `Resultado disponible`
+
+#### Scope
+- primary UX surface: `Vacantes`
+- secondary future surface: `Analisis > Perfil-vacante`
+- use existing endpoints where possible
+- add only small orchestration helpers if strictly needed
+
+#### Out of scope
+- reintroducing the old monolithic V1 prompt as the source of truth
+- a new all-in-one backend orchestration endpoint in this first pass
+- `Cohere`
+- deep semantic recalibration of `S6.5`
+- major analysis-sheet redesign in the same slice
+
+#### Acceptance criteria
+- vacancy-side upstream artifacts are prepared from vacancy operations rather than exclusively from manual technical stepping
+- the design clearly distinguishes what belongs to vacancy time, profile time and alignment time
+- `S1` is treated as vacancy pre-ingesta, while `vacancy_v2` starts formally at `S2`
+- `S2`, `S3`, `S3.1`, `S3.9`, `S4` and `C1` are treated as vacancy-side preparation
+- `P0` is treated as profile-side preparation
+- `S5`, `S6`, `S6.5`, `C2`, `P1`, `S7 v2` and `S8 v2` are treated as alignment-time processing
+- the alignment CTA is defined for `Vacantes` before any first-class embedding into `Analisis`
+- the future embedding into `Analisis > Perfil-vacante` remains explicitly deferred until the vacancy-side path is stable
+
+#### Recommended implementation model
+- `gpt-5.4` with `medium` reasoning if the worker must wire frontend orchestration and reconcile multiple existing flows
+- use `gpt-5.4-mini` only for doc-only cleanup or a much narrower follow-up after the orchestration shape is already implemented
 
 ## Model Recommendation Summary
 

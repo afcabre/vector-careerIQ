@@ -32,6 +32,7 @@ Consolidar en un solo documento la definicion operativa de los Steps de `vacancy
 | `S4` | Generacion de queries de retrieval | `LLM-first` | `vacancy_retrieval_queries.v1` | `task_vacancy_retrieval_queries_extract` |
 | `S5` | Retrieval de evidencia | programatico | `vacancy_retrieval_evidence.v1` | `ninguna` |
 | `S6` | Analisis de evidencia | programatico | `vacancy_evidence_analysis.v1` | `ninguna` |
+| `S6.5` | Adjudicacion grounded de evidencia | `LLM-first` | `vacancy_evidence_adjudication.v1` | `task_vacancy_evidence_adjudication` |
 | `S7` | Resumen de alineacion | programatico | `vacancy_alignment_summary.v1` | `ninguna` |
 | `S8` | Reporte final grounded | `LLM-first` | `vacancy_alignment_report.v1` | `task_vacancy_alignment_report` |
 
@@ -576,9 +577,54 @@ Deduplica por fragmento recuperado y clasifica usando umbrales configurables. Ma
 ### Contrato principal
 - `vacancy_evidence_analysis.v1`
 
+## S6.5. Adjudicacion grounded de evidencia
+### Objetivo
+Transformar la evidencia consolidada de `S6` en un juicio por item grounded y trazable, antes de la matriz de presentacion y del relato final.
+
+### Tipo de ejecucion
+`LLM-first`
+
+### Input
+- `vacancy_evidence_analysis.v1`
+
+### Output
+- contrato `vacancy_evidence_adjudication.v1`
+- por item:
+  - `alignment_status`
+  - `proof_summary`
+  - `best_supporting_evidence`
+  - `weak_or_discarded_evidence`
+  - `confidence`
+  - `candidate_risk`
+  - `cv_improvement_opportunity`
+
+### Regla operativa
+El juicio principal ocurre a nivel item. La evidencia visible debe salir de la evidencia aceptada o descartada ya trazada en `S6`, preservando metadata estructural y evitando reconstrucciones libres del snippet.
+
+### Regla vigente de diseno
+- `proof_summary` es la explicacion principal a nivel item
+- `best_supporting_evidence` usa soporte minimo por snippet (`support_scope` y `support_note_short` opcional)
+- el paso no debe atribuir a un snippet hechos que solo vivan en otro snippet hermano del mismo item
+
+### Transformaciones permitidas
+- consolidar juicio semantico por item
+- seleccionar evidencia visible por referencia grounded
+- clasificar fuerza local de soporte por snippet
+
+### Transformaciones prohibidas
+- no inventar `source_ref`, `block_title`, `section` o `snippet`
+- no usar evidencia fuera de lo recuperado y consolidado aguas arriba
+- no reemplazar a `S6`; este paso adjudica, no rehace retrieval
+
+### Prompt key
+- `task_vacancy_evidence_adjudication`
+
+### Contrato principal
+- `vacancy_evidence_adjudication.v1`
+
 ## S7. Resumen de alineacion
 ### Objetivo
-Sintetizar `S6` en un resumen estructurado de consumo rapido para el paso final.
+Sintetizar `S6` y/o `S6.5` en un resumen estructurado de consumo rapido para el paso final.
 
 ### Tipo de ejecucion
 Programatico

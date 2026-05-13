@@ -2,9 +2,9 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `El rediseño de match ya cuenta con P0, C1, C2 y P1 operativos; S8 v2 ya consume la matriz profesional y la matriz de preferencias como estructuras autoritativas, y el slice correctivo actual endurece refresco de P0, recorta S6.5 al fit profesional y obliga a S8 a completar narrativa util`
+- checkpoint_actual: `Gate documental de Slice 7 cerrado y plan de Slice 8 aclarado: se difiere Cohere; la orquestacion vacancy-first queda repartida con S1 como pre-ingesta operativa, S2-S4+C1 en Vacantes, P0 en Perfil y la alineacion visible como CTA en Vacantes antes de pensar su insercion final en Analisis`
 - repo_status: `flujo V1 operativo con analisis, postulacion, chat, CV semantico, admin de prompts y extraccion estructurada de vacantes en forma legacy estable; propuesta v2 desacoplada en branch experimental`
-- ultima_actualizacion: `2026-05-12`
+- ultima_actualizacion: `2026-05-13`
 
 ## Progreso Por Fase
 - `Fase 0`: completada
@@ -58,6 +58,12 @@
 - slice de referencias implementado entre `S6` y `S6.5`: `S6` ahora asigna `evidence_id` estable a evidencias aceptadas y descartadas; `S6.5` deja al LLM la seleccion semantica por `evidence_id` (`best_supporting_evidence_refs` / `weak_or_discarded_evidence_refs`) y el backend hidrata programaticamente `source_ref`, `block_title`, `section` y `snippet` desde `S6`, evitando perdida de metadata y reescritura libre de evidencia
 - micro-slice final de grounding semantico aplicado en `S6.5`: `proof_summary` queda explicitamente definido como sintesis a nivel item y `why_it_supports` como explicacion local a nivel snippet; el prompt ahora prohíbe mezclar en `why_it_supports` hechos tomados de otros snippets del mismo item y endurece el uso de `direct` cuando falten umbrales o numeros visibles
 - slice final de adjudicacion `item-first + snippet support minimal` implementado en `S6.5`: `proof_summary` pasa a ser la explicacion principal a nivel item; `best_supporting_evidence` conserva trazabilidad hidratada desde `S6` pero reemplaza `why_it_supports` por `support_scope` (`direct|partial|contextual`) y `support_note_short` opcional, reduciendo alucinacion local y aprovechando mejor el grounding general del retrieval
+- checkpoint de `Slice 7` consolidado en documentacion local: se revisaron las corridas recientes validadas de `S6/S6.5` y la decision queda en diferir la activacion de `Cohere` por ahora
+- findings sinteticos del gate `Slice 7`: `S6` sigue aportando retrieval valioso, la trazabilidad estructural entre `S6` y `S6.5` ya quedo resuelta, y el problema residual dominante es calibracion semantica en `S6.5`, no falta inmediata de rerank externo
+- principal riesgo residual tras `Slice 7`: algunos `alignment_status: direct` siguen siendo demasiado optimistas cuando el criterio pide numero, rango, umbral o ejemplo fuerte explicito; los casos mas sensibles siguen siendo headcount y ejemplos concretos como `CRM`
+- siguiente linea de trabajo recomendada tras el gate de `Cohere`: seguir afinando el camino sin provider, endureciendo reglas semanticas para `alignment_status` y especialmente para `direct` cuando falte evidencia explicita del numero, rango, umbral o ejemplo fuerte solicitado por el criterio
+- `Slice 8` decidido y documentado: la siguiente implementacion ya no arranca en `Analisis > Perfil-vacante`, sino en `Vacantes`; se adopta una orquestacion vacancy-first donde los artefactos derivados de la vacante se preparan desde acciones de vacante, los artefactos comparables del candidato siguen preparandose desde perfil/preferencias y la hoja de analisis queda para una integracion posterior cuando el flujo este estable
+- criterio operativo del nuevo slice: no volver al prompt monolitico V1, no crear aun un mega-endpoint backend `run-all`, y preferir una primera orquestacion aditiva desde frontend usando endpoints y SSE ya existentes
 - validacion tecnica del slice `C1 + S3.1 variable component` en verde: `cd apps/backend && .venv/bin/python -m unittest tests.test_vacancy_comparable_conditions_contract tests.test_vacancy_comparable_conditions_service tests.test_vacancy_salary_contract tests.test_vacancy_salary_service tests.test_vacancy_v2_endpoints` (`71 tests`)
 - slice backend `C2` implementado: nuevo contrato `candidate_preference_checks.v1`, servicio deterministico de comparacion entre `candidate_preference_profile.v1` y `vacancy_comparable_conditions.v1`, persistencia por oportunidad y endpoints `candidate-preference-checks/recompute` y `recompute/stream`
 - reglas iniciales de `C2` cerradas en codigo: ubicacion, modalidad, compensacion y tipo de contrato se comparan sin LLM; relocalizacion influye en la fila de ubicacion y `travel_willingness` / `hard_constraints` quedan advertidos como captura disponible pero cobertura todavia pendiente
@@ -69,6 +75,12 @@
 - validacion tecnica del slice backend `P1`: `cd apps/backend && .venv/bin/python -m unittest tests.test_vacancy_fit_presentation_contract tests.test_vacancy_fit_presentation_service tests.test_vacancy_v2_endpoints` en verde (`67 tests`)
 - slice frontend experimental extendido a `P1`: `Vacancy V2` ahora expone `Vacancy Fit Presentation` con `status`, `generated_at`, recompute por SSE, aprobacion manual `draft/approved` y JSON read-only por oportunidad
 - validacion tecnica del slice frontend `P1`: `cd apps/frontend && npm run build` en verde
+- decision documental refinada para `Slice 8`: el reparto operativo deja de ser ambiguo y queda asi:
+  - `Vacantes`: `S1` pre-ingesta operativa, `S2`, `S3`, `S3.1`, `S3.9`, `S4` y `C1`
+  - `Perfil`: `P0`
+  - `Alineacion`: `S5`, `S6`, `S6.5`, `C2`, `P1`, `S7 v2` y `S8 v2`
+- decision UX refinada para `Slice 8`: la preparacion de `Vacantes` y `Perfil` debe tender a correr de forma silenciosa o casi silenciosa tras guardar/importar/cambiar datos relevantes; la accion visible del usuario queda como `Calcular/Recalcular alineacion` dentro de `Vacantes`, por encima de las secciones tecnicas de artefactos, con progreso por etapas de negocio y no solo por nombres crudos de step
+- consistencia documental corregida: `docs/vacancy_v2_steps_reference.md` ya incluye `S6.5` tanto en la matriz de steps como en su descripcion operativa; la spec de orquestacion tambien neutraliza labels UX para no sugerir que una vacante o perfil "esperan" necesariamente una alineacion futura
 - `Sprint 1` del rediseño de match iniciado en backend: `S3` ahora refuerza preservacion de contexto minimo en items atomizados, `S4` refuerza queries probatorias, los defaults de retrieval quedan en `retrieval_queries_per_item=4` y `top_k_semantic_per_criterion=6`, y `S8` ya persiste traza completa de request/response sin truncacion forzada por flow
 - nuevo slice backend de `S6.5` implementado: contrato `vacancy_evidence_adjudication.v1`, flow `task_vacancy_evidence_adjudication`, servicio grounded LLM-first, persistencia de artefacto/status/generated_at por oportunidad y endpoints `recompute` / `recompute/stream`
 - validacion tecnica del slice `S6.5` en verde: `cd apps/backend && .venv/bin/python -m unittest tests.test_vacancy_evidence_adjudication_contract tests.test_vacancy_evidence_adjudication_service tests.test_vacancy_v2_endpoints` (`47 tests`)
