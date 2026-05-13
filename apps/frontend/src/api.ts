@@ -183,6 +183,46 @@ export type VacancyV2ConsistencyReport = {
   issue_samples: VacancyV2ConsistencyIssue[];
 };
 
+export type AlignmentRuntimeStepTelemetry = {
+  step_key: string;
+  status: "running" | "done" | "error" | "retried" | string;
+  started_at: string;
+  ended_at: string;
+  duration_ms: number | null;
+  attempt_index: number;
+  attempt_count: number;
+  retry_reason: string | null;
+  provider: string | null;
+  model: string | null;
+  input_size_hints: Record<string, unknown>;
+  output_size_hints: Record<string, unknown>;
+  params_effective: Record<string, unknown>;
+  warnings: string[];
+};
+
+export type AlignmentRuntimeRunSummary = {
+  total_duration_ms: number | null;
+  slowest_steps: Array<Record<string, unknown>>;
+  total_retries: number;
+  llm_calls_count: number;
+  retrieval_summary: Record<string, unknown>;
+  warnings: string[];
+};
+
+export type AlignmentRuntimeRun = {
+  run_id: string;
+  person_id: string;
+  opportunity_id: string;
+  status: string;
+  current_stage: string;
+  started_at: string;
+  ended_at: string;
+  steps: AlignmentRuntimeStepTelemetry[];
+  summary: AlignmentRuntimeRunSummary;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ApplicationArtifact = {
   artifact_id: string;
   person_id: string;
@@ -1059,6 +1099,98 @@ export async function listOpportunities(personId: string): Promise<Opportunity[]
     credentials: "include"
   });
   const payload = await parseResponse<{ items: Opportunity[] }>(response);
+  return payload.items;
+}
+
+export async function startAlignmentRuntimeRun(
+  personId: string,
+  opportunityId: string
+): Promise<AlignmentRuntimeRun> {
+  const response = await safeFetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/alignment-runtime-runs/start`,
+    {
+      method: "POST",
+      credentials: "include"
+    }
+  );
+  return parseResponse<AlignmentRuntimeRun>(response);
+}
+
+export async function upsertAlignmentRuntimeStep(
+  personId: string,
+  opportunityId: string,
+  runId: string,
+  payload: {
+    step_key: string;
+    status: string;
+    started_at: string;
+    ended_at: string;
+    duration_ms: number | null;
+    attempt_index: number;
+    attempt_count: number;
+    retry_reason: string | null;
+    provider: string | null;
+    model: string | null;
+    input_size_hints: Record<string, unknown>;
+    output_size_hints: Record<string, unknown>;
+    params_effective: Record<string, unknown>;
+    warnings: string[];
+    current_stage?: string | null;
+  }
+): Promise<AlignmentRuntimeRun> {
+  const response = await safeFetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/alignment-runtime-runs/${runId}/steps`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }
+  );
+  return parseResponse<AlignmentRuntimeRun>(response);
+}
+
+export async function completeAlignmentRuntimeRun(
+  personId: string,
+  opportunityId: string,
+  runId: string,
+  payload: {
+    status: string;
+    ended_at?: string | null;
+    total_duration_ms: number | null;
+    slowest_steps: Array<Record<string, unknown>>;
+    total_retries: number;
+    llm_calls_count: number;
+    retrieval_summary: Record<string, unknown>;
+    warnings: string[];
+  }
+): Promise<AlignmentRuntimeRun> {
+  const response = await safeFetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/alignment-runtime-runs/${runId}/complete`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }
+  );
+  return parseResponse<AlignmentRuntimeRun>(response);
+}
+
+export async function listAlignmentRuntimeRuns(
+  personId: string,
+  opportunityId: string,
+  limit = 2
+): Promise<AlignmentRuntimeRun[]> {
+  const query = new URLSearchParams({ limit: String(limit) }).toString();
+  const response = await safeFetch(
+    `${API_BASE}/persons/${personId}/opportunities/${opportunityId}/alignment-runtime-runs?${query}`,
+    {
+      method: "GET",
+      credentials: "include"
+    }
+  );
+  const payload = await parseResponse<{ items: AlignmentRuntimeRun[] }>(response);
   return payload.items;
 }
 

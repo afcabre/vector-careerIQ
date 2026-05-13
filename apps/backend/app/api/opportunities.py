@@ -119,6 +119,12 @@ from app.services.vacancy_alignment_report_v2_service import (
     VacancyAlignmentReportV2BuildError,
     extract_vacancy_alignment_report_v2,
 )
+from app.services.alignment_runtime_telemetry_store import (
+    complete_alignment_run,
+    create_alignment_run,
+    list_alignment_runs,
+    upsert_alignment_step,
+)
 
 
 router = APIRouter()
@@ -309,6 +315,63 @@ class ActionRequest(BaseModel):
 class PrepareRequest(BaseModel):
     targets: list[str] | None = None
     force_recompute: bool = False
+
+
+class AlignmentRuntimeRunStartResponse(BaseModel):
+    run_id: str
+    person_id: str
+    opportunity_id: str
+    status: str
+    started_at: str
+
+
+class AlignmentRuntimeStepTelemetryRequest(BaseModel):
+    step_key: str = Field(min_length=1)
+    status: str = Field(default="running")
+    started_at: str = Field(default="")
+    ended_at: str = Field(default="")
+    duration_ms: int | None = Field(default=None)
+    attempt_index: int = Field(default=1)
+    attempt_count: int = Field(default=1)
+    retry_reason: str | None = Field(default=None)
+    provider: str | None = Field(default=None)
+    model: str | None = Field(default=None)
+    input_size_hints: dict[str, Any] = Field(default_factory=dict)
+    output_size_hints: dict[str, Any] = Field(default_factory=dict)
+    params_effective: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+    current_stage: str | None = Field(default=None)
+
+
+class AlignmentRuntimeRunCompleteRequest(BaseModel):
+    status: str = Field(default="done")
+    ended_at: str | None = Field(default=None)
+    total_duration_ms: int | None = Field(default=None)
+    slowest_steps: list[dict[str, Any]] = Field(default_factory=list)
+    total_retries: int = Field(default=0)
+    llm_calls_count: int = Field(default=0)
+    retrieval_summary: dict[str, Any] = Field(default_factory=dict)
+    warnings: list[str] = Field(default_factory=list)
+
+
+class AlignmentRuntimeRunResponse(BaseModel):
+    run_id: str
+    person_id: str
+    opportunity_id: str
+    status: str
+    current_stage: str
+    started_at: str
+    ended_at: str
+    steps: list[dict[str, Any]]
+    summary: dict[str, Any]
+    created_at: str
+    updated_at: str
+
+
+class AlignmentRuntimeRunsResponse(BaseModel):
+    person_id: str
+    opportunity_id: str
+    items: list[AlignmentRuntimeRunResponse]
 
 
 class CulturalSignalResponse(BaseModel):
@@ -4623,6 +4686,122 @@ async def prepare_stream(
             )
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.post("/{opportunity_id}/alignment-runtime-runs/start")
+def start_alignment_runtime_run(
+    person_id: str,
+    opportunity_id: str,
+    _: SessionData = Depends(require_operator_session),
+) -> AlignmentRuntimeRunStartResponse:
+    _require_person(person_id)
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+    record = create_alignment_run(person_id, opportunity_id)
+    return AlignmentRuntimeRunStartResponse(
+        run_id=record["run_id"],
+        person_id=record["person_id"],
+        opportunity_id=record["opportunity_id"],
+        status=record["status"],
+        started_at=record["started_at"],
+    )
+
+
+@router.post("/{opportunity_id}/alignment-runtime-runs/{run_id}/steps")
+def upsert_alignment_runtime_step(
+    person_id: str,
+    opportunity_id: str,
+    run_id: str,
+    payload: AlignmentRuntimeStepTelemetryRequest,
+    _: SessionData = Depends(require_operator_session),
+) -> AlignmentRuntimeRunResponse:
+    _require_person(person_id)
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+    try:
+        record = upsert_alignment_step(
+            person_id=person_id,
+            opportunity_id=opportunity_id,
+            run_id=run_id,
+            step_payload=payload.model_dump(),
+            current_stage=payload.current_stage,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    return AlignmentRuntimeRunResponse(**record)
+
+
+@router.post("/{opportunity_id}/alignment-runtime-runs/{run_id}/complete")
+def finalize_alignment_runtime_run(
+    person_id: str,
+    opportunity_id: str,
+    run_id: str,
+    payload: AlignmentRuntimeRunCompleteRequest,
+    _: SessionData = Depends(require_operator_session),
+) -> AlignmentRuntimeRunResponse:
+    _require_person(person_id)
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+    summary_payload = {
+        "total_duration_ms": payload.total_duration_ms,
+        "slowest_steps": payload.slowest_steps,
+        "total_retries": payload.total_retries,
+        "llm_calls_count": payload.llm_calls_count,
+        "retrieval_summary": payload.retrieval_summary,
+        "warnings": payload.warnings,
+    }
+    try:
+        record = complete_alignment_run(
+            person_id=person_id,
+            opportunity_id=opportunity_id,
+            run_id=run_id,
+            status=payload.status,
+            ended_at=payload.ended_at,
+            summary=summary_payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    return AlignmentRuntimeRunResponse(**record)
+
+
+@router.get("/{opportunity_id}/alignment-runtime-runs")
+def get_alignment_runtime_runs(
+    person_id: str,
+    opportunity_id: str,
+    limit: int = Query(default=2, ge=1, le=10),
+    _: SessionData = Depends(require_operator_session),
+) -> AlignmentRuntimeRunsResponse:
+    _require_person(person_id)
+    opportunity = find_opportunity(person_id, opportunity_id)
+    if not opportunity:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Opportunity not found",
+        )
+    items = list_alignment_runs(person_id, opportunity_id, limit=limit)
+    return AlignmentRuntimeRunsResponse(
+        person_id=person_id,
+        opportunity_id=opportunity_id,
+        items=[AlignmentRuntimeRunResponse(**item) for item in items],
+    )
 
 
 @router.get("/{opportunity_id}/artifacts")

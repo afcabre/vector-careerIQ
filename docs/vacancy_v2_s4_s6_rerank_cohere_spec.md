@@ -932,3 +932,116 @@ If a smaller worker is asked to execute this roadmap, it must follow these rules
 5. preserve compatibility of `S4 -> S5 -> S6 -> S7 -> S8`
 6. prefer additive changes and keep the pipeline running even if quality is still imperfect
 7. treat the evidence-fidelity and explanation-quality findings from validation as already decided inputs to slices 5 and 6, not as open design questions
+
+### Slice 9 - Alignment Runtime Telemetry and Cost/Time Visibility
+
+#### Objective
+Make alignment execution observable end-to-end so the team can optimize with data, not intuition.
+
+This slice must expose:
+- per-step runtime
+- retries/reprocess count
+- service/model usage per step
+- retrieval volume signals (`top_k`, queries per item, total hits)
+- run-level summary with bottlenecks
+
+#### Why now
+Current optimization discussions are blocked by missing runtime evidence. We need stable telemetry before changing retries, thresholds, or retrieval depth.
+
+#### Product decision
+The first implementation target remains `Vacantes`, where the alignment CTA already runs the chain.
+
+Telemetry should be:
+- visible to the user during execution
+- persisted for later diagnostics
+- reusable for future embedding into `Analisis`
+
+#### Scope
+1. **Run identity and persistence**
+- define `run_id` per alignment execution
+- persist step telemetry records linked to:
+  - `run_id`
+  - `opportunity_id`
+  - `person_id`
+  - step key
+
+2. **Per-step telemetry contract (minimum)**
+- `step_key`
+- `status` (`running|done|error|retried`)
+- `started_at`
+- `ended_at`
+- `duration_ms`
+- `attempt_index`
+- `attempt_count`
+- `retry_reason` (when exists)
+- `provider` / `model` when step is LLM-based
+- `input_size_hints` (criterion count, query count, etc., when available)
+- `output_size_hints` (items produced, rows produced, etc., when available)
+- `params_effective` snapshot for key runtime knobs (when available)
+
+3. **Alignment-run summary telemetry**
+- `total_duration_ms`
+- `slowest_steps` (top 3)
+- `total_retries`
+- `llm_calls_count`
+- retrieval summary:
+  - `criteria_count`
+  - `queries_per_item_effective`
+  - `top_k_effective`
+  - `total_hits_retrieved` (or nearest available proxy)
+
+4. **Vacantes UI runtime panel (v1)**
+- show during run:
+  - current stage
+  - elapsed run time
+  - step-by-step progress rows
+- show after run:
+  - per-step duration table
+  - retries per step
+  - service/model used per step
+  - bottleneck highlight (`slowest step`)
+
+5. **History visibility (minimal)**
+- keep at least recent run summary visible in the selected vacancy detail
+- if full run history is expensive in this slice, store latest + previous run summaries only
+
+#### UX guidance
+- use business-friendly labels primarily
+- keep technical step mapping available in details/expand
+- do not overload normal users with raw JSON by default
+- keep JSON/detail view available for debugging
+
+#### Optimization hooks (must be observable, not necessarily tuned yet)
+Expose effective values used in the run for:
+- `top_k_semantic_per_criterion`
+- `retrieval_queries_per_item`
+- retry counts/limits by step
+- timeout caps by step (if available)
+
+The slice does not need to change tuning values yet; it must make them visible per run.
+
+#### Out of scope
+- major redesign of the alignment chain
+- changing core adjudication semantics in `S6.5`
+- introducing `Cohere`
+- building a full analytics warehouse
+
+#### Acceptance criteria
+- alignment execution in `Vacantes` displays per-step runtime progress in real time or near-real time
+- telemetry persists enough data to compare runs and identify bottlenecks
+- retries/reprocess are visible per step
+- service/model usage is visible for LLM steps
+- run summary identifies slowest steps and total duration
+- no regression in current alignment success path
+
+#### Validation
+- backend tests for telemetry persistence and shape
+- frontend build green
+- manual run check in `Vacantes` proving:
+  - visible runtime progression
+  - final summary with duration and retries
+  - at least one persisted run record retrievable after refresh
+
+#### Recommended implementation model for this slice
+- `gpt-5.3-codex` with `medium` reasoning
+- escalate to `high` only if cross-flow regressions appear during integration

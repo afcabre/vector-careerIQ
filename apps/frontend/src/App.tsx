@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import {
   AIRuntimeConfig,
   AIRun,
+  AlignmentRuntimeRun,
   ActiveCV,
   ApplicationArtifact,
   ConsolidatedAssessment,
@@ -40,6 +41,7 @@ import {
   importOpportunityByText,
   listOpportunityAiRuns,
   listOpportunityArtifacts,
+  listAlignmentRuntimeRuns,
   listOpportunities,
   listPersons,
   listPromptConfigs,
@@ -48,6 +50,9 @@ import {
   listRequestTraces,
   login,
   logout,
+  startAlignmentRuntimeRun,
+  upsertAlignmentRuntimeStep,
+  completeAlignmentRuntimeRun,
   prepareOpportunityStream,
   prepareOpportunity,
   getVacancyV2ConsistencyReport,
@@ -1062,6 +1067,60 @@ function getVacancyV2StatusClassName(status: string): string {
     return "vacancyV2StatusChip vacancyV2StatusChipError";
   }
   return "vacancyV2StatusChip vacancyV2StatusChipNone";
+}
+
+const VACANCY_PREPARATION_STAGE_LABELS: Record<string, string> = {
+  idle: "",
+  s2: "Capturando vacante",
+  s3: "Estructurando vacante",
+  s31: "Normalizando condiciones",
+  s39: "Normalizando condiciones",
+  s4: "Normalizando condiciones",
+  c1: "Normalizando condiciones",
+  done: "Vacante preparada",
+  error: "Error"
+};
+
+const PROFILE_PREPARATION_STAGE_LABELS: Record<string, string> = {
+  idle: "",
+  running: "Preparando perfil comparable",
+  done: "Perfil preparado",
+  error: "Error"
+};
+
+const ALIGNMENT_VISIBLE_STAGE_LABELS: Record<string, string> = {
+  idle: "",
+  s5: "Buscando evidencia",
+  s6: "Evaluando ajuste",
+  s65: "Evaluando ajuste",
+  c2: "Evaluando ajuste",
+  p1: "Consolidando resultado",
+  s7v2: "Consolidando resultado",
+  s8v2: "Consolidando resultado",
+  done: "Resultado disponible",
+  error: "Error"
+};
+
+const ALIGNMENT_STEP_ORDER = ["S5", "S6", "S6.5", "C2", "P1", "S7 v2", "S8 v2"];
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function elapsedMs(startedAtIso: string): number {
+  const started = Date.parse(startedAtIso);
+  if (!Number.isFinite(started)) {
+    return 0;
+  }
+  return Math.max(0, Date.now() - started);
+}
+
+function formatDurationMs(ms: number | null | undefined): string {
+  if (!Number.isFinite(ms ?? NaN) || (ms ?? 0) < 0) {
+    return "-";
+  }
+  const value = Math.round((ms ?? 0) / 100) / 10;
+  return `${value.toFixed(1)} s`;
 }
 
 function getVacancyAlignmentReportStageLabel(stage: string): string {
@@ -2509,6 +2568,20 @@ export default function App() {
     useState<Record<string, string>>({});
   const [vacancyAlignmentReportStageByOpportunityId, setVacancyAlignmentReportStageByOpportunityId] =
     useState<Record<string, string>>({});
+  const [vacancyPreparationStageByOpportunityId, setVacancyPreparationStageByOpportunityId] =
+    useState<Record<string, string>>({});
+  const [vacancyPreparationErrorByOpportunityId, setVacancyPreparationErrorByOpportunityId] =
+    useState<Record<string, string>>({});
+  const [alignmentVisibleStageByOpportunityId, setAlignmentVisibleStageByOpportunityId] =
+    useState<Record<string, string>>({});
+  const [alignmentVisibleErrorByOpportunityId, setAlignmentVisibleErrorByOpportunityId] =
+    useState<Record<string, string>>({});
+  const [runningAlignmentOpportunityId, setRunningAlignmentOpportunityId] = useState<string | null>(null);
+  const [alignmentRuntimeRunsByOpportunityId, setAlignmentRuntimeRunsByOpportunityId] = useState<
+    Record<string, AlignmentRuntimeRun[]>
+  >({});
+  const [alignmentRuntimeRunStartedAtByOpportunityId, setAlignmentRuntimeRunStartedAtByOpportunityId] =
+    useState<Record<string, string>>({});
   const [focusedRunId, setFocusedRunId] = useState("");
   const [isAnalyzingProfile, setIsAnalyzingProfile] = useState(false);
   const [isAnalyzingCultural, setIsAnalyzingCultural] = useState(false);
@@ -3302,6 +3375,29 @@ export default function App() {
   }, [selectedOpportunity?.opportunity_id, selectedOpportunity?.notes]);
 
   useEffect(() => {
+    if (!selectedPersonId || !selectedOpportunityId) {
+      return;
+    }
+    let cancelled = false;
+    void listAlignmentRuntimeRuns(selectedPersonId, selectedOpportunityId, 2)
+      .then((items) => {
+        if (cancelled) {
+          return;
+        }
+        setAlignmentRuntimeRunsByOpportunityId((current) => ({
+          ...current,
+          [selectedOpportunityId]: items
+        }));
+      })
+      .catch(() => {
+        // Keep UX resilient when telemetry is not available.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedPersonId, selectedOpportunityId]);
+
+  useEffect(() => {
     setOpportunityStatus(selectedOpportunity?.status ?? "detected");
     setStatusSaveMessage(null);
   }, [selectedOpportunity?.opportunity_id, selectedOpportunity?.status]);
@@ -3602,6 +3698,7 @@ export default function App() {
       setNewPersonTravelWillingness("unknown");
       setNewPersonHardConstraintsInput("");
       setIsCreateProfileFormOpen(false);
+      void silentlyPrepareCandidatePreferenceProfile(created.person_id);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "No se pudo crear el nuevo perfil";
@@ -4024,15 +4121,368 @@ export default function App() {
     setSavingResultId(result.search_result_id);
     setErrorMessage(null);
     try {
-      await saveOpportunityFromSearch(selectedPersonId, result);
+      const saved = await saveOpportunityFromSearch(selectedPersonId, result);
       const items = await listOpportunities(selectedPersonId);
       setSavedOpportunities(items);
+      void runVacancyPreparationPipeline(selectedPersonId, saved.item.opportunity_id);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "No se pudo guardar la oportunidad";
       setErrorMessage(message);
     } finally {
       setSavingResultId(null);
+    }
+  }
+
+  async function refreshSavedOpportunitiesAndSelection(
+    personId: string,
+    opportunityId: string
+  ): Promise<Opportunity[]> {
+    const items = await listOpportunities(personId);
+    setSavedOpportunities(items);
+    if (selectedOpportunityId === opportunityId) {
+      const refreshed = items.find((entry) => entry.opportunity_id === opportunityId);
+      if (refreshed) {
+        setOpportunityStatus(refreshed.status);
+        setOpportunityNotes(refreshed.notes);
+      }
+    }
+    return items;
+  }
+
+  async function runVacancyPreparationPipeline(personId: string, opportunityId: string) {
+    setVacancyPreparationStageByOpportunityId((current) => ({
+      ...current,
+      [opportunityId]: "s2"
+    }));
+    setVacancyPreparationErrorByOpportunityId((current) => {
+      const next = { ...current };
+      delete next[opportunityId];
+      return next;
+    });
+    try {
+      await recomputeOpportunityVacancyBlocks(personId, opportunityId);
+      setVacancyPreparationStageByOpportunityId((current) => ({ ...current, [opportunityId]: "s3" }));
+      await recomputeOpportunityVacancyDimensions(personId, opportunityId);
+      setVacancyPreparationStageByOpportunityId((current) => ({ ...current, [opportunityId]: "s31" }));
+      await recomputeOpportunityVacancySalaryStream(personId, opportunityId, () => undefined);
+      setVacancyPreparationStageByOpportunityId((current) => ({ ...current, [opportunityId]: "s39" }));
+      await recomputeOpportunityVacancyDimensionsEnriched(personId, opportunityId);
+      setVacancyPreparationStageByOpportunityId((current) => ({ ...current, [opportunityId]: "s4" }));
+      await recomputeOpportunityVacancyRetrievalQueries(personId, opportunityId);
+      setVacancyPreparationStageByOpportunityId((current) => ({ ...current, [opportunityId]: "c1" }));
+      await recomputeOpportunityVacancyComparableConditionsStream(personId, opportunityId, () => undefined);
+      await refreshSavedOpportunitiesAndSelection(personId, opportunityId);
+      setVacancyPreparationStageByOpportunityId((current) => ({ ...current, [opportunityId]: "done" }));
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo preparar automaticamente la vacante";
+      setVacancyPreparationStageByOpportunityId((current) => ({ ...current, [opportunityId]: "error" }));
+      setVacancyPreparationErrorByOpportunityId((current) => ({ ...current, [opportunityId]: message }));
+      try {
+        await refreshSavedOpportunitiesAndSelection(personId, opportunityId);
+      } catch {
+        // Keep original preparation error.
+      }
+    }
+  }
+
+  async function runAlignmentVisiblePipeline(item: Opportunity) {
+    if (!selectedPersonId || runningAlignmentOpportunityId) {
+      return;
+    }
+    const opportunityId = item.opportunity_id;
+    setRunningAlignmentOpportunityId(opportunityId);
+    const runStartIso = nowIso();
+    setAlignmentRuntimeRunStartedAtByOpportunityId((current) => ({
+      ...current,
+      [opportunityId]: runStartIso
+    }));
+    setAlignmentVisibleErrorByOpportunityId((current) => {
+      const next = { ...current };
+      delete next[opportunityId];
+      return next;
+    });
+    setAlignmentVisibleStageByOpportunityId((current) => ({ ...current, [opportunityId]: "s5" }));
+    const latestStepTelemetry = new Map<string, Record<string, unknown>>();
+    let runId = "";
+    const reportStep = async (
+      stepKey: string,
+      status: "running" | "done" | "error" | "retried",
+      startedAt: string,
+      endedAt: string,
+      durationMs: number | null,
+      extra?: {
+        input_size_hints?: Record<string, unknown>;
+        output_size_hints?: Record<string, unknown>;
+        params_effective?: Record<string, unknown>;
+        provider?: string | null;
+        model?: string | null;
+        retry_reason?: string | null;
+        warnings?: string[];
+      }
+    ) => {
+      if (!runId) {
+        return;
+      }
+      const payload = {
+        step_key: stepKey,
+        status,
+        started_at: startedAt,
+        ended_at: endedAt,
+        duration_ms: durationMs,
+        attempt_index: 1,
+        attempt_count: 1,
+        retry_reason: extra?.retry_reason ?? null,
+        provider: extra?.provider ?? null,
+        model: extra?.model ?? null,
+        input_size_hints: extra?.input_size_hints ?? {},
+        output_size_hints: extra?.output_size_hints ?? {},
+        params_effective: extra?.params_effective ?? {},
+        warnings: extra?.warnings ?? [],
+        current_stage: stepKey
+      };
+      latestStepTelemetry.set(stepKey, payload);
+      try {
+        const run = await upsertAlignmentRuntimeStep(
+          selectedPersonId,
+          opportunityId,
+          runId,
+          payload
+        );
+        setAlignmentRuntimeRunsByOpportunityId((current) => ({
+          ...current,
+          [opportunityId]: [
+            run,
+            ...(current[opportunityId] ?? []).filter((entry) => entry.run_id !== run.run_id).slice(0, 1)
+          ]
+        }));
+      } catch {
+        // Keep UX non-blocking if telemetry write fails.
+      }
+    };
+
+    try {
+      try {
+        const started = await startAlignmentRuntimeRun(selectedPersonId, opportunityId);
+        runId = started.run_id;
+      } catch {
+        runId = "";
+      }
+      try {
+        if (candidatePreferenceProfileStatus !== "approved") {
+          setCandidatePreferenceProfileStage("candidate_preference_profile_recompute_started");
+          await recomputeCandidatePreferenceProfileStream(selectedPersonId, (stage) =>
+            setCandidatePreferenceProfileStage(stage)
+          );
+        }
+      } catch {
+        // Fallback silencioso: el tramo visible sigue y backend validara prerequisitos.
+      } finally {
+        setCandidatePreferenceProfileStage("");
+      }
+
+      const s5Start = nowIso();
+      await reportStep("S5", "running", s5Start, "", null, {
+        input_size_hints: { source: "vacancy_retrieval_queries.v1" },
+        params_effective: { top_k_effective: null },
+      });
+      await recomputeOpportunityVacancyRetrievalEvidence(selectedPersonId, opportunityId);
+      const s5End = nowIso();
+      await reportStep("S5", "done", s5Start, s5End, Date.parse(s5End) - Date.parse(s5Start));
+      setAlignmentVisibleStageByOpportunityId((current) => ({ ...current, [opportunityId]: "s6" }));
+
+      const s6Start = nowIso();
+      await reportStep("S6", "running", s6Start, "", null, {
+        input_size_hints: { source: "vacancy_retrieval_evidence.v1" },
+      });
+      await recomputeOpportunityVacancyEvidenceAnalysis(selectedPersonId, opportunityId);
+      const s6End = nowIso();
+      await reportStep("S6", "done", s6Start, s6End, Date.parse(s6End) - Date.parse(s6Start));
+      setAlignmentVisibleStageByOpportunityId((current) => ({ ...current, [opportunityId]: "s65" }));
+
+      const s65Start = nowIso();
+      await reportStep("S6.5", "running", s65Start, "", null, {
+        provider: "openai",
+        model: null,
+        warnings: ["model_unavailable_in_telemetry"],
+      });
+      await recomputeOpportunityVacancyEvidenceAdjudicationStream(
+        selectedPersonId,
+        opportunityId,
+        (stage) =>
+          setVacancyEvidenceAdjudicationStageByOpportunityId((current) => ({
+            ...current,
+            [opportunityId]: stage
+          }))
+      );
+      const s65End = nowIso();
+      await reportStep("S6.5", "done", s65Start, s65End, Date.parse(s65End) - Date.parse(s65Start), {
+        provider: "openai",
+        model: null,
+        warnings: ["model_unavailable_in_telemetry"],
+      });
+      setAlignmentVisibleStageByOpportunityId((current) => ({ ...current, [opportunityId]: "c2" }));
+
+      const c2Start = nowIso();
+      await reportStep("C2", "running", c2Start, "", null);
+      await recomputeOpportunityCandidatePreferenceChecksStream(selectedPersonId, opportunityId, () => undefined);
+      const c2End = nowIso();
+      await reportStep("C2", "done", c2Start, c2End, Date.parse(c2End) - Date.parse(c2Start));
+      setAlignmentVisibleStageByOpportunityId((current) => ({ ...current, [opportunityId]: "p1" }));
+
+      const p1Start = nowIso();
+      await reportStep("P1", "running", p1Start, "", null);
+      await recomputeOpportunityVacancyFitPresentationStream(selectedPersonId, opportunityId, () => undefined);
+      const p1End = nowIso();
+      await reportStep("P1", "done", p1Start, p1End, Date.parse(p1End) - Date.parse(p1Start));
+      setAlignmentVisibleStageByOpportunityId((current) => ({ ...current, [opportunityId]: "s7v2" }));
+
+      const s7Start = nowIso();
+      await reportStep("S7 v2", "running", s7Start, "", null);
+      await recomputeOpportunityVacancyAlignmentSummaryV2Stream(
+        selectedPersonId,
+        opportunityId,
+        (stage) =>
+          setVacancyAlignmentSummaryV2StageByOpportunityId((current) => ({
+            ...current,
+            [opportunityId]: stage
+          }))
+      );
+      const s7End = nowIso();
+      await reportStep("S7 v2", "done", s7Start, s7End, Date.parse(s7End) - Date.parse(s7Start));
+      setAlignmentVisibleStageByOpportunityId((current) => ({ ...current, [opportunityId]: "s8v2" }));
+
+      const s8Start = nowIso();
+      await reportStep("S8 v2", "running", s8Start, "", null, {
+        provider: "openai",
+        model: null,
+        warnings: ["model_unavailable_in_telemetry"],
+      });
+      await recomputeOpportunityVacancyAlignmentReportV2Stream(
+        selectedPersonId,
+        opportunityId,
+        (stage) =>
+          setVacancyAlignmentReportV2StageByOpportunityId((current) => ({
+            ...current,
+            [opportunityId]: stage
+          })),
+        (delta) => {
+          setVacancyAlignmentReportV2NarrativeByOpportunityId((current) => ({
+            ...current,
+            [opportunityId]: `${current[opportunityId] ?? ""}${delta}`
+          }));
+        }
+      );
+      const s8End = nowIso();
+      await reportStep("S8 v2", "done", s8Start, s8End, Date.parse(s8End) - Date.parse(s8Start), {
+        provider: "openai",
+        model: null,
+        warnings: ["model_unavailable_in_telemetry"],
+      });
+      await refreshSavedOpportunitiesAndSelection(selectedPersonId, opportunityId);
+      const finalRuns = await listAlignmentRuntimeRuns(selectedPersonId, opportunityId, 1).catch(() => []);
+      const latestRun = finalRuns[0];
+      const telemetryStepsRaw = latestRun?.steps?.length
+        ? latestRun.steps
+        : Array.from(latestStepTelemetry.values());
+      const telemetrySteps = telemetryStepsRaw
+        .map((entry) => ({
+          step_key: String(entry.step_key ?? ""),
+          duration_ms:
+            typeof entry.duration_ms === "number" ? entry.duration_ms : null,
+          provider: entry.provider ?? null,
+          model: entry.model ?? null,
+        }))
+        .filter((entry) => entry.step_key);
+      const slowest = [...telemetrySteps]
+        .sort((a, b) => (b.duration_ms ?? 0) - (a.duration_ms ?? 0))
+        .slice(0, 3)
+        .map((entry) => ({
+          step_key: entry.step_key,
+          duration_ms: entry.duration_ms,
+          provider: entry.provider,
+          model: entry.model,
+        }));
+      const totalDuration = elapsedMs(runStartIso);
+      const retrievalHitsProxy = Array.isArray(item.vacancy_retrieval_evidence_artifact?.evidence_rows)
+        ? item.vacancy_retrieval_evidence_artifact.evidence_rows.length
+        : null;
+      if (runId) {
+        try {
+          const doneRun = await completeAlignmentRuntimeRun(
+            selectedPersonId,
+            opportunityId,
+            runId,
+            {
+              status: "done",
+              total_duration_ms: totalDuration,
+              slowest_steps: slowest,
+              total_retries: 0,
+              llm_calls_count: 2,
+              retrieval_summary: {
+                criteria_count: null,
+                queries_per_item_effective: null,
+                top_k_effective: null,
+                total_hits_retrieved: retrievalHitsProxy,
+              },
+              warnings: [
+                "criteria_count_unavailable",
+                "queries_per_item_effective_unavailable",
+                "top_k_effective_unavailable",
+              ],
+            }
+          );
+          const history = await listAlignmentRuntimeRuns(selectedPersonId, opportunityId, 2);
+          setAlignmentRuntimeRunsByOpportunityId((current) => ({
+            ...current,
+            [opportunityId]: history.length > 0 ? history : [doneRun]
+          }));
+        } catch {
+          // Keep UX non-blocking when final telemetry write fails.
+        }
+      }
+      setAlignmentVisibleStageByOpportunityId((current) => ({ ...current, [opportunityId]: "done" }));
+      setToastMessage("Alineación recalculada");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo calcular la alineación";
+      const failedStage = alignmentVisibleStageByOpportunityId[opportunityId] ?? "error";
+      if (runId) {
+        try {
+          await completeAlignmentRuntimeRun(selectedPersonId, opportunityId, runId, {
+            status: "error",
+            total_duration_ms: elapsedMs(runStartIso),
+            slowest_steps: [],
+            total_retries: 0,
+            llm_calls_count: 0,
+            retrieval_summary: {},
+            warnings: [`failed_stage:${failedStage}`, message],
+          });
+          const history = await listAlignmentRuntimeRuns(selectedPersonId, opportunityId, 2);
+          setAlignmentRuntimeRunsByOpportunityId((current) => ({
+            ...current,
+            [opportunityId]: history
+          }));
+        } catch {
+          // Preserve original alignment error.
+        }
+      }
+      setAlignmentVisibleStageByOpportunityId((current) => ({ ...current, [opportunityId]: "error" }));
+      setAlignmentVisibleErrorByOpportunityId((current) => ({ ...current, [opportunityId]: message }));
+      setErrorMessage(message);
+      try {
+        await refreshSavedOpportunitiesAndSelection(selectedPersonId, opportunityId);
+      } catch {
+        // Keep original error.
+      }
+    } finally {
+      setRunningAlignmentOpportunityId((current) => (current === opportunityId ? null : current));
+      setAlignmentRuntimeRunStartedAtByOpportunityId((current) => {
+        const next = { ...current };
+        delete next[opportunityId];
+        return next;
+      });
     }
   }
 
@@ -4176,6 +4626,7 @@ export default function App() {
         }
       }
       setEditingOpportunityProfileId(null);
+      void runVacancyPreparationPipeline(selectedPersonId, item.opportunity_id);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "No se pudo guardar la estructura de vacante";
@@ -5235,6 +5686,9 @@ export default function App() {
           ? `Oportunidad cargada: ${opportunityLabel}`
           : `La URL ya existia. Se selecciono la oportunidad guardada: ${opportunityLabel}`
       );
+      if (payload.created) {
+        void runVacancyPreparationPipeline(selectedPersonId, payload.item.opportunity_id);
+      }
       setManualUrl("");
       setManualUrlTitle("");
       setManualUrlCompany("");
@@ -5282,6 +5736,7 @@ export default function App() {
         focusSavedOpportunityCard(item.opportunity_id);
       }, 0);
       setToastMessage(`Oportunidad creada desde WhatsApp/texto: ${opportunityLabel}`);
+      void runVacancyPreparationPipeline(selectedPersonId, item.opportunity_id);
       setManualTextTitle("");
       setManualTextCompany("");
       setManualTextLocation("");
@@ -5833,6 +6288,33 @@ export default function App() {
     }
   }
 
+  async function silentlyPrepareCandidatePreferenceProfile(personId: string) {
+    setCandidatePreferenceProfileError(null);
+    setCandidatePreferenceProfileStage("running");
+    try {
+      const payload = await recomputeCandidatePreferenceProfileStream(personId, () => undefined);
+      setCandidatePreferenceProfileArtifact(payload.artifact ?? {});
+      setCandidatePreferenceProfileStatus(payload.status ?? "draft");
+      setCandidatePreferenceProfileGeneratedAt(payload.generated_at ?? "");
+      setCandidatePreferenceProfileStage("done");
+      const items = await listPersons();
+      setPeople(items);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "No se pudo preparar el perfil comparable";
+      setCandidatePreferenceProfileStage("error");
+      setCandidatePreferenceProfileError(message);
+      try {
+        const payload = await getCandidatePreferenceProfile(personId);
+        setCandidatePreferenceProfileArtifact(payload.artifact ?? {});
+        setCandidatePreferenceProfileStatus(payload.status ?? "none");
+        setCandidatePreferenceProfileGeneratedAt(payload.generated_at ?? "");
+      } catch {
+        // Ignore refresh failure.
+      }
+    }
+  }
+
   async function handleSaveCulturePreferences() {
     if (!selectedPersonId || isSavingCulturePreferences) {
       return;
@@ -5847,6 +6329,7 @@ export default function App() {
       setPeople((current) =>
         current.map((item) => (item.person_id === updated.person_id ? updated : item))
       );
+      void silentlyPrepareCandidatePreferenceProfile(selectedPersonId);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "No se pudieron guardar las preferencias";
@@ -5968,6 +6451,7 @@ export default function App() {
       setPeople((current) =>
         current.map((item) => (item.person_id === updated.person_id ? updated : item))
       );
+      void silentlyPrepareCandidatePreferenceProfile(selectedPersonId);
     } catch (error) {
       const message = error instanceof Error ? error.message : "No se pudo guardar el perfil";
       setErrorMessage(message);
@@ -5988,6 +6472,12 @@ export default function App() {
 
   function getCandidatePreferenceProfileStageLabel(stage: string): string {
     switch (stage) {
+      case "running":
+        return "Preparando perfil comparable";
+      case "done":
+        return "Perfil preparado";
+      case "error":
+        return "Error";
       case "candidate_preference_profile_recompute_started":
         return "Iniciando recomputo de P0";
       case "candidate_preference_profile_building":
@@ -8480,6 +8970,36 @@ export default function App() {
                 vacancyAlignmentReportStageByOpportunityId[item.opportunity_id] ?? "";
               const vacancyAlignmentReportStageLabel =
                 getVacancyAlignmentReportStageLabel(vacancyAlignmentReportStage);
+              const vacancyPreparationStage =
+                vacancyPreparationStageByOpportunityId[item.opportunity_id] ?? "idle";
+              const vacancyPreparationStageLabel =
+                VACANCY_PREPARATION_STAGE_LABELS[vacancyPreparationStage] ?? "";
+              const vacancyPreparationError =
+                vacancyPreparationErrorByOpportunityId[item.opportunity_id] ?? "";
+              const profilePreparationStageLabel =
+                PROFILE_PREPARATION_STAGE_LABELS[candidatePreferenceProfileStage] ?? "";
+              const alignmentVisibleStage =
+                alignmentVisibleStageByOpportunityId[item.opportunity_id] ?? "idle";
+              const alignmentVisibleStageLabel =
+                ALIGNMENT_VISIBLE_STAGE_LABELS[alignmentVisibleStage] ?? "";
+              const alignmentVisibleError =
+                alignmentVisibleErrorByOpportunityId[item.opportunity_id] ?? "";
+              const isRunningVisibleAlignment = runningAlignmentOpportunityId === item.opportunity_id;
+              const shouldShowRecalculateAlignment =
+                hasVacancyAlignmentReportV2Artifact || item.vacancy_alignment_report_v2_status === "approved";
+              const runtimeRuns = alignmentRuntimeRunsByOpportunityId[item.opportunity_id] ?? [];
+              const latestRuntimeRun = runtimeRuns[0] ?? null;
+              const latestRuntimeSteps = latestRuntimeRun?.steps ?? [];
+              const activeRunStartedAt = alignmentRuntimeRunStartedAtByOpportunityId[item.opportunity_id] ?? "";
+              const runElapsedLabel =
+                isRunningVisibleAlignment && activeRunStartedAt
+                  ? formatDurationMs(elapsedMs(activeRunStartedAt))
+                  : latestRuntimeRun?.summary?.total_duration_ms != null
+                    ? formatDurationMs(latestRuntimeRun.summary.total_duration_ms)
+                    : "-";
+              const latestRuntimeSlowestSteps = Array.isArray(latestRuntimeRun?.summary?.slowest_steps)
+                ? latestRuntimeRun.summary.slowest_steps
+                : [];
               const isSelectedSavedOpportunity = selectedOpportunityId === item.opportunity_id;
               return (
                 <article
@@ -8970,6 +9490,111 @@ export default function App() {
                       <p className="chatRole vacancyV2Title">Vacancy V2 (experimental)</p>
                       <span className="metaChip vacancyV2Tag">No afecta el flujo legacy</span>
                     </div>
+                    <section className="vacancyV2Section">
+                      <div className="vacancyV2SectionHeader">
+                        <div>
+                          <p className="metaText vacancyV2SectionTitle">Alineación vacancy-first</p>
+                          {alignmentVisibleStageLabel ? (
+                            <p className="metaText">{alignmentVisibleStageLabel}</p>
+                          ) : null}
+                          {alignmentVisibleError ? (
+                            <p className="errorText">{alignmentVisibleError}</p>
+                          ) : null}
+                        </div>
+                        <div className="metaChips vacancyV2HeaderChips">
+                          {vacancyPreparationStageLabel ? (
+                            <span className="metaChip">{vacancyPreparationStageLabel}</span>
+                          ) : null}
+                          {profilePreparationStageLabel ? (
+                            <span className="metaChip">{profilePreparationStageLabel}</span>
+                          ) : null}
+                        </div>
+                      </div>
+                      {vacancyPreparationError ? (
+                        <p className="metaText">{vacancyPreparationError}</p>
+                      ) : null}
+                      <div className="cardActions">
+                        <button
+                          className="primaryButton vacancyProfileQuickActionButton"
+                          disabled={!selectedPersonId || isRunningVisibleAlignment}
+                          onClick={() => void runAlignmentVisiblePipeline(item)}
+                          type="button"
+                        >
+                          {isRunningVisibleAlignment
+                            ? alignmentVisibleStageLabel || "Procesando..."
+                            : shouldShowRecalculateAlignment
+                              ? "Recalcular alineacion"
+                              : "Calcular alineacion"}
+                        </button>
+                      </div>
+                      <div className="metaChips vacancyV2HeaderChips">
+                        <span className="metaChip">Tiempo: {runElapsedLabel}</span>
+                        <span className="metaChip">
+                          Progreso: {latestRuntimeSteps.length}/{ALIGNMENT_STEP_ORDER.length}
+                        </span>
+                        <span className="metaChip">
+                          Retries: {latestRuntimeRun?.summary?.total_retries ?? 0}
+                        </span>
+                      </div>
+                      <details className="payloadDetails">
+                        <summary>Ver detalle técnico de runtime</summary>
+                        {latestRuntimeSteps.length > 0 ? (
+                          <div className="vacancyMatrixTableWrap">
+                            <table className="vacancyMatrixTable">
+                              <thead>
+                                <tr>
+                                  <th>Step</th>
+                                  <th>Estado</th>
+                                  <th>Duración</th>
+                                  <th>Retries</th>
+                                  <th>Servicio / Modelo</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {latestRuntimeSteps.map((step) => (
+                                  <tr key={`${latestRuntimeRun?.run_id ?? "run"}-${step.step_key}`}>
+                                    <td>{step.step_key}</td>
+                                    <td>{step.status}</td>
+                                    <td>{formatDurationMs(step.duration_ms)}</td>
+                                    <td>{Math.max(0, (step.attempt_count ?? 1) - 1)}</td>
+                                    <td>
+                                      {step.provider || "-"}
+                                      {step.model ? ` / ${step.model}` : ""}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <p className="metaText">Sin telemetría persistida todavía para esta vacante.</p>
+                        )}
+                        {latestRuntimeSlowestSteps.length > 0 ? (
+                          <p className="metaText">
+                            Cuello de botella:{" "}
+                            {String(latestRuntimeSlowestSteps[0]?.step_key ?? "-")} (
+                            {formatDurationMs(
+                              typeof latestRuntimeSlowestSteps[0]?.duration_ms === "number"
+                                ? latestRuntimeSlowestSteps[0].duration_ms
+                                : null
+                            )}
+                            )
+                          </p>
+                        ) : null}
+                        {latestRuntimeRun?.summary?.retrieval_summary ? (
+                          <p className="metaText">
+                            Retrieval: criterios=
+                            {String(latestRuntimeRun.summary.retrieval_summary.criteria_count ?? "null")} ·
+                            queries/item=
+                            {String(latestRuntimeRun.summary.retrieval_summary.queries_per_item_effective ?? "null")} ·
+                            top_k=
+                            {String(latestRuntimeRun.summary.retrieval_summary.top_k_effective ?? "null")} ·
+                            hits=
+                            {String(latestRuntimeRun.summary.retrieval_summary.total_hits_retrieved ?? "null")}
+                          </p>
+                        ) : null}
+                      </details>
+                    </section>
 
                     <section className="vacancyV2Section">
                       <div className="vacancyV2SectionHeader">

@@ -2,7 +2,7 @@
 
 ## Estado
 - fase_actual: `Implementacion`
-- checkpoint_actual: `Gate documental de Slice 7 cerrado y plan de Slice 8 aclarado: se difiere Cohere; la orquestacion vacancy-first queda repartida con S1 como pre-ingesta operativa, S2-S4+C1 en Vacantes, P0 en Perfil y la alineacion visible como CTA en Vacantes antes de pensar su insercion final en Analisis`
+- checkpoint_actual: `Slice 9 implementado: telemetria de runtime de alineacion persistida por run_id/step en backend (latest+previous), y visibilidad en Vacantes de progreso temporal por step, duraciones, retries, servicio/modelo y cuello de botella`
 - repo_status: `flujo V1 operativo con analisis, postulacion, chat, CV semantico, admin de prompts y extraccion estructurada de vacantes en forma legacy estable; propuesta v2 desacoplada en branch experimental`
 - ultima_actualizacion: `2026-05-13`
 
@@ -16,6 +16,18 @@
 
 ## Estado Vigente
 - backend y frontend compilan en estado de trabajo actual
+- Slice 9 implementado en backend: nuevo store `alignment_runtime_telemetry_store` y endpoints en `opportunities` para `start`, `step upsert`, `complete` y `list` de corridas de alineacion por `run_id` (vinculadas a `person_id`, `opportunity_id`, `step_key`)
+- contrato minimo de telemetria por step aterrizado: `status`, `started_at`, `ended_at`, `duration_ms`, `attempt_index`, `attempt_count`, `retry_reason`, `provider/model`, `input_size_hints`, `output_size_hints`, `params_effective` y `warnings`; cuando un dato no existe se persiste `null`/warning estructurado
+- resumen de corrida aterrizado en persistencia: `total_duration_ms`, `slowest_steps`, `total_retries`, `llm_calls_count`, `retrieval_summary` y `warnings`
+- Slice 9 implementado en frontend (`Vacantes`): la CTA de alineacion ahora crea `run_id`, reporta telemetria por step durante la corrida y muestra panel runtime con tiempo transcurrido, progreso por step, tabla final de duraciones/retries/servicio-modelo y highlight de cuello de botella; detalle tecnico disponible en `details`
+- historial minimo visible tras refresh: carga y muestra corridas recientes (`latest + previous`) por oportunidad desde backend
+- validacion tecnica del slice backend en verde: `cd apps/backend && .venv/bin/python -m unittest tests.test_alignment_runtime_telemetry_api` (`3 tests`)
+- validacion tecnica del slice frontend en verde: `cd apps/frontend && npm run build`
+- Slice 8 implementado en `apps/frontend/src/App.tsx`: importacion/creacion/edicion material de vacantes dispara preparacion vacancy-side silenciosa (`S2 -> S3 -> S3.1 -> S3.9 -> S4 -> C1`) manteniendo disponibles los controles manuales existentes por step
+- preparacion de perfil comparable ajustada a modo silencioso: guardar perfil/preferencias (y crear persona) dispara `P0` automatico (`candidate_preference_profile.v1`) sin volverlo una accion manual obligatoria
+- nueva CTA visible en `Vacantes`, por encima de secciones tecnicas `Vacancy V2`: `Calcular alineacion` / `Recalcular alineacion`; ejecuta solo tramo de alineacion (`S5 -> S6 -> S6.5 -> C2 -> P1 -> S7 v2 -> S8 v2`) con progreso por etapas de negocio (`Buscando evidencia`, `Evaluando ajuste`, `Consolidando resultado`, `Resultado disponible`)
+- validacion tecnica del slice frontend en verde: `cd apps/frontend && npm run build`
+- siguiente foco de implementacion documentado: `Slice 9 - Alignment Runtime Telemetry and Cost/Time Visibility` en `docs/vacancy_v2_s4_s6_rerank_cohere_spec.md`, con objetivo de observabilidad operativa por corrida (tiempos por step, retries, uso de servicios/modelos, volumen de retrieval y resumen de cuellos de botella) antes de cambios de tuning en retries/top_k/timeouts
 - UX de `Oportunidades > Carga manual` ajustada: la UI ahora separa `Carga por URL` de `Carga desde WhatsApp / texto`, informa si una URL ya existia, enfoca la card resultante y permite registrar `source_label` opcional sin derivarlo del dominio
 - extraccion de vacantes restaurada a la version estable inicial de V1.1
 - prompt recomendado de extraccion restaurado al contrato legacy estable
